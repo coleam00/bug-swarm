@@ -37,6 +37,9 @@ body:has(.stream-board) { margin: 0; }
 @keyframes board-glow { 50% { box-shadow: inset 0 0 24px #caff6c33; } }
 @media (max-width: 1050px) {
   .stream-board { padding: 16px; }
+  .board-teams { gap: 8px; }
+  .board-team { display: block; padding: 0 4px; }
+  .board-team strong { font-size: clamp(32px, 10vw, 40px); line-height: 48px; }
   .board-leaders ol { grid-auto-flow: row; grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: 88px; }
 }
 @media (max-width: 540px) {
@@ -44,9 +47,6 @@ body:has(.stream-board) { margin: 0; }
   .board-header { display: block; }
   .board-header h1 { font-size: 24px; }
   .board-header p { font-size: 16px; }
-  .board-teams { gap: 8px; }
-  .board-team { display: block; padding: 0 4px; }
-  .board-team strong { font-size: 40px; line-height: 48px; }
   .board-name { font-size: clamp(20px, 6vw, 30px); line-height: 38px; gap: 6px; }
   .board-rank { font-size: 20px; }
   .board-score { font-size: 30px; line-height: 38px; padding-left: 46px; }

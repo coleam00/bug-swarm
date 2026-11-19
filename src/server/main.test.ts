@@ -104,7 +104,6 @@ test.each([
     expect(board.status).toBe(200);
     expect(board.html).toBe(result.html);
   }
-  expect(result.assets.some((asset: { path: string }) => /Board-.*\.js$/.test(asset.path))).toBe(true);
   for (const asset of result.assets) {
     expect(asset.status).toBe(200);
     expect(asset.type).toMatch(asset.path.endsWith(".css") ? /css/ : /javascript/);

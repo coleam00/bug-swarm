@@ -4,7 +4,7 @@ Validated on Windows with Bun 1.4.2 and Microsoft Edge 157.0.4341.60 (headless C
 
 `bun install`, `bun run check` and `bun run build` pass. The check ran 161 tests with zero failures. The focused board, route and production-handler tests cover mapping, validation, empty/zero states, identities and ties, highlight deadlines, independent polling, 2/4/8/8-second retries, recovery, out-of-order responses, slow reads and lifecycle cleanup. The actual React renderer test exercises subscriptions, stable keyed rows, waiting/reconnecting text, text-only names, origin-derived links and unmount/remount. Existing API deadline tests still cover five-second body timeouts.
 
-## Browser evidence
+## Initial browser evidence
 
 The production entry's real Hono/static handler served `/board`, `/board/` and the built assets through Playwright request interception. Development used Vite's actual HTML/module transform pipeline and the same API handler. This exercised the default production build and the development module graph, including React StrictMode. No network listener was opened: `Bun.serve` was captured, HTTP requests were fulfilled in process, and browser WebSockets were closed. Every database, browser profile, home and dependency used for this probe lived in scratch directories; all database handles, browser processes and Vite watchers were closed afterward. Playwright was installed only for validation, with no project dependency added.
 
@@ -20,6 +20,16 @@ The browser probe then returned HTTP 503 for leaderboard reads only, while team 
 Against the scratch database, the actual `bun run hide "New_Robot_123456"` command removed that name from the visible board and its score from the displayed Spaces total in about 2.15 seconds. Team totals returned to Tabs 4,975,315 / Spaces 4,969,145. This was checked while reads succeeded; a name hidden during an outage can remain in the retained last-good snapshot until recovery.
 
 Browser traffic contained only board GETs: no run-start, finish, player-best or other mutation requests. Production loaded the board chunk and its CSS, with no App chunk. Development loaded the board module, with no App, identity or engine module. There were zero browser page errors. The join anchor displayed and targeted the actual page origin, `http://board.test` in the harness; browser-free rendering tests also check HTTPS and an origin with a port.
+
+## Landscape and coverage recheck
+
+The original phone captures used compact multi-million team totals and missed full six-digit values at smaller landscape widths. A follow-up isolated Edge probe reproduced the returned defect with Tabs 999,999 / Spaces 888,888: the old stylesheet made the document 719 px wide at both 667×375 and 600×400. Team panels now switch to stacked labels and smaller totals at the same 1050 px breakpoint as the leaderboard; their type also scales down for narrow phones.
+
+The fixed production build passed 24 browser cases: six-digit, maximum-safe-integer and zero totals at 600×400, 667×375, 390×844, 1280×720, 320×640, 844×390, 1050×720 and 1051×720. Every name, team label and total stayed within the viewport with no horizontal scrolling. At 1280×720 the page still fits vertically, with 40 px names/scores, 64 px totals and a visible join footer. Evidence: [667×375](board-evidence/landscape-667x375.png), [600×400](board-evidence/landscape-600x400.png), and [before/after measurements](board-evidence/landscape-measurements.json). This probe intercepted the built assets and fixture GET responses without a network listener or database; its browser context closed afterward. No project dependency was added.
+
+The existing renderer test now asserts all ten displayed names, ranks and scores before and after a reorder/score update, both displayed team totals and proportional bar widths, and retained data plus a nonempty status when either endpoint fails independently. The route test imports the actual `main.tsx` with `/board` as the pathname and a different hash, then verifies that the root mounts Board without importing the game. Loading/empty/status assertions use structure and meaningful content rather than fixed wording, and production asset checks no longer require a particular chunk basename.
+
+`bun run check` still passes all 161 tests; `bun run build` passes. In an isolated source copy, the updated tests rejected mutations that render one row, display zero team totals, fix race widths at 50/50, route by hash, require both endpoints to fail before warning, or suppress either endpoint's failure warning. Changing loading wording, the document title wording, or Vite's chunk filenames passed. All mutations were restored in that scratch copy; the checkout was never mutated for these checks.
 
 ## Limits and reproduction
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-test("board routes load only the board; other paths retain the game", () => {
+test("the entry mounts the board by pathname; board routes load only the board and other paths retain the game", () => {
   const scratch = mkdtempSync(join(tmpdir(), "board-route-")), home = join(scratch, "home");
   mkdirSync(home);
   const moduleUrl = (path: string) => JSON.stringify(pathToFileURL(join(import.meta.dir, path)).href);
@@ -21,6 +21,21 @@ for (const path of ["/board", "/board/", new URL("https://swarm.test/board?strea
   assert.equal(await loadView(path), Board);
   assert.equal(gameImports, 0, "Board imported the game");
 }
+// Exercise the actual entry-to-router connection, with a deliberately different
+// hash so using the wrong location field cannot accidentally select the board.
+globalThis.window = { location: { pathname: "/board", search: "?stream=1", hash: "#/" } };
+const container = {};
+globalThis.document = { getElementById: id => { assert.equal(id, "root"); return container; } };
+let mounted;
+const mounting = new Promise(resolve => { mounted = resolve; });
+mock.module(${JSON.stringify(import.meta.resolve("react-dom/client"))}, () => ({ createRoot: element => {
+  assert.equal(element, container);
+  return { render: mounted };
+} }));
+await import(${moduleUrl("main.tsx")});
+const element = await mounting;
+assert.equal(element.props.children.type, Board, "The actual entry did not mount Board at /board");
+assert.equal(gameImports, 0, "The board entry imported the game");
 for (const path of ["/", "/other", "/boardwalk"]) assert.equal(await loadView(path), Game);
 assert.equal(gameImports, 1);
 `;
