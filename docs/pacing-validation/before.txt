@@ -1,0 +1,31 @@
+idle 390x844 seed=1 priority=first-card seconds=81.62 death score=1331 build=[{"id":"review-laser","count":1},{"id":"refactor-bomb","count":1},{"id":"ci-drone","count":2}]
+idle 390x844 seed=42 priority=first-card seconds=64.48 death score=854 build=[{"id":"review-laser","count":1},{"id":"refactor-bomb","count":1},{"id":"ci-drone","count":1}]
+idle 390x844 seed=12345 priority=first-card seconds=65.77 death score=905 build=[{"id":"review-laser","count":1},{"id":"refactor-bomb","count":2}]
+idle 390x844 seed=7 priority=first-card seconds=67.75 death score=907 build=[{"id":"review-laser","count":1},{"id":"test-shield","count":1},{"id":"ci-drone","count":1}]
+idle 390x844 seed=99 priority=first-card seconds=49.82 death score=569 build=[{"id":"review-laser","count":2}]
+idle 1280x800 seed=1 priority=first-card seconds=75.17 death score=1125 build=[{"id":"review-laser","count":1},{"id":"refactor-bomb","count":1},{"id":"ci-drone","count":1}]
+idle 1280x800 seed=42 priority=first-card seconds=66.87 death score=906 build=[{"id":"review-laser","count":1},{"id":"refactor-bomb","count":1},{"id":"ci-drone","count":1}]
+idle 1280x800 seed=12345 priority=first-card seconds=84.55 death score=1324 build=[{"id":"review-laser","count":1},{"id":"test-shield","count":1},{"id":"refactor-bomb","count":2}]
+idle 1280x800 seed=7 priority=first-card seconds=69.57 death score=989 build=[{"id":"review-laser","count":1},{"id":"test-shield","count":1},{"id":"ci-drone","count":1}]
+idle 1280x800 seed=99 priority=first-card seconds=57.40 death score=677 build=[{"id":"review-laser","count":2}]
+evasive 390x844 seed=1 priority=test-shield,ci-drone,refactor-bomb,review-laser seconds=115.47 death score=2305 build=[{"id":"test-shield","count":3},{"id":"ci-drone","count":2}]
+evasive 390x844 seed=42 priority=ci-drone,refactor-bomb,test-shield,review-laser seconds=>=600.00 CUTOFF score=27380 build=[{"id":"refactor-bomb","count":9},{"id":"ci-drone","count":20}]
+evasive 390x844 seed=12345 priority=refactor-bomb,ci-drone,review-laser,test-shield seconds=>=600.00 CUTOFF score=27510 build=[{"id":"refactor-bomb","count":20},{"id":"ci-drone","count":9}]
+evasive 390x844 seed=7 priority=review-laser,test-shield,ci-drone,refactor-bomb seconds=71.42 death score=1001 build=[{"id":"review-laser","count":3}]
+evasive 390x844 seed=99 priority=ci-drone,review-laser,refactor-bomb,test-shield seconds=138.68 death score=3708 build=[{"id":"review-laser","count":3},{"id":"ci-drone","count":3}]
+evasive 1280x800 seed=1 priority=test-shield,ci-drone,refactor-bomb,review-laser seconds=98.27 death score=1778 build=[{"id":"test-shield","count":2},{"id":"ci-drone","count":2}]
+evasive 1280x800 seed=42 priority=ci-drone,refactor-bomb,test-shield,review-laser seconds=134.08 death score=3474 build=[{"id":"refactor-bomb","count":2},{"id":"ci-drone","count":4}]
+evasive 1280x800 seed=12345 priority=refactor-bomb,ci-drone,review-laser,test-shield seconds=>=600.00 CUTOFF score=27510 build=[{"id":"refactor-bomb","count":20},{"id":"ci-drone","count":9}]
+evasive 1280x800 seed=7 priority=review-laser,test-shield,ci-drone,refactor-bomb seconds=67.48 death score=887 build=[{"id":"review-laser","count":3}]
+evasive 1280x800 seed=99 priority=ci-drone,review-laser,refactor-bomb,test-shield seconds=127.72 death score=3117 build=[{"id":"review-laser","count":3},{"id":"ci-drone","count":3}]
+idle 390x844: median=65.77s longest=81.62s cutoffs=0
+idle 1280x800: median=69.57s longest=84.55s cutoffs=0
+idle overall: median=67.31s longest=84.55s cutoffs=0
+evasive 390x844: median=>=138.68s longest=>=600.00s cutoffs=2
+evasive 1280x800: median=>=127.72s longest=>=600.00s cutoffs=1
+evasive overall: median=>=130.90s longest=>=600.00s cutoffs=3
+overall: median=>=78.39s longest=>=600.00s cutoffs=3
+FAIL idle60
+PASS evasiveMedian60to180
+FAIL allDead240
+PASS scoresPlausible

@@ -1,0 +1,112 @@
+{
+  "startingCommit": "f040c9b560669a0a5bf889cb40a2ea79436abc6e",
+  "fault": "Contact damage and immunity removed attackers without weapon kills",
+  "reproducer": [
+    {
+      "seed": 29514,
+      "priority": [
+        "test-shield",
+        "ci-drone",
+        "refactor-bomb",
+        "review-laser"
+      ],
+      "viewport": [
+        390,
+        844
+      ],
+      "mode": "idle",
+      "elapsed": 20.333333333333314,
+      "dead": true,
+      "score": 160,
+      "squashes": 14,
+      "seconds": 20,
+      "build": [
+        {
+          "id": "ci-drone",
+          "count": 1
+        }
+      ],
+      "spawned": 23,
+      "validScore": true
+    },
+    {
+      "seed": 29514,
+      "priority": [
+        "test-shield",
+        "ci-drone",
+        "refactor-bomb",
+        "review-laser"
+      ],
+      "viewport": [
+        1280,
+        800
+      ],
+      "mode": "idle",
+      "elapsed": 25.91666666666633,
+      "dead": true,
+      "score": 235,
+      "squashes": 21,
+      "seconds": 25,
+      "build": [
+        {
+          "id": "ci-drone",
+          "count": 1
+        }
+      ],
+      "spawned": 31,
+      "validScore": true
+    }
+  ],
+  "beforePortraitSeconds": 71.816666666666,
+  "wide": {
+    "cases": 1000000,
+    "longest": 59.26666666666557,
+    "worst": {
+      "seed": 466880651,
+      "viewport": [
+        390,
+        844
+      ],
+      "elapsed": 59.26666666666557,
+      "build": [
+        {
+          "id": "refactor-bomb",
+          "count": 1
+        },
+        {
+          "id": "ci-drone",
+          "count": 1
+        }
+      ]
+    },
+    "failures": [],
+    "seeds": "i and Math.imul(i+1,0x9e3779b9)>>>0 for i=0..249999"
+  },
+  "mutations": [
+    {
+      "name": "idle ceiling",
+      "rejected": true
+    },
+    {
+      "name": "overall ceiling",
+      "rejected": true
+    },
+    {
+      "name": "median range",
+      "rejected": true
+    },
+    {
+      "name": "score validation",
+      "rejected": true
+    },
+    {
+      "name": "free contact clears",
+      "rejected": true
+    }
+  ],
+  "sources": {
+    "src/web/game/simulation.ts": "cfeced75628e0a48a43f2678c3cbe44310e176558b0cfe5b009f929552f58938",
+    "src/web/game/config.ts": "aabec27c0df1cbd8e711a12bf777bb489ccf0c470ccc6187cbca39bcdc56e02d",
+    "scripts/pacing.ts": "0bc1f7eb48695001fc9bc7f0f15127534aa8e55730b0ed0730ea3647afa56758"
+  }
+}

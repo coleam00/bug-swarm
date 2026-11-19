@@ -1,0 +1,53 @@
+{
+    "baseline":  "35f6fa25593c3a723932ae9912d897122da5fbcb",
+    "idle":  {
+                 "cases":  100000,
+                 "seeds":  "i and Math.imul(i + 1, 0x9e3779b9) \u003e\u003e\u003e 0, i = 0..24999",
+                 "viewports":  [
+                                   [
+                                       390,
+                                       844
+                                   ],
+                                   [
+                                       1280,
+                                       800
+                                   ]
+                               ],
+                 "actualDeathAndScoreValidationAnd60SecondCeiling":  true,
+                 "longestSeconds":  59.3999999999989
+             },
+    "prescribedEvasiveMedians":  [
+                                     61.46666666666658,
+                                     60.99999999999994
+                                 ],
+    "rejectedMutations":  [
+                              {
+                                  "name":  "default seeds",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "shield priority",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "mean for median",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "minimum for longest",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "vertical repulsion",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "vertical drift",
+                                  "rejected":  true
+                              },
+                              {
+                                  "name":  "live ramp clamp",
+                                  "rejected":  true
+                              }
+                          ]
+}
