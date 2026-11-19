@@ -11,7 +11,7 @@ function deferred<T>() {
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 function fixture(overrides: Partial<GameApi> = {}) {
-  const finishes: { id: string; result: Finish }[] = [], logs: string[] = [];
+  const finishes: { id: string; result: Finish }[] = [], logs: { message: string; error: unknown }[] = [];
   let starts = 0;
   const api: GameApi = {
     start: async () => ({ runId: `run-${++starts}` }),
@@ -19,7 +19,7 @@ function fixture(overrides: Partial<GameApi> = {}) {
     best: async () => ({ best: 7 }), leaders: async () => [{ playerId: "other", name: "Server", score: 99 }],
     ...overrides,
   };
-  return { session: new Session(identity, api, () => 42, (message) => logs.push(message)), finishes, logs, starts: () => starts };
+  return { session: new Session(identity, api, () => 42, (message, error) => logs.push({ message, error })), finishes, logs, starts: () => starts };
 }
 test("simulation starts immediately; a death before start response submits exactly once with its own id", async () => {
   const start = deferred<RunStarted>();
@@ -40,10 +40,12 @@ test("late starts and saves after immediate restart cannot mutate the new run", 
   expect(session.view.over).toBe(false); expect(session.view.save).toBe("pending"); expect(session.current).not.toBe(old);
 });
 test("offline start and rejected finish log failures and keep restart usable", async () => {
-  for (const overrides of [{ start: async () => { throw new Error("offline"); } }, { finish: async () => { throw new Error("offline"); } }]) {
+  const failure = new Error("offline");
+  for (const overrides of [{ start: async () => { throw failure; } }, { finish: async () => { throw failure; } }]) {
     const { session, logs } = fixture(overrides);
-    session.start(); session.end(); await flush();
-    expect(session.view.save).toBe("failed"); expect(logs.some((line) => line.startsWith("Score save failed ["))).toBe(true);
+    const run = session.start(); session.end(); await flush();
+    expect(session.view.save).toBe("failed"); expect(logs.some((entry) => entry.error === failure)).toBe(true);
+    expect(logs.some((entry) => entry.message.includes(run.runId ?? String(run.token)) && entry.error instanceof Error)).toBe(true);
     session.start(); expect(session.view.over).toBe(false);
   }
 });
@@ -61,19 +63,33 @@ test("reads follow the server and stale reads cannot overwrite newer reads or ru
   });
   session.start(); session.end(); await flush();
   expect(reads).toHaveLength(2); // On death, then after the durable save.
-  reads[1]!.resolve([{ playerId: "a", name: "New", score: 1 }]); bests[1]!.resolve({ best: 1 }); await flush();
   reads[0]!.resolve([{ playerId: "b", name: "Old", score: 99 }]); bests[0]!.resolve({ best: 99 }); await flush();
+  expect(session.view.leadersStatus).toBe("ready"); expect(session.view.leaders[0]?.name).toBe("Old");
+  expect(session.view.bestStatus).toBe("ready"); expect(session.view.best).toBe(99);
+  void session.refreshLeaders(session.current!); void session.refreshBest(session.current!);
+  reads[2]!.resolve([{ playerId: "a", name: "New", score: 1 }]); bests[2]!.resolve({ best: 1 }); await flush();
+  reads[1]!.resolve([{ playerId: "b", name: "Old", score: 99 }]); bests[1]!.resolve({ best: 99 }); await flush();
   expect(session.view.leaders[0]?.name).toBe("New"); expect(session.view.best).toBe(1);
-  void session.refreshLeaders(session.current!); session.start(); reads[2]!.resolve([]); await flush();
+  void session.refreshLeaders(session.current!); void session.refreshBest(session.current!);
+  void session.refreshLeaders(session.current!); void session.refreshBest(session.current!);
+  reads[4]!.resolve([]); bests[4]!.resolve({ best: 2 }); await flush();
+  reads[3]!.reject(new Error("stale")); bests[3]!.reject(new Error("stale")); await flush();
+  expect(session.view.leadersStatus).toBe("ready"); expect(session.view.bestStatus).toBe("ready");
+  expect(session.view.best).toBe(2);
+  void session.refreshLeaders(session.current!); void session.refreshBest(session.current!);
+  session.start(); reads[5]!.resolve([]); bests[5]!.resolve({ best: 99 }); await flush();
   expect(session.view.leadersStatus).toBe("loading"); expect(session.view.over).toBe(false);
+  expect(session.view.bestStatus).toBe("loading");
 });
 test("failed reads do not misreport an acknowledged save", async () => {
-  const { session, logs } = fixture({ best: async () => { throw new Error("read failed"); }, leaders: async () => { throw new Error("read failed"); } });
+  const bestFailure = new Error("best unavailable"), leadersFailure = new Error("rankings unavailable");
+  const { session, logs } = fixture({ best: async () => { throw bestFailure; }, leaders: async () => { throw leadersFailure; } });
   session.start(); session.end(); await flush();
   expect(session.view.save).toBe("saved"); expect(session.view.bestStatus).toBe("failed"); expect(session.view.leadersStatus).toBe("failed");
-  expect(logs.some((line) => line.includes("Leaderboard read failed"))).toBe(true);
+  expect(logs.some((entry) => entry.error === bestFailure)).toBe(true);
+  expect(logs.some((entry) => entry.error === leadersFailure)).toBe(true);
 });
-test("touch resets between runs and StrictMode-style reattachment doesn't start again", async () => {
+test("touch resets between runs and subscriptions preserve the current run", async () => {
   const { session, starts } = fixture();
   const unsubscribe = session.subscribe(() => {});
   if (!session.current) session.start(); unsubscribe();
@@ -82,6 +98,47 @@ test("touch resets between runs and StrictMode-style reattachment doesn't start 
   session.touch(); expect(session.current?.touch).toBe(true);
   session.start(); expect(session.current?.touch).toBe(false);
   session.start(true); expect(session.current?.touch).toBe(true); detach();
+});
+
+test("2500 ms leaderboard responses apply across 2000 ms polls, including a hidden row's removal", async () => {
+  const originalSet = globalThis.setInterval, originalClear = globalThis.clearInterval;
+  let now = 0, nextPoll = Infinity, poll: (() => void) | undefined, hidden = false, unavailable = false;
+  const pending: { at: number; rows: Leader[]; failed: boolean; reply: ReturnType<typeof deferred<Leader[]>> }[] = [];
+  globalThis.setInterval = ((fn: () => void, ms: number) => {
+    expect(ms).toBe(2000); poll = fn; nextPoll = now + ms; return 1;
+  }) as typeof setInterval;
+  globalThis.clearInterval = (() => { poll = undefined; nextPoll = Infinity; }) as typeof clearInterval;
+  const { session } = fixture({ leaders: () => {
+    const reply = deferred<Leader[]>();
+    pending.push({ at: now + 2500, rows: hidden ? [] : [{ playerId: "a", name: "Visible", score: 99 }], failed: unavailable, reply });
+    return reply.promise;
+  } });
+  const detach = session.subscribe(() => {});
+  async function advanceTo(time: number) {
+    while (Math.min(nextPoll, pending[0]?.at ?? Infinity) <= time) {
+      now = Math.min(nextPoll, pending[0]?.at ?? Infinity);
+      if (nextPoll === now) { nextPoll += 2000; poll!(); }
+      while (pending[0]?.at === now) {
+        const read = pending.shift()!;
+        if (read.failed) read.reply.reject(new Error("unavailable")); else read.reply.resolve(read.rows);
+      }
+      await flush();
+    }
+    now = time;
+  }
+  try {
+    session.start(); session.end(); await flush();
+    await advanceTo(2500);
+    expect(session.view.leadersStatus).toBe("ready"); expect(session.view.leaders[0]?.name).toBe("Visible");
+    hidden = true;
+    await advanceTo(6500);
+    expect(pending.length).toBeGreaterThan(0); // The next poll is already awaiting its response.
+    expect(session.view.leadersStatus).toBe("ready"); expect(session.view.leaders).toEqual([]);
+    await advanceTo(7800); expect(session.view.leaders).toEqual([]);
+    unavailable = true; await advanceTo(10500); expect(session.view.leadersStatus).toBe("failed");
+    unavailable = false; await advanceTo(14500); expect(session.view.leadersStatus).toBe("ready");
+    expect(session.view.leaders).toEqual([]);
+  } finally { detach(); globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
 });
 test("game-over polling refreshes every two seconds and stops when detached or restarted", async () => {
   const originalSet = globalThis.setInterval, originalClear = globalThis.clearInterval;
@@ -92,6 +149,7 @@ test("game-over polling refreshes every two seconds and stops when detached or r
     const { session } = fixture({ leaders: async () => { reads++; return []; } });
     const detach = session.subscribe(() => {}); session.start(); session.end(); await flush();
     expect(interval).toBe(2000); const before = reads; callback!(); await flush(); expect(reads).toBe(before + 1);
-    session.start(); expect(cleared).toBeGreaterThan(0); detach();
+    detach(); expect(cleared).toBeGreaterThan(0); const stop = session.subscribe(() => {});
+    const beforeRestart = cleared; session.start(); expect(cleared).toBeGreaterThan(beforeRestart); stop();
   } finally { globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
 });

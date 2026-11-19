@@ -23,6 +23,9 @@ test("bet counts accepted finishes, hidden players, grouped median, rounding and
     add("c", 5000, false); add("c", 6000, false);
     expect(report(db)).toContain("median_runs_per_player: 2.0\ntouch_share: 50%");
     expect(report(db, 3000, 6000)).toContain("touch_share: 33%");
+    // Counts [7, 1, 2] have a median of 2, rather than their mean of 3.3.
+    for (let i = 0; i < 4; i++) add("a", 7000 + i, false);
+    expect(report(db)).toBe("players: 3\nfinished_runs: 10\nmedian_runs_per_player: 2.0\ntouch_share: 30%");
   } finally { db.close(); }
 });
 test("ISO flags support offsets, optional separator and independent bounds; reject invalid arguments", () => {
@@ -40,8 +43,13 @@ test("stats CLI has exact stdout, fails cleanly and doesn't create a missing dat
     const bad = Bun.spawnSync([process.execPath, "scripts/stats.ts", "--since", "bad"], { env, stdout: "pipe", stderr: "pipe" });
     expect(bad.exitCode).toBe(1); expect(bad.stdout.toString()).toBe(""); expect(bad.stderr.toString()).not.toBe("");
     const db = openDb(join(dir, "data", "app.db"));
-    const playerId = crypto.randomUUID(), id = startRun(db, playerId, "Robot", 0)!;
-    finishRun(db, id, { playerId, score: 1, squashes: 0, seconds: 1, touch: true }, Date.parse("2026-11-28T15:00:00Z")); db.close();
+    const playerId = crypto.randomUUID();
+    try {
+      for (const at of ["2026-11-28T14:59:59Z", "2026-11-28T15:00:00Z", "2026-11-28T15:01:00Z"]) {
+        const id = startRun(db, playerId, "Robot", 0)!;
+        finishRun(db, id, { playerId, score: 1, squashes: 0, seconds: 1, touch: true }, Date.parse(at));
+      }
+    } finally { db.close(); }
     const output = Bun.spawnSync([process.execPath, "scripts/stats.ts", "--", "--since", "2026-11-28T15:00:00Z", "--until", "2026-11-28T15:01:00Z"], { env, stdout: "pipe", stderr: "pipe" });
     expect(output.exitCode).toBe(0); expect(output.stdout.toString()).toBe("players: 1\nfinished_runs: 1\nmedian_runs_per_player: 1.0\ntouch_share: 100%\n");
   } finally { rmSync(dir, { recursive: true, force: true }); }

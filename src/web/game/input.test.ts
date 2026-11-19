@@ -10,6 +10,10 @@ test("portrait and landscape use the same centered logical arena and clamp outsi
 });
 test("WASD and arrows produce equivalent inputs and opposing keys cancel", () => {
   const target = { x: 0, y: 0 };
+  for (const [key, x, y] of [
+    ["w", 0, -1], ["a", -1, 0], ["s", 0, 1], ["d", 1, 0],
+    ["arrowup", 0, -1], ["arrowleft", -1, 0], ["arrowdown", 0, 1], ["arrowright", 1, 0],
+  ] as const) expect(keyboardInput(new Set([key]), null)).toEqual({ x, y, target: null });
   expect(keyboardInput(new Set(["w", "d"]), target)).toEqual({ x: 1, y: -1, target });
   expect(keyboardInput(new Set(["arrowup", "arrowright"]), target)).toEqual({ x: 1, y: -1, target });
   expect(keyboardInput(new Set(["a", "d"]), null).x).toBe(0);

@@ -1,13 +1,13 @@
 import { expect, test } from "bun:test";
 import { IDENTITY_KEY, loadIdentity, storeIdentity, type Storage } from "./identity";
 test("validated browser identity persists; corrupt, blocked, or old invalid names require entry", () => {
-  let saved: string | null = null;
-  const storage: Storage = { getItem: () => saved, setItem: (key, value) => { expect(key).toBe(IDENTITY_KEY); saved = value; } };
+  const saved = new Map<string, string>();
+  const storage: Storage = { getItem: (key) => saved.get(key) ?? null, setItem: (key, value) => { saved.set(key, value); } };
   expect(loadIdentity(storage)).toBeNull();
   const identity = { playerId: crypto.randomUUID(), name: "Robot" };
   storeIdentity(storage, identity); expect(loadIdentity(storage)).toEqual(identity);
   for (const value of ["{", "null", JSON.stringify({ ...identity, name: "5h1t" }), JSON.stringify({ ...identity, playerId: "invalid" })]) {
-    saved = value; expect(loadIdentity(storage)).toBeNull();
+    saved.set(IDENTITY_KEY, value); expect(loadIdentity(storage)).toBeNull();
   }
 });
 test("storage read/write failure does not prevent in-memory play", () => {

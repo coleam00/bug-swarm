@@ -50,6 +50,9 @@ test("best per player, first-best finish and id tie order, filtering before ten"
     for (let i = 0; i < 14; i++) score(`p${i}`, `Robot${i}`, 99 - i, 10);
     // Legacy entries that no longer pass the current list never reach public output.
     score("bad", "shit", 1000, 0);
-    expect(leaderboard(db)).toHaveLength(10); expect(leaderboard(db).some((v) => v.name === "shit")).toBe(false);
+    expect(leaderboard(db)).toEqual([
+      { playerId: "c", name: "Gamma", score: 100 }, { playerId: "b", name: "Beta", score: 100 },
+      ...Array.from({ length: 8 }, (_, i) => ({ playerId: `p${i}`, name: `Robot${i}`, score: 99 - i })),
+    ]);
   } finally { db.close(); }
 });

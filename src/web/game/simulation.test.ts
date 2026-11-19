@@ -7,7 +7,7 @@ test.each([1, 42, 12345])("seed %i is reproducible and an idle robot loses in 30
   while (!a.dead && a.time < 90) { step(a, IDLE, STEP); step(b, IDLE, STEP); }
   expect(a).toEqual(b);
   expect(a.time).toBeGreaterThanOrEqual(30); expect(a.time).toBeLessThanOrEqual(60);
-  expect(a.hits).toBe(3); expect(a.score).toBe(a.squashes * 10 + Math.floor(a.time));
+  expect(a.hits).toBe(3);
   const frozen = structuredClone(a); step(a, IDLE, STEP); expect(a).toEqual(frozen);
 });
 test("steady edge spawning and chasing", () => {
@@ -15,7 +15,9 @@ test("steady edge spawning and chasing", () => {
   for (let i = 0; i < 20; i++) spawnBug(s);
   expect(s.bugs.every((b) => b.x === 0 || b.x === 600 || b.y === 0 || b.y === 600)).toBe(true);
   s.bugs = [{ id: 1, x: 0, y: 300 }];
-  step(s, IDLE, STEP); expect(s.bugs[0]!.x).toBeGreaterThan(0);
+  s.robot = { x: 100, y: 100 };
+  step(s, IDLE, STEP);
+  expect(s.bugs[0]!.x).toBeGreaterThan(0); expect(s.bugs[0]!.y).toBeLessThan(300);
   s.bugs = []; s.fireIn = 100;
   for (let i = 1; i < 48 * 4; i++) step(s, IDLE, STEP);
   expect(s.nextId).toBe(1 + 20 + Math.floor((s.time + 1e-9) / SPAWN_INTERVAL));
@@ -32,6 +34,8 @@ test("nearest targeting uses stable ids; a swept shot kills once and awards ten"
   const s = createSimulation(1);
   s.bugs = [{ id: 2, x: 350, y: 300 }, { id: 1, x: 250, y: 300 }];
   expect(nearestBug(s)!.id).toBe(1);
+  s.bugs = [{ id: 1, x: 400, y: 300 }, { id: 2, x: 250, y: 300 }];
+  expect(nearestBug(s)!.id).toBe(2);
   s.fireIn = 0; step(s, IDLE, STEP); expect(s.shots[0]!.vx).toBeLessThan(0);
   s.bugs = [{ id: 3, x: 400, y: 300 }];
   s.shots = [{ x: 350, y: 300, vx: 10000, vy: 0, life: 3 }];

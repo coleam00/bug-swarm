@@ -4,7 +4,7 @@ import { createSimulation, type Simulation } from "./simulation";
 
 export interface LocalRun {
   token: number; simulation: Simulation; start: Promise<string | null>; runId?: string;
-  startFailed: boolean; touch: boolean; result?: Readonly<Finish>;
+  touch: boolean; result?: Readonly<Finish>;
 }
 export interface SessionView {
   token: number; over: boolean; score: number; save: "pending" | "saved" | "failed";
@@ -19,6 +19,8 @@ export class Session {
   private poll?: ReturnType<typeof setInterval>;
   private bestSequence = 0;
   private leadersSequence = 0;
+  private bestApplied = 0;
+  private leadersApplied = 0;
   constructor(readonly identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error) {}
 
@@ -36,14 +38,13 @@ export class Session {
     if (this.listeners.size && this.view.over) this.poll = setInterval(() => void this.refreshLeaders(this.current!), 2000);
   }
   start(touch = false): LocalRun {
-    this.bestSequence++; this.leadersSequence++;
     const token = this.view.token + 1;
-    const run: LocalRun = { token, simulation: createSimulation(this.seed()), start: Promise.resolve(null), startFailed: false, touch };
+    const run: LocalRun = { token, simulation: createSimulation(this.seed()), start: Promise.resolve(null), touch };
     this.current = run; this.view = this.emptyView(token); this.syncPoll();
     run.start = Promise.resolve().then(() => this.api.start(this.identity)).then(({ runId }) => {
       run.runId = runId; return runId;
     }).catch((error) => {
-      run.startFailed = true; this.log(`Run start failed [${run.token}]`, error); return null;
+      this.log(`Run start failed [${run.token}]`, error); return null;
     });
     this.emit(); return run;
   }
@@ -75,11 +76,13 @@ export class Session {
     const sequence = ++this.bestSequence;
     try {
       const { best } = await this.api.best(this.identity.playerId);
-      if (this.current !== run || sequence !== this.bestSequence || !this.view.over) return;
+      if (this.current !== run || sequence < this.bestApplied || !this.view.over) return;
+      this.bestApplied = sequence;
       this.view = { ...this.view, best, bestStatus: "ready" }; this.emit();
     } catch (error) {
       this.log(`Best read failed [${run.runId ?? run.token}]`, error);
-      if (this.current !== run || sequence !== this.bestSequence) return;
+      if (this.current !== run || sequence < this.bestApplied || !this.view.over) return;
+      this.bestApplied = sequence;
       this.view = { ...this.view, bestStatus: "failed" }; this.emit();
     }
   }
@@ -87,11 +90,15 @@ export class Session {
     const sequence = ++this.leadersSequence;
     try {
       const leaders = await this.api.leaders();
-      if (this.current !== run || sequence !== this.leadersSequence || !this.view.over) return;
+      // A newer request in flight must not starve a successful response. Only a
+      // newer result already shown (or a different run) makes this result stale.
+      if (this.current !== run || sequence < this.leadersApplied || !this.view.over) return;
+      this.leadersApplied = sequence;
       this.view = { ...this.view, leaders, leadersStatus: "ready" }; this.emit();
     } catch (error) {
       this.log(`Leaderboard read failed [${run.runId ?? run.token}]`, error);
-      if (this.current !== run || sequence !== this.leadersSequence) return;
+      if (this.current !== run || sequence < this.leadersApplied || !this.view.over) return;
+      this.leadersApplied = sequence;
       this.view = { ...this.view, leaders: [], leadersStatus: "failed" }; this.emit();
     }
   }
