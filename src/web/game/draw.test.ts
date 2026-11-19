@@ -299,3 +299,19 @@ test("a hit flashes the chassis white and translates the world while the clip an
   const recovered = s.render(); expect(recovered.some(whiteBody)).toBe(false);
   expect(recovered.find((p) => p.op === "drawImage" && Number(p.args[3]) >= SQUARE_ARENA.width)!.transform).toEqual([1, 0, 0, 1, 0, 0]);
 });
+
+
+test("review laser stretches both its bright streak and cached glow", () => {
+  const s = scene();
+  s.state.shots = [{ x: 450, y: 200, vx: 300, vy: 0, life: 1 }];
+  const geometry = () => {
+    const paints = s.render().filter(p => at(p, 450, 200));
+    const stroke = paints.find(p => p.op === "stroke")!;
+    const line = stroke.path.filter(p => p.op === "moveTo" || p.op === "lineTo");
+    return [Math.abs(line[1]!.args[0]! - line[0]!.args[0]!), Number(paints.find(p => p.op === "drawImage")!.args[3])];
+  };
+  const normal = geometry(); s.state.shots[0]!.laser = true;
+  const laser = geometry();
+  expect(laser[0]!).toBeGreaterThan(normal[0]! * 2);
+  expect(laser[1]!).toBeGreaterThan(normal[1]!);
+});

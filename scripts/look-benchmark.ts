@@ -3,6 +3,9 @@ import { Renderer } from "../src/web/game/draw";
 import { Effects } from "../src/web/game/fx";
 import { Feedback } from "../src/web/game/fx/feedback";
 import { FixedStepper } from "../src/web/game/loop";
+import { REVIEW_LASER, UPGRADE_IDS } from "../src/shared/upgrades";
+import { openChoice } from "../src/web/game/upgrades";
+import { chooseUpgrade } from "../src/web/game/simulation";
 import { createSimulation } from "../src/web/game/simulation";
 import { arenaForViewport } from "../src/web/game/arena";
 
@@ -10,6 +13,14 @@ const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!
 const readout = document.querySelector("pre")!;
 const renderer = new Renderer(ctx), fx = new Effects(), feedback = new Feedback(fx), loop = new FixedStepper(feedback);
 const state = createSimulation(73, arenaForViewport(innerWidth, innerHeight)), input = { x: 0, y: 0, target: null };
+const profile = new URLSearchParams(location.search).get("profile") ?? "normal";
+function acquire(id: typeof UPGRADE_IDS[number], count: number) {
+  for (let i = 0; i < count; i++) {
+    do { state.upgrades.offer = null; openChoice(state.upgrades); } while (!state.upgrades.offer!.includes(id));
+    chooseUpgrade(state, state.upgrades.choiceNumber, id);
+  }
+}
+if (profile === "laser") acquire(REVIEW_LASER, 2);
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
 const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];
@@ -37,7 +48,7 @@ function fixture(timestamp: number) {
   replenish();
   if (timestamp - lastShot >= 200) {
     const bug = state.bugs[0]!;
-    state.shots.push({ x: bug.x, y: bug.y, vx: 30, vy: 0, life: 1 }); lastShot = timestamp;
+    state.shots.push({ x: bug.x, y: bug.y, vx: 30, vy: 0, life: 1, remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0 }); lastShot = timestamp;
   }
   if (timestamp - lastHit >= 2000) {
     const bug = state.bugs[state.bugs.length - 1]!; bug.x = state.robot.x; bug.y = state.robot.y;
@@ -53,7 +64,7 @@ function percentile(values: number[], fraction: number) {
 }
 function mean(values: number[]) { return values.reduce((sum, value) => sum + value, 0) / (values.length || 1); }
 function report() {
-  return { mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
+  return { profile, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
     meanFps: 1000 / mean(intervals), lowestRollingFps: Math.min(...rolling),
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),

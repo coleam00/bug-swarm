@@ -73,8 +73,8 @@ export class Renderer {
     for (const shot of state.shots) {
       const length = Math.hypot(shot.vx, shot.vy) || 1, dx = shot.vx / length, dy = shot.vy / length;
       ctx.save(); ctx.translate(shot.x, shot.y); ctx.rotate(Math.atan2(dy, dx));
-      ctx.drawImage(art.shot, -27, -9, 44, 18);
-      ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(3, 0);
+      ctx.drawImage(art.shot, shot.laser ? -57 : -27, -9, shot.laser ? 80 : 44, 18);
+      ctx.beginPath(); ctx.moveTo(shot.laser ? -45 : -15, 0); ctx.lineTo(3, 0);
       ctx.lineWidth = 3; ctx.strokeStyle = "#fff2b8"; ctx.stroke(); ctx.restore();
     }
     ctx.globalCompositeOperation = "source-over";

@@ -1,6 +1,8 @@
 import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
+import { REVIEW_LASER, type UpgradeId } from "../../shared/upgrades";
+import { createUpgrades, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
@@ -11,18 +13,22 @@ export interface ShotObserver {
   beforeShots(bugs: readonly Readonly<Bug>[], squashes: number): void;
   afterShots(bugs: readonly Readonly<Bug>[], squashes: number): void;
 }
-export interface Shot extends Point { vx: number; vy: number; life: number }
+export interface Shot extends Point { vx: number; vy: number; life: number; remaining?: number; laser?: boolean }
 export interface Simulation {
   readonly arena: Arena;
   seed: number; nextId: number; time: number; seconds: number; score: number; squashes: number;
   hits: number; dead: boolean; invulnerableUntil: number; spawnIn: number; fireIn: number; eligibleSpawns: number;
   robot: Point; bugs: Bug[]; shots: Shot[];
+  upgrades: UpgradeState;
 }
 export const IDLE: Input = { x: 0, y: 0, target: null };
 export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Simulation {
   return { arena: Object.freeze({ ...arena }), seed: seed >>> 0, nextId: 1, time: 0, seconds: 0, score: 0, squashes: 0, hits: 0,
     dead: false, invulnerableUntil: 0, spawnIn: spawnInterval(0), fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
-    robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [] };
+    robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [], upgrades: createUpgrades(seed) };
+}
+export function chooseUpgrade(state: Simulation, choiceNumber: number, id: UpgradeId): boolean {
+  return !state.dead && selectUpgrade(state.upgrades, choiceNumber, id);
 }
 export function random(state: Simulation): number {
   state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
@@ -85,22 +91,33 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Sho
     const target = nearestBug(state);
     if (target) {
       const sx = target.x - state.robot.x, sy = target.y - state.robot.y, length = Math.hypot(sx, sy) || 1;
-      state.shots.push({ ...state.robot, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME });
+      state.shots.push({ ...state.robot, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME,
+        remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0 });
     }
   }
   observer?.beforeShots(state.bugs, state.squashes);
   let kept = 0;
   for (const shot of state.shots) {
     const nx = shot.x + shot.vx * dt, ny = shot.y + shot.vy * dt;
-    let hit = -1, closest = Infinity;
-    for (let i = 0; i < state.bugs.length; i++) {
+    shot.remaining ??= 1;
+    while (shot.remaining > 0) {
+      let hit = -1, closest = Infinity, closestId = Infinity;
+      for (let i = 0; i < state.bugs.length; i++) {
       const bug = state.bugs[i]!;
       if (segmentDistanceSquared(shot.x, shot.y, nx, ny, bug) <= (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2) {
-        const distance = (bug.x - shot.x) ** 2 + (bug.y - shot.y) ** 2;
-        if (distance < closest) { closest = distance; hit = i; }
+        const vx = nx - shot.x, vy = ny - shot.y, lengthSquared = vx * vx + vy * vy;
+        const projection = ((bug.x - shot.x) * vx + (bug.y - shot.y) * vy) / (lengthSquared || 1);
+        const perpendicular = (bug.x - shot.x) ** 2 + (bug.y - shot.y) ** 2 - projection * projection * lengthSquared;
+        const distance = Math.max(0, projection - Math.sqrt(Math.max(0, (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2 - perpendicular) / (lengthSquared || 1)));
+        if (distance < closest - 1e-9 || (Math.abs(distance - closest) <= 1e-9 && bug.id < closestId)) {
+          closest = distance; closestId = bug.id; hit = i;
+        }
       }
     }
-    if (hit !== -1) { state.bugs.splice(hit, 1); state.squashes++; continue; }
+      if (hit === -1) break;
+      state.bugs.splice(hit, 1); state.squashes++; shot.remaining--;
+    }
+    if (shot.remaining === 0) continue;
     shot.x = nx; shot.y = ny; shot.life -= dt;
     if (shot.life > 0) state.shots[kept++] = shot;
   }
