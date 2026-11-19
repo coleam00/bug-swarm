@@ -70,6 +70,18 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+test("invalid load override fails before creating a database or starting a listener", () => {
+  const dataDir = join(scratch, "invalid-data");
+  const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
+    cwd: scratch, env: { ...env, DATA_DIR: dataDir, LOAD_TEST_START_LIMIT: "" },
+    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+  });
+  expect(child.exitCode).not.toBe(0);
+  expect(child.stderr.toString()).toContain("LOAD_TEST_START_LIMIT must be a positive safe integer");
+  expect(child.stdout.toString()).not.toContain("App on");
+  expect(existsSync(dataDir)).toBe(false);
+});
+
 test.each([
   { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
   {
