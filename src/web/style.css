@@ -21,6 +21,21 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .over li strong { float: right; }
 .restart { color: #86ded1; font-weight: bold; }
 footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 8px 12px; font-size: 0.8rem; }
+.choices { width: min(900px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 20px; border: 1px solid #86ded1; border-radius: 14px; color: #edf3fa; background: #101e2c; text-align: center; }
+.choices::backdrop { background: #050b14cf; }
+.choices h1 { margin: 0 0 8px; font-size: 1.5rem; }
+.choices p { margin: 0 0 18px; }
+.choice-cards { display: grid; gap: 12px; }
+.choice-cards button { min-width: 44px; min-height: 100px; display: grid; grid-template-columns: 32px 1fr; gap: 6px 10px; text-align: left; padding: 14px; }
+.choice-cards button strong { font-size: 1.1rem; }
+.choice-cards button > span:last-child { grid-column: 2; font-size: 0.9rem; font-weight: normal; line-height: 1.35; }
+.choice-number { grid-row: span 2; align-self: center; font-size: 1.4rem; }
+button:focus-visible, canvas:focus-visible { outline: 3px solid #fff4ab; outline-offset: 3px; }
+.build { line-height: 1.5; overflow-wrap: anywhere; }
+@media (min-width: 650px) {
+  .choice-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .choice-cards button { min-height: 150px; }
+}
 @media (max-height: 500px) and (min-width: 600px) {
   .over { left: 35%; text-align: left; }
   .over ol { margin-left: 0; }

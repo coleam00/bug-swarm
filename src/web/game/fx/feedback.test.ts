@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { BUG_DEFINITIONS, STEP } from "../config";
 import { FixedStepper } from "../loop";
-import { createSimulation, IDLE, step, type Bug } from "../simulation";
+import { chooseUpgrade, createSimulation, IDLE, step, type Bug } from "../simulation";
 import { Effects } from "./index";
 import { Feedback } from "./feedback";
 
@@ -103,5 +103,9 @@ test.each([
     fx.advance(i * 1000 / 60); feedback.beforeStep(observed);
     step(plain, input, STEP); step(observed, input, STEP, feedback); feedback.afterStep(observed, STEP);
     expect(observed).toEqual(plain);
+    if (plain.upgrades.offer) {
+      const number = plain.upgrades.choiceNumber, id = plain.upgrades.offer[(number - 1) % 3]!;
+      chooseUpgrade(plain, number, id); chooseUpgrade(observed, number, id);
+    }
   }
 });

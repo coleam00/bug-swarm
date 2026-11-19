@@ -1,0 +1,97 @@
+{
+  "portrait": [
+    {
+      "text": "1Test shieldRefill to block 1 hit",
+      "width": 306,
+      "height": 100,
+      "left": 42,
+      "right": 348,
+      "top": 315,
+      "bottom": 415,
+      "scroll": 306,
+      "client": 306
+    },
+    {
+      "text": "2Review laserShots hit up to 2 bugs",
+      "width": 306,
+      "height": 100,
+      "left": 42,
+      "right": 348,
+      "top": 427,
+      "bottom": 527,
+      "scroll": 306,
+      "client": 306
+    },
+    {
+      "text": "3CI droneAdd firing drone 1",
+      "width": 306,
+      "height": 100,
+      "left": 42,
+      "right": 348,
+      "top": 539,
+      "bottom": 639,
+      "scroll": 306,
+      "client": 306
+    }
+  ],
+  "landscape": [
+    {
+      "text": "1Test shieldRefill to block 1 hit",
+      "width": 245.328125,
+      "height": 150,
+      "left": 42,
+      "right": 287.328125,
+      "top": 163,
+      "bottom": 313,
+      "scroll": 245,
+      "client": 245
+    },
+    {
+      "text": "2Review laserShots hit up to 2 bugs",
+      "width": 245.328125,
+      "height": 150,
+      "left": 299.328125,
+      "right": 544.65625,
+      "top": 163,
+      "bottom": 313,
+      "scroll": 245,
+      "client": 245
+    },
+    {
+      "text": "3CI droneAdd firing drone 1",
+      "width": 245.328125,
+      "height": 150,
+      "left": 556.65625,
+      "right": 801.984375,
+      "top": 163,
+      "bottom": 313,
+      "scroll": 245,
+      "client": 245
+    }
+  ],
+  "shiftTab": true,
+  "spaceSelection": true,
+  "allNumericKeys": true,
+  "heldSteeringCleared": true,
+  "waitSeconds": 30,
+  "errors": [],
+  "finish": {
+    "playerId": "6816b94f-06ef-40d8-86da-c4df56f29744",
+    "score": 60,
+    "squashes": 0,
+    "seconds": 60,
+    "touch": true,
+    "upgrades": [
+      {
+        "id": "review-laser",
+        "count": 1
+      },
+      {
+        "id": "refactor-bomb",
+        "count": 2
+      }
+    ]
+  },
+  "restart": true,
+  "browser": "157.0.8103.51"
+}

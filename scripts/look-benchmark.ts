@@ -5,8 +5,7 @@ import { Feedback } from "../src/web/game/fx/feedback";
 import { FixedStepper } from "../src/web/game/loop";
 import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, UPGRADE_IDS } from "../src/shared/upgrades";
 import { openChoice } from "../src/web/game/upgrades";
-import { chooseUpgrade } from "../src/web/game/simulation";
-import { createSimulation } from "../src/web/game/simulation";
+import { chooseUpgrade, createSimulation } from "../src/web/game/simulation";
 import { arenaForViewport } from "../src/web/game/arena";
 
 const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!;
@@ -24,6 +23,11 @@ if (profile === "laser") acquire(REVIEW_LASER, 2);
 if (profile === "shield") acquire(TEST_SHIELD, 2);
 if (profile === "bomb") acquire(REFACTOR_BOMB, 2);
 if (profile === "drone") acquire(CI_DRONE, 2);
+if (["first", "double", "stress"].includes(profile)) {
+  for (const id of UPGRADE_IDS) acquire(id, profile === "first" ? 1 : profile === "double" ? 2 : id === CI_DRONE ? 9 : 4);
+}
+// Fixture-only: measurement must continue without a modal choice.
+state.upgrades.nextChoiceAt = Infinity;
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
 const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];
@@ -32,6 +36,8 @@ let rollingStart = 0, rollingFrames = 0, lastShot = 0, lastHit = 0, lastBurst = 
 let peakParticles = 0, peakTrails = 0, peakLabels = 0, minBugs = Infinity, maxBugs = 0;
 let minFastBugs = Infinity, maxFastBugs = 0;
 let stopped = false;
+let blocks = 0, detonations = 0, laserKills = 0, droneShots = 0, peakRings = 0;
+const droneCooldowns = new Float64Array(state.drones.length);
 let frame = 0;
 function resize() {
   const ratio = Math.min(devicePixelRatio || 1, 2);
@@ -73,7 +79,7 @@ function report() {
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),
     fixtureMeanMs: mean(fixtures), fixtureP95Ms: percentile(fixtures, 0.95),
-    peakParticles, peakTrails, peakLabels, minBugs, maxBugs, minFastBugs, maxFastBugs,
+    blocks, detonations, laserKills, droneShots, peakRings, peakParticles, peakTrails, peakLabels, minBugs, maxBugs, minFastBugs, maxFastBugs,
     worldWidth: state.arena.width, worldHeight: state.arena.height,
     viewport: [innerWidth, innerHeight], dpr: devicePixelRatio, renderDpr: Math.min(devicePixelRatio || 1, 2), userAgent: navigator.userAgent };
 }
@@ -85,7 +91,13 @@ function tick(timestamp: number) {
   const prepared = performance.now();
   fx.advance(timestamp);
   input.x = Math.cos(state.time * 0.8); input.y = Math.sin(state.time * 0.8);
+  const charges = state.shieldCharges, bombs = state.bombDetonations, kills = state.squashes;
+  for (let i = 0; i < state.drones.length; i++) droneCooldowns[i] = state.drones[i]!.fireIn;
   loop.advance(timestamp, state, input);
+  blocks += Math.max(0, charges - state.shieldCharges); detonations += state.bombDetonations - bombs;
+  if (state.bombDetonations === bombs && state.upgrades.counts[REVIEW_LASER]) laserKills += state.squashes - kills;
+  // Cooldowns reset only after real simulation firing. Count those transitions.
+  for (let i = 0; i < state.drones.length; i++) if (state.drones[i]!.fireIn > droneCooldowns[i]!) droneShots++;
   const updated = performance.now();
   replenish();
   const replenished = performance.now();
@@ -99,6 +111,7 @@ function tick(timestamp: number) {
     let fastBugs = 0;
     for (const bug of state.bugs) if (bug.kind === "fast") fastBugs++;
     minFastBugs = Math.min(minFastBugs, fastBugs); maxFastBugs = Math.max(maxFastBugs, fastBugs);
+    peakRings = Math.max(peakRings, fx.ring.life > 0 ? 1 : 0);
     peakParticles = Math.max(peakParticles, fx.particles.count); peakTrails = Math.max(peakTrails, fx.trails.count); peakLabels = Math.max(peakLabels, fx.labels.count);
     rollingFrames++;
     if (timestamp - rollingStart >= 1000) { rolling.push(rollingFrames * 1000 / (timestamp - rollingStart)); rollingFrames = 0; rollingStart = timestamp; }

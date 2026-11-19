@@ -1,9 +1,8 @@
-import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, type BugKind } from "./config";
+import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, BOMB_RECHARGE, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
 import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, type UpgradeId } from "../../shared/upgrades";
-import { BOMB_RECHARGE, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED } from "./config";
-import { createUpgrades, selectUpgrade, type UpgradeState } from "./upgrades";
+import { createUpgrades, openChoice, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
@@ -82,8 +81,9 @@ function segmentDistanceSquared(x: number, y: number, nx: number, ny: number, po
 }
 
 // Mutates reusable working state. No clock, DOM, network, or unseeded random source.
-export function step(state: Simulation, input: Input, dt: number, observer?: KillObserver): void {
-  if (state.dead || state.upgrades.offer || dt <= 0) return;
+export function step(state: Simulation, input: Input, dt: number, observer?: KillObserver): number {
+  if (state.dead || state.upgrades.offer || dt <= 0) return 0;
+  dt = Math.min(dt, Math.max(0, state.upgrades.nextChoiceAt - state.time));
   state.time += dt;
   let dx = input.x, dy = input.y, distance = Math.hypot(dx, dy);
   let travel = ROBOT_SPEED * dt;
@@ -135,17 +135,17 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
     while (shot.remaining > 0) {
       let hit = -1, closest = Infinity, closestId = Infinity;
       for (let i = 0; i < state.bugs.length; i++) {
-      const bug = state.bugs[i]!;
-      if (segmentDistanceSquared(shot.x, shot.y, nx, ny, bug) <= (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2) {
-        const vx = nx - shot.x, vy = ny - shot.y, lengthSquared = vx * vx + vy * vy;
-        const projection = ((bug.x - shot.x) * vx + (bug.y - shot.y) * vy) / (lengthSquared || 1);
-        const perpendicular = (bug.x - shot.x) ** 2 + (bug.y - shot.y) ** 2 - projection * projection * lengthSquared;
-        const distance = Math.max(0, projection - Math.sqrt(Math.max(0, (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2 - perpendicular) / (lengthSquared || 1)));
-        if (distance < closest - 1e-9 || (Math.abs(distance - closest) <= 1e-9 && bug.id < closestId)) {
-          closest = distance; closestId = bug.id; hit = i;
+        const bug = state.bugs[i]!;
+        if (segmentDistanceSquared(shot.x, shot.y, nx, ny, bug) <= (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2) {
+          const vx = nx - shot.x, vy = ny - shot.y, lengthSquared = vx * vx + vy * vy;
+          const projection = ((bug.x - shot.x) * vx + (bug.y - shot.y) * vy) / (lengthSquared || 1);
+          const perpendicular = (bug.x - shot.x) ** 2 + (bug.y - shot.y) ** 2 - projection * projection * lengthSquared;
+          const distance = Math.max(0, projection - Math.sqrt(Math.max(0, (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2 - perpendicular) / (lengthSquared || 1)));
+          if (distance < closest - 1e-9 || (Math.abs(distance - closest) <= 1e-9 && bug.id < closestId)) {
+            closest = distance; closestId = bug.id; hit = i;
+          }
         }
       }
-    }
       if (hit === -1) break;
       state.bugs.splice(hit, 1); state.squashes++; shot.remaining--;
     }
@@ -169,4 +169,9 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   state.bugs.length = kept;
   state.seconds = Math.floor(state.time + 1e-9);
   state.score = state.squashes * POINTS_PER_SQUASH + state.seconds * POINTS_PER_SECOND;
+  if (!state.dead && state.time + 1e-9 >= state.upgrades.nextChoiceAt) {
+    state.time = state.upgrades.nextChoiceAt;
+    openChoice(state.upgrades);
+  }
+  return dt;
 }

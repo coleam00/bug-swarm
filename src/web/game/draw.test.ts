@@ -300,7 +300,6 @@ test("a hit flashes the chassis white and translates the world while the clip an
   expect(recovered.find((p) => p.op === "drawImage" && Number(p.args[3]) >= SQUARE_ARENA.width)!.transform).toEqual([1, 0, 0, 1, 0, 0]);
 });
 
-
 test("review laser stretches both its bright streak and cached glow", () => {
   const s = scene();
   s.state.shots = [{ x: 450, y: 200, vx: 300, vy: 0, life: 1 }];
@@ -316,7 +315,6 @@ test("review laser stretches both its bright streak and cached glow", () => {
   expect(laser[1]!).toBeGreaterThan(normal[1]!);
 });
 
-
 test("shield bubble exists only with charges; two charges add a second outline", () => {
   const s = scene();
   const outlines = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && hasShape(p, "arc"));
@@ -326,7 +324,6 @@ test("shield bubble exists only with charges; two charges add a second outline",
   s.state.shieldCharges = 2; expect(outlines()).toHaveLength(2);
   s.state.shieldCharges = 0; expect(outlines()).toHaveLength(0);
 });
-
 
 test("bomb ring expands across the arena, fades and expires", () => {
   const s = scene(); s.fx.advance(0); s.fx.bomb(250, 200, 850);
@@ -339,7 +336,6 @@ test("bomb ring expands across the arena, fades and expires", () => {
   for (let t = 320; t <= 640; t += 80) s.fx.advance(t);
   expect(ring()).toBeUndefined();
 });
-
 
 test("each drone has a small cached glow at its simulation orbit position", () => {
   const s = scene(); s.state.drones = [{ fireIn: 0 }, { fireIn: 0 }]; s.state.time = 2;

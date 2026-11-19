@@ -5,6 +5,9 @@ import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
 import { countEvents, getRun, hideName, openDb, recordEvent } from "./db";
+import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
+import { acquiredUpgrades } from "../web/game/upgrades";
+import { arenaForViewport } from "../web/game/arena";
 import { UPGRADE_IDS } from "../shared/upgrades";
 
 let dir: string;
@@ -124,4 +127,24 @@ test("committed finish stays successful if subsequent ranking reads fail", async
   expect((await app.request("/api/leaderboard")).status).toBe(503);
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
   expect(countEvents(db).run_ended).toBe(1); expect(failures).toHaveLength(1);
+});
+
+test("seeded choice-driven finishes remain plausible in all arena shapes, with and without wall-clock pauses", async () => {
+  for (const shape of [[1, 1], [390, 844], [844, 390]]) {
+    const s = createSimulation(73, arenaForViewport(shape[0]!, shape[1]!));
+    while (!s.dead && s.time < 180) {
+      step(s, { x: Math.cos(s.time * 0.4), y: Math.sin(s.time * 0.4), target: null }, 1 / 60);
+      if (s.upgrades.offer) chooseUpgrade(s, s.upgrades.choiceNumber, s.upgrades.offer[(s.upgrades.choiceNumber - 1) % 3]!);
+    }
+    expect(acquiredUpgrades(s.upgrades).length).toBeGreaterThan(0);
+    for (const pause of [0, 600000]) {
+      let time = 0;
+      const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+      const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot" }))).json() as { runId: string };
+      time = s.time * 1000 + pause;
+      const result = { playerId, seconds: s.seconds, squashes: s.squashes, score: s.score, touch: false, upgrades: acquiredUpgrades(s.upgrades) };
+      expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
+      expect(getRun(db, runId)?.upgrades).toBe(JSON.stringify(result.upgrades));
+    }
+  }
 });

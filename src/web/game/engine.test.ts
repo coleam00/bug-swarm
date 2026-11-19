@@ -149,3 +149,42 @@ test("engine delivers movement and simulated squash/hit feedback to rendering an
     expect(latest.flash).toBe(0); expect(latest.shake.remaining).toBe(0);
   } finally { h.cleanup(); draw.mockRestore(); }
 });
+
+test("choice releases steering/capture, freezes visuals, requires fresh numeric keys and resumes without catch-up", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+  try {
+    const s = h.session.current!.simulation; s.spawnIn = s.fireIn = Infinity; s.time = 19.99;
+    h.tick(0);
+    h.event(h.canvas, "pointerdown", { pointerId: 7, pointerType: "mouse", button: 0, clientX: 380, clientY: 370 });
+    h.event(h.win, "keydown", { key: "d", repeat: false });
+    h.event(h.win, "keydown", { key: "1", repeat: false });
+    h.tick(17); expect(h.session.view.choice).not.toBeNull(); expect(h.captures.size).toBe(0);
+    const frozen = structuredClone(s), fx = draw.mock.calls.at(-1)![1], visualTime = fx.time;
+    h.tick(300000); expect(s).toEqual(frozen); expect(fx.time).toBe(visualTime);
+    h.event(h.win, "keydown", { key: "1", repeat: true }); expect(h.session.view.choice).not.toBeNull();
+    h.event(h.win, "keydown", { key: "1", repeat: false }); expect(h.session.view.choice).not.toBeNull();
+    h.event(h.win, "keyup", { key: "1" });
+    h.event(h.win, "blur", {}); h.resize(844, 280);
+    expect(h.session.view.choice).not.toBeNull(); expect(s).toEqual(frozen);
+    h.event(h.win, "keydown", { key: "d", repeat: false });
+    const chosen = h.event(h.win, "keydown", { key: "1", repeat: false });
+    expect(chosen.defaultPrevented).toBe(true); expect(h.session.view.choice).toBeNull();
+    const robot = { ...s.robot };
+    h.event(h.win, "keydown", { key: "d", repeat: true });
+    h.tick(600000); expect(s.time).toBe(20); h.tick(600017);
+    expect(s.time).toBeCloseTo(20 + 1 / 60); expect(s.robot).toEqual(robot);
+    expect(h.session.view.upgrades.reduce((sum, item) => sum + item.count, 0)).toBe(1);
+  } finally { h.cleanup(); draw.mockRestore(); }
+});
+
+test.each([1, 2, 3])("fresh numeric key %i selects exactly its offered card", number => {
+  const h = harness();
+  try {
+    const s = h.session.current!.simulation; s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
+    h.tick(0); h.tick(17);
+    const id = h.session.view.choice!.offer[number - 1]!;
+    h.event(h.win, "keydown", { key: String(number), repeat: false });
+    expect(h.session.view.choice).toBeNull(); expect(h.session.view.upgrades).toEqual([{ id, count: 1 }]);
+    expect(s.time).toBe(20);
+  } finally { h.cleanup(); }
+});
