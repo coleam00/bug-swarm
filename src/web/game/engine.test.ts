@@ -119,26 +119,33 @@ test("visibility drops hidden elapsed time and DPR resize updates canvas dimensi
 
 test("engine delivers movement and simulated squash/hit feedback to rendering and advances effects on later frames", () => {
   const draw = spyOn(Renderer.prototype, "draw"), h = harness();
-  const renderedEffects = () => draw.mock.calls.at(-1)![1];
+  const tickAndReadEffects = (timestamp: number) => {
+    draw.mockClear();
+    h.tick(timestamp);
+    // A retained Effects reference can advance even when the canvas isn't drawn.
+    expect(draw).toHaveBeenCalledTimes(1);
+    return draw.mock.calls[0]![1];
+  };
   try {
     const state = h.session.current!.simulation; state.spawnIn = state.fireIn = 100;
-    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
-    expect(renderedEffects().trails.count).toBeGreaterThan(0);
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false });
+    expect(tickAndReadEffects(17).trails.count).toBeGreaterThan(0);
     h.event(h.win, "keyup", { key: "d" });
     state.hits = 2;
     state.bugs.push({ id: 1, kind: "base", x: 100, y: 300 }, { id: 2, kind: "base", x: state.robot.x, y: state.robot.y });
-    state.shots.push({ x: 100, y: 300, vx: 1, vy: 0, life: 1 }); h.tick(34);
-    const fx = renderedEffects(), labelY = fx.labels.y[0]!, particleX = fx.particles.x[0]!, particleY = fx.particles.y[0]!, life = fx.labels.life[0]!;
+    state.shots.push({ x: 100, y: 300, vx: 1, vy: 0, life: 1 });
+    const fx = tickAndReadEffects(34), labelY = fx.labels.y[0]!, particleX = fx.particles.x[0]!, particleY = fx.particles.y[0]!, life = fx.labels.life[0]!;
     expect(state.squashes).toBe(1); expect(state.hits).toBe(3); expect(h.session.view.over).toBe(true);
     expect(fx.labels.count).toBe(1); expect(fx.particles.count).toBeGreaterThan(0);
     expect(fx.flash).toBeGreaterThan(0); expect(Math.hypot(fx.shake.x, fx.shake.y)).toBeGreaterThan(0);
-    h.tick(51);
-    expect(renderedEffects()).toBe(fx); expect(fx.labels.y[0]!).toBeLessThan(labelY);
-    expect(Math.hypot(fx.particles.x[0]! - particleX, fx.particles.y[0]! - particleY)).toBeGreaterThan(0);
-    expect(fx.labels.life[0]!).toBeLessThan(life);
-    expect(fx.flash).toBeLessThan(0.1);
-    for (let frame = 0; frame < 45; frame++) h.tick(68 + frame * 17);
-    expect(fx.trails.count).toBe(0); expect(fx.labels.count).toBe(0); expect(fx.particles.count).toBe(0);
-    expect(fx.flash).toBe(0); expect(fx.shake.remaining).toBe(0);
+    const advanced = tickAndReadEffects(51);
+    expect(advanced).toBe(fx); expect(advanced.labels.y[0]!).toBeLessThan(labelY);
+    expect(Math.hypot(advanced.particles.x[0]! - particleX, advanced.particles.y[0]! - particleY)).toBeGreaterThan(0);
+    expect(advanced.labels.life[0]!).toBeLessThan(life);
+    expect(advanced.flash).toBeLessThan(0.1);
+    let latest = advanced;
+    for (let frame = 0; frame < 45; frame++) latest = tickAndReadEffects(68 + frame * 17);
+    expect(latest.trails.count).toBe(0); expect(latest.labels.count).toBe(0); expect(latest.particles.count).toBe(0);
+    expect(latest.flash).toBe(0); expect(latest.shake.remaining).toBe(0);
   } finally { h.cleanup(); draw.mockRestore(); }
 });
