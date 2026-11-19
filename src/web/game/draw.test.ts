@@ -88,8 +88,8 @@ function contrast(a: Paint["fillStyle"], b: Paint["fillStyle"]): number {
   const x = colour(a).light, y = colour(b).light;
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
-function visibleLegs(s: ReturnType<typeof scene>, paint: Paint): void {
-  expect(colour(paint.strokeStyle).alpha * paint.globalAlpha).toBeGreaterThan(0.5);
+function visibleStroke(s: ReturnType<typeof scene>, paint: Paint, minimumAlpha = 0.5): void {
+  expect(colour(paint.strokeStyle).alpha * paint.globalAlpha).toBeGreaterThan(minimumAlpha);
   expect(contrast(paint.strokeStyle, floorColour(s))).toBeGreaterThan(1.5);
   expect(paint.lineWidth).toBeGreaterThan(0);
 }
@@ -219,14 +219,14 @@ test("beetles face the robot and animate their articulated legs with visual time
   const beetle = (paints: Paint[]) => paints.find((p) => p.op === "fill" && at(p, 100, 100) && hasShape(p, "ellipse"))!;
   const legs = (paints: Paint[]) => paints.find((p) => p.op === "stroke" && at(p, 100, 100) && p.path.filter((part) => part.op === "lineTo").length >= 6)!;
   const first = s.render(); expect(beetle(first)).toBeDefined(); expect(legs(first)).toBeDefined();
-  visibleLegs(s, legs(first));
+  visibleStroke(s, legs(first));
   expect(heading(beetle(first))).toBeCloseTo(Math.atan2(200, 200));
   s.fx.time += 0.1;
   const animated = s.render(); expect(legs(animated).path).not.toEqual(legs(first).path);
-  visibleLegs(s, legs(animated));
+  visibleStroke(s, legs(animated));
   s.state.robot.y = 100;
   const turned = s.render(); expect(heading(beetle(turned))).toBeCloseTo(0);
-  visibleLegs(s, legs(turned));
+  visibleStroke(s, legs(turned));
 });
 
 test("fast beetles have a smaller bright shell and quicker gait selected from the kind table", () => {
@@ -245,7 +245,7 @@ test("fast beetles have a smaller bright shell and quicker gait selected from th
   const legs = (paints: Paint[], x: number) => paints.find((p) => p.op === "stroke" && at(p, x, 100) && p.path.length === 18)!;
   s.fx.time = 2 * Math.PI / BUG_STYLES.fast.gait;
   const later = s.render();
-  visibleLegs(s, legs(first, 200)); visibleLegs(s, legs(later, 200));
+  visibleStroke(s, legs(first, 200)); visibleStroke(s, legs(later, 200));
   legs(later, 200).path.forEach((part, i) => part.args.forEach((value, j) => expect(value).toBeCloseTo(legs(first, 200).path[i]!.args[j]!, 6)));
   expect(legs(later, 100).path).not.toEqual(legs(first, 100).path);
   expect(BUG_STYLES.fast.gait).toBeGreaterThan(BUG_STYLES.base.gait);
@@ -306,12 +306,14 @@ test("review laser stretches both its bright streak and cached glow", () => {
   const geometry = () => {
     const paints = s.render().filter(p => at(p, 450, 200));
     const stroke = paints.find(p => p.op === "stroke")!;
+    visibleStroke(s, stroke);
+    expect(paints.some(p => glow(s, p))).toBe(true);
     const line = stroke.path.filter(p => p.op === "moveTo" || p.op === "lineTo");
     return [Math.abs(line[1]!.args[0]! - line[0]!.args[0]!), Number(paints.find(p => p.op === "drawImage")!.args[3])];
   };
   const normal = geometry(); s.state.shots[0]!.laser = true;
   const laser = geometry();
-  expect(laser[0]!).toBeGreaterThan(normal[0]! * 2);
+  expect(laser[0]!).toBeGreaterThan(normal[0]!);
   expect(laser[1]!).toBeGreaterThan(normal[1]!);
 });
 
@@ -331,6 +333,7 @@ test("bomb ring expands across the arena, fades and expires", () => {
   expect(ring()).toBeDefined();
   const first = ring()!; s.fx.advance(80); s.fx.advance(160); s.fx.advance(240);
   const later = ring()!;
+  visibleStroke(s, first); visibleStroke(s, later, 0.1);
   expect(later.path[0]!.args[2]!).toBeGreaterThan(first.path[0]!.args[2]!);
   expect(later.globalAlpha).toBeLessThan(first.globalAlpha);
   for (let t = 320; t <= 640; t += 80) s.fx.advance(t);

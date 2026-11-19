@@ -102,3 +102,14 @@ Screenshots: [portrait cards](upgrade-validation/portrait.png), [landscape cards
 | burst | 150-150 | 24-43 | 1024 / 6 / 256 / 1 | 68 | 10 | 3463 | 639 |
 
 All profiles exceeded the 58 FPS criterion, with exactly 150 bugs at every sampled draw. Saturation reached the fixed particle and label caps while the ring stayed within its single slot. The activity counters confirm shield blocks, automatic clears, upgraded projectile kills and independent drone firing occurred; laser kills include all upgraded projectile sources. No page or console errors occurred. These are desktop measurements accepted by the owner, not estimates for other hardware. [Raw reports](upgrade-validation/benchmark.json) include browser version, durations, frame counts, viewport, population bounds, fixture costs and pool peaks.
+
+
+### Focused test repairs after review
+
+The follow-up changes tests only. `react-test-renderer` 18.3.1 is a development dependency matching React 18.3.1; it replaces the App test's server-rendered HTML probe with actual React effects, handlers and real Session subscriptions without a DOM/browser dependency or a custom React renderer. Native dialog methods and canvas mounting are test boundaries. The probe checks modal open/close, all three touch-card handlers, touch attribution, focus restoration and a full minute of UI timers without selection. Build and description assertions check meaningful content without fixing copy, separators or count placement.
+
+The existing offer test now compares fixed different run seeds as well as equal seeds, including the simulation-to-choice seed handoff. Laser and bomb tests require effective opacity and contrast through the existing paint fixture; laser geometry only has to exceed the ordinary beam. The existing real-client/in-process-API test submits a mixed repeated-pick build and checks its SQLite JSON.
+
+In a disposable copy, 15 broken variants were rejected: missing modal opening, disabled cards, timeout/interval auto-selection, missing dialog close/focus restoration, a constant seed at either layer, transparent laser, transparent/zero-alpha/camouflaged ring, dropped client upgrades, missing descriptions and missing build counts. Six harmless controls passed: a 30-unit laser instead of 48 (ordinary shots remain 18), equivalent descriptions, alternate empty copy, different build separators/count placement and modest ring-colour tuning.
+
+`bun run check` passes all 135 tests with 13,320 assertions; `bun run build` produces the same application bundle. Neighboring engine keyboard/pointer and session lifecycle tests, shield opacity and drone glow checks, and the other client routes were inspected for the same gaps. The recorded browser/FPS measurements above were not rerun for this test-only repair; the operator's before-merge browser check remains due.
