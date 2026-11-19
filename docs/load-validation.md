@@ -83,7 +83,7 @@ This deletes all gameplay history, including real players, abandoned runs and le
 
 ## Factory evidence
 
-Measured 2026-11-19, ending at 22:12:32 UTC, at source commit `78312ff5ae9ac6e38cafb31fb10e9f5601cd84aa`. Subsequent changes add this evidence and a startup-validation test; measured runtime code is unchanged.
+Measured 2026-11-19, ending at 22:12:32 UTC, at source commit `78312ff5ae9ac6e38cafb31fb10e9f5601cd84aa`. Subsequent changes add evidence and tests only; measured runtime code is unchanged.
 
 - Machine: Windows 11 Home 10.0.26200; AMD Ryzen 9 7950X3D, 16 cores / 32 logical processors; 127.2 GiB OS-visible RAM; Bun 1.4.2 (`744846f84`). This is the factory workstation; server and generator ran together on it, using loopback TCP, without other project checks running during measurement.
 - Built with `bun run build`; server launched with `bun run start`, `NODE_ENV=production`, `PORT=63788`, `LOAD_TEST_START_LIMIT=10000`, a fresh empty scratch `DATA_DIR`, and a scratch home. Production's normal listener remained `0.0.0.0`; the generator targeted `http://127.0.0.1:63788`. No proxy headers or plausibility overrides.
@@ -104,4 +104,4 @@ Post-run `bun run stats` reported `players: 500`, `finished_runs: 500`, `median_
 
 A separate fresh-server smoke test preceded measurement: 5 players / 6 seconds, 54 requests, 5 accepted starts and finishes, no failures/5xx, 100% under 200 ms; overall p50/p95/p99 5.45/13.87/14.41 ms. Stats counted all five finishes, and reset deleted 10 events, 5 runs and 5 players before the measured server was created with a different scratch database. Both server process trees were stopped by their owned PIDs. The timed workloads remain outside CI.
 
-`bun run check` passed on this machine: TypeScript clean, 154 tests passed, zero failed across 27 files. This includes CLI parsing and summary fixtures, virtual-clock HTTP workload tests against the real Hono/SQLite app, full-body timeout/drain coverage, reset rollback/confirmation/isolation, default rate-limit/spoof/expiry coverage and production startup override validation. Linux verification is left to the existing Windows/Linux CI matrix.
+`bun run check` passed on this machine: TypeScript clean, 158 tests passed, zero failed across 27 files. This includes CLI parsing, mixed-outcome request totals and per-route report data, virtual-clock HTTP workload tests against the real Hono/SQLite app, the 95% capacity boundary with successful slow responses, full-body timeout/drain coverage, reset rollback/confirmation/isolation, default rate-limit/spoof/expiry coverage and production startup override validation. Linux verification is left to the existing Windows/Linux CI matrix.

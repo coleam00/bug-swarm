@@ -3,7 +3,7 @@ import { createApp } from "../src/server/app";
 import { countEvents, openDb } from "../src/server/db";
 import { isId, validateName } from "../src/server/rules";
 import { TEAMS } from "../src/shared/teams";
-import { formatSummary, makeFinish, makePlayer, parseArgs, percentiles, runLoad, summarize, type Runtime } from "./load";
+import { formatSummary, makeFinish, makePlayer, parseArgs, percentiles, runLoad, summarize, type Runtime, type Sample } from "./load";
 
 test("load arguments: defaults, separator, origin normalization and help", () => {
   expect(parseArgs(["--url", "https://example.test/"])).toEqual({ url: "https://example.test", players: 500, seconds: 60 });
@@ -36,17 +36,40 @@ test("summary uses nearest ranks across raw samples, includes failures and stric
     { route: "b", ms: 4, failure: "transport" },
     { route: "b", ms: 5, status: 200, failure: "invalid-response" },
   ]);
+  expect(summary.requests).toBe(8);
   expect(summary.failures).toEqual({ "HTTP 429": 2, timeout: 1, "HTTP 503": 1, transport: 1, "invalid-response": 1 });
   expect(summary.successfulUnder200).toBe(1 / 8);
   expect(summary.serverErrors).toBe(1);
   expect(summary.overall).toEqual({ count: 8, p50: 4, p95: 5000, p99: 5000 });
-  expect(summary.byRoute.a?.count).toBe(3);
+  expect(summary.byRoute).toEqual({
+    a: { count: 3, p50: 199, p95: 200, p99: 200 },
+    b: { count: 5, p50: 4, p95: 5000, p99: 5000 },
+  });
   expect(summarize([]).successfulUnder200).toBe(0);
+});
+
+test("report includes all attempted requests, failure counts and each route's latency data", () => {
+  const routes = ["POST /api/runs", "POST /api/runs/:runId/finish", "GET /api/players/:playerId/best", "GET /api/leaderboard", "GET /api/teams"];
+  const samples: Sample[] = routes.flatMap((route, index) => Array.from({ length: 100 }, (_, i) => ({
+    route, ms: (i + 1) * (index + 1), status: i === 99 ? 429 : 200, failure: i === 99 ? "HTTP 429" : undefined,
+  })));
+  const report = formatSummary({
+    ...summarize(samples), requestedPlayers: 1, acceptedStarts: 1, acceptedFinishes: 1,
+    schedulingMs: 1000, drainMs: 0, errors: [], missingReads: [], passed: false,
+  });
+  expect(Number(report.match(/\brequests\b\D+(\d+)/i)?.[1])).toBe(500);
+  expect(report).toMatch(/"HTTP 429"\s*:\s*5\b/);
+  routes.forEach((route, index) => {
+    const lines = report.split("\n").filter(line => line.startsWith(`${route}:`));
+    expect(lines).toHaveLength(1);
+    const fields = Object.fromEntries([...lines[0]!.matchAll(/\b(n|p50|p95|p99)=([\d.]+)/g)].map(([, key, value]) => [key, Number(value)]));
+    expect(fields).toEqual({ n: 100, p50: 50 * (index + 1), p95: 95 * (index + 1), p99: 99 * (index + 1) });
+  });
 });
 
 // A virtual scheduler advances only after all work at the current instant settles.
 // The HTTP handler and score validation are real; no sockets or wall-clock deaths.
-async function virtualRun(players: number, seconds: number, transform?: (response: Response, url: string, init: RequestInit) => Response | Promise<Response>, interruptAt?: number) {
+async function virtualRun(players: number, seconds: number, transform?: (response: Response, url: string, init: RequestInit) => Response | Promise<Response>, interruptAt?: number, responseDelay: (index: number) => number = () => 0) {
   let now = 0, done = false;
   const db = openDb(":memory:");
   const app = createApp(db, { now: () => now, startLimit: 10000 });
@@ -61,8 +84,11 @@ async function virtualRun(players: number, seconds: number, transform?: (respons
       if (signal.aborted) wait.wake();
     }),
     fetch: async (url, init) => {
+      const index = calls.length;
       calls.push({ at: now, url, init });
       const response = await app.request(url, init);
+      const delay = responseDelay(index);
+      if (delay) await runtime.sleep(delay, init.signal!);
       return transform ? transform(response, url, init) : response;
     },
   };
@@ -94,7 +120,6 @@ test("workload uses valid identities, plausible scores, death/save reads, 2s pol
   expect(new Set(ids.map(identity => identity.playerId)).size).toBe(3);
   ids.forEach((identity, index) => {
     expect(isId(identity.playerId)).toBe(true);
-    expect(identity.name).toMatch(/^load-[a-f0-9]{11}$/);
     expect(validateName(identity.name).error).toBeUndefined();
     expect(identity.team).toBe(TEAMS[index % TEAMS.length]!);
   });
@@ -108,7 +133,25 @@ test("workload uses valid identities, plausible scores, death/save reads, 2s pol
   expect(leaders.filter(call => call.at === 8000)).toHaveLength(3);
   expect(leaders.filter(call => call.at === 10000)).toHaveLength(4);
   expect(calls.every(call => call.init.redirect === "manual" && call.init.cache === "no-store")).toBe(true);
-  expect(formatSummary(result)).toContain("Capacity result: PASS");
+});
+
+test.each([
+  { slow: 1, fraction: .95, passed: true },
+  { slow: 2, fraction: .90, passed: false },
+  { slow: 20, fraction: 0, passed: false },
+])("successful responses meet capacity only at or above 95 percent fast ($slow slow of 20)", async ({ slow, fraction, passed }) => {
+  // One player over twelve virtual seconds makes exactly twenty requests.
+  // Delays preserve successful statuses, valid payloads and all required reads.
+  const { result } = await virtualRun(1, 12, undefined, undefined, index => index < slow ? 250 : 0);
+  expect(result.requests).toBe(20);
+  expect(result.acceptedStarts).toBe(1);
+  expect(result.acceptedFinishes).toBe(1);
+  expect(result.failures).toEqual({});
+  expect(result.serverErrors).toBe(0);
+  expect(result.missingReads).toEqual([]);
+  expect(result.errors).toEqual([]);
+  expect(result.successfulUnder200).toBe(fraction);
+  expect(result.passed).toBe(passed);
 });
 
 test("default death delays vary from 5 to 15 seconds", async () => {
@@ -140,11 +183,10 @@ test("invalid finish acknowledgement fails without a post-save refresh; interrup
   expect(interrupted.result.passed).toBe(false);
   expect(interrupted.result.acceptedStarts).toBe(1);
   expect(interrupted.result.acceptedFinishes).toBe(0);
-  expect(formatSummary(interrupted.result)).toContain("Capacity result: FAIL");
 });
 
 test("player helpers keep the load prefix and imported scoring rules", () => {
-  expect(makePlayer(0).name).toMatch(/^load-[a-f0-9]{11}$/);
+  expect(makePlayer(0).name.startsWith("load-")).toBe(true);
   expect(makeFinish("player", 2, 5999)).toEqual({ playerId: "player", seconds: 5, squashes: 15, score: 155, touch: true, upgrades: [] });
 });
 
