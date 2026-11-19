@@ -2,6 +2,19 @@ import { expect, test } from "bun:test";
 import { keyboardInput, mapPointer, viewport } from "./input";
 import { createSimulation, IDLE } from "./simulation";
 import { FixedStepper } from "./loop";
+import { arenaForViewport } from "./arena";
+
+test.each([[390, 844], [844, 390]])("pointer maps the %i x %i arena, including corners and letterboxing after rotation", (w, h) => {
+  const arena = arenaForViewport(w, h);
+  for (const [displayW, displayH] of [[w, h], [h, w]]) {
+    const v = viewport(displayW!, displayH!, arena);
+    expect(mapPointer(displayW! / 2, displayH! / 2, v).x).toBeCloseTo(arena.width / 2);
+    expect(mapPointer(displayW! / 2, displayH! / 2, v).y).toBeCloseTo(arena.height / 2);
+    expect(mapPointer(v.left, v.top, v)).toEqual({ x: 0, y: 0 });
+    expect(mapPointer(v.left + arena.width * v.scale, v.top + arena.height * v.scale, v).x).toBeCloseTo(arena.width);
+    expect(mapPointer(-100, 10000, v)).toEqual({ x: 0, y: arena.height });
+  }
+});
 
 test("portrait and landscape use the same centered logical arena and clamp outside points", () => {
   expect(mapPointer(195, 350, viewport(390, 700))).toEqual({ x: 300, y: 300 });

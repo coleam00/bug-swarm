@@ -35,7 +35,7 @@ Persistent deployments should mount their chosen `DATA_DIR`; the example stores 
 - `src/web/game/`: the game in plain TypeScript.
   - The simulation (robot, bugs, shots, hits) is pure: it advances by a time step from input and seeded state, with no canvas, DOM or clock access, so `bun test` covers it. Phase 1 uses a steady spawn rate and placeholder circles; ramp, upgrades and effects arrive in Phase 2.
   - The loop runs on `requestAnimationFrame` with a fixed time step and draws the state to the canvas, scaled to the screen in portrait or landscape.
-  - Input: touch drag (the robot moves toward the finger), WASD and arrow keys, mouse steering, F for the rolling FPS and update/draw-time readout. Keys take priority over the mouse. The arena stays 600 by 600 logical units across rotation.
+  - Input: touch drag (the robot moves toward the finger), WASD and arrow keys, mouse steering, F for the rolling FPS and update/draw-time readout. Keys take priority over the mouse. Each run samples the browser viewport at start: its arena keeps 360,000 logical units squared and follows the viewport aspect ratio, clamped to 9:16 through 16:9. Rotation only rescales the active arena; the next run adopts the new shape.
   - The API client starts a run and submits its score without blocking the loop; failures are logged and the game-over screen says the score wasn't saved.
 - `src/web/game/session.ts`: asynchronous run lifecycle, immutable finish payloads, save/read status and polling. Late responses stay attached to their original local run. Requests time out after five seconds; no offline submission queue.
 - `src/web/board/`: planned Phase 3 stream page (top 10 and team totals).

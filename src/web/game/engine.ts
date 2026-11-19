@@ -30,7 +30,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   const restart = (touch: boolean) => { clear(); token = session.start(touch).token; };
   const locate = (event: PointerEvent) => {
     const box = canvas.getBoundingClientRect();
-    target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height));
+    target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height, session.current?.simulation.arena));
   };
   const down = (event: PointerEvent) => {
     if (event.button !== 0) return;

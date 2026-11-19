@@ -5,6 +5,7 @@ import { api } from "./game/api";
 import { loadIdentity, storeIdentity } from "./game/identity";
 import { mountGame, type Hud } from "./game/engine";
 import { Session } from "./game/session";
+import { arenaForViewport } from "./game/arena";
 import "./style.css";
 
 function readIdentity(): Identity | null {
@@ -34,7 +35,8 @@ export function App() {
 }
 
 function Game({ identity, initialTouch }: { identity: Identity; initialTouch: boolean }) {
-  const [session] = useState(() => new Session(identity, api, () => crypto.getRandomValues(new Uint32Array(1))[0]!));
+  const [session] = useState(() => new Session(identity, api, () => crypto.getRandomValues(new Uint32Array(1))[0]!,
+    console.error, () => arenaForViewport(window.innerWidth, window.innerHeight)));
   const [view, setView] = useState(session.view);
   const [hud, setHud] = useState<Hud>({ score: 0, hits: 0, seconds: 0 });
   const [debug, setDebug] = useState("");

@@ -1,4 +1,6 @@
-export const ARENA_SIZE = 600;
+export const ARENA_AREA = 360_000;
+export const MIN_ARENA_ASPECT = 9 / 16;
+export const MAX_ARENA_ASPECT = 16 / 9;
 export const ROBOT_RADIUS = 14;
 export const ROBOT_SPEED = 180;
 export const BUG_RADIUS = 12;
