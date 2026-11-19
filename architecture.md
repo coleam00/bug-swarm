@@ -33,9 +33,9 @@ Persistent deployments should mount their chosen `DATA_DIR`; the example stores 
 - Browser game -> HTTP API -> one SQLite file.
 - `src/web/App.tsx`: name entry, the canvas/HUD, the game-over screen. Team entry arrives in Phase 3.
 - `src/web/game/`: the game in plain TypeScript.
-  - The simulation (robot, bugs, shots, hits) is pure: it advances by a time step from input and seeded state, with no canvas, DOM or clock access, so `bun test` covers it. Phase 1 uses a steady spawn rate and placeholder circles; ramp, upgrades and effects arrive in Phase 2.
+  - The simulation (robot, bugs, shots, hits) is pure: it advances by a time step from input and seeded state, with no canvas, DOM or clock access, so `bun test` covers it. Spawn intervals interpolate from 1 second at start to 0.8 at 30 seconds, 0.4 at 60 and 0.2 at 120, then hold. The first scheduled spawn at or after 30 seconds is fast, followed by every fourth eligible spawn. Bug definitions (speed, radius, color and unlock time) and pacing constants live in `src/web/game/config.ts`. Both bug kinds die in one shot; drawings remain placeholder circles. Upgrades and effects arrive in separate Phase 2 items.
   - The loop runs on `requestAnimationFrame` with a fixed time step and draws the state to the canvas, scaled to the screen in portrait or landscape.
-  - Input: touch drag (the robot moves toward the finger), WASD and arrow keys, mouse steering, F for the rolling FPS and update/draw-time readout. Keys take priority over the mouse. The arena stays 600 by 600 logical units across rotation.
+  - Input: touch drag (the robot moves toward the finger), WASD and arrow keys, mouse steering, F for the rolling FPS and update/draw-time readout. Keys take priority over the mouse. Each run samples the browser viewport at start: its arena keeps 360,000 logical units squared and follows the viewport aspect ratio, clamped to 9:16 through 16:9. Rotation only rescales the active arena; the next run adopts the new shape.
   - The API client starts a run and submits its score without blocking the loop; failures are logged and the game-over screen says the score wasn't saved.
 - `src/web/game/session.ts`: asynchronous run lifecycle, immutable finish payloads, save/read status and polling. Late responses stay attached to their original local run. Requests time out after five seconds; no offline submission queue.
 - `src/web/board/`: planned Phase 3 stream page (top 10 and team totals).
@@ -79,5 +79,5 @@ Hide trims and lowercases the name, hides all players using it, and is idempoten
 - Nothing the player does depends on a server response; a run plays with the API down.
 
 ## Decisions deferred
-- Spawn rates, bug speed and upgrade strength: start from the PRD's targets (idle player loses within 60 s, typical run 1 to 3 minutes) and tune after Phase 2.
+- Human pacing and upgrade strength: current swarm tuning targets idle death in 30–60 seconds and moving survival in 60–180 seconds, checked with deterministic seed/arena matrices. Scripted dodging is a regression aid; the owner’s five human runs with upgrades remain the Phase 2 pacing validation.
 - Art: drawn in code on the canvas (see `direction.md`, "The look"). Effects live in `src/web/game/fx/` (particles, trails, screen shake, floating text), pooled so they allocate nothing per frame.

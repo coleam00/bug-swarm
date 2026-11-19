@@ -1,6 +1,7 @@
 import type { Finish, Identity, Leader } from "../../shared/api";
 import type { GameApi } from "./api";
 import { createSimulation, type Simulation } from "./simulation";
+import { SQUARE_ARENA, type Arena } from "./arena";
 
 export interface LocalRun {
   token: number; simulation: Simulation; start: Promise<string | null>; runId?: string;
@@ -22,7 +23,8 @@ export class Session {
   private bestApplied = 0;
   private leadersApplied = 0;
   constructor(readonly identity: Identity, private api: GameApi, private seed: () => number,
-    private log: (message: string, error: unknown) => void = console.error) {}
+    private log: (message: string, error: unknown) => void = console.error,
+    private arena: () => Arena = () => SQUARE_ARENA) {}
 
   private emptyView(token: number): SessionView {
     return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading" };
@@ -39,7 +41,7 @@ export class Session {
   }
   start(touch = false): LocalRun {
     const token = this.view.token + 1;
-    const run: LocalRun = { token, simulation: createSimulation(this.seed()), start: Promise.resolve(null), touch };
+    const run: LocalRun = { token, simulation: createSimulation(this.seed(), this.arena()), start: Promise.resolve(null), touch };
     this.current = run; this.view = this.emptyView(token); this.syncPoll();
     run.start = Promise.resolve().then(() => this.api.start(this.identity)).then(({ runId }) => {
       run.runId = runId; return runId;

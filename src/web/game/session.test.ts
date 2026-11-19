@@ -2,6 +2,21 @@ import { expect, test } from "bun:test";
 import type { Best, Finish, Leader, RunStarted } from "../../shared/api";
 import type { GameApi } from "./api";
 import { Session } from "./session";
+import { arenaForViewport } from "./arena";
+
+test("every start samples arena once and isolates dimensions from its provider", () => {
+  let calls = 0, dimensions = { ...arenaForViewport(390, 844) };
+  const api: GameApi = { start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
+    best: async () => ({ best: null }), leaders: async () => [] };
+  const session = new Session(identity, api, () => 42, undefined, () => { calls++; return dimensions; });
+  const first = session.start();
+  dimensions.width = 1;
+  expect(first.simulation.arena).toEqual({ width: 450, height: 800 });
+  dimensions = { ...arenaForViewport(844, 390) };
+  const next = session.start(true);
+  expect(calls).toBe(2); expect(next.simulation.arena).toEqual({ width: 800, height: 450 });
+  expect(first.simulation.arena).toEqual({ width: 450, height: 800 });
+});
 
 const identity = { playerId: crypto.randomUUID(), name: "Robot" };
 function deferred<T>() {
