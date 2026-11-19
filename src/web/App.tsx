@@ -8,6 +8,7 @@ import { Session } from "./game/session";
 import { arenaForViewport } from "./game/arena";
 import { UPGRADE_NAMES, nextPickDescription } from "../shared/upgrades";
 import type { SessionView } from "./game/session";
+import { TEAMS, TEAM_NAMES, TEAM_COLOURS, type Team } from "../shared/teams";
 import "./style.css";
 
 function readIdentity(): Identity | null {
@@ -18,20 +19,26 @@ export function App() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const entryTouch = useRef(false);
-  if (identity) return <Game identity={identity} initialTouch={entryTouch.current} />;
+  function selectTeam(team: Team) {
+    const result = validateName(identity?.name ?? name);
+    if (result.error) { setError(result.error); return; }
+    const next: Identity = { playerId: identity?.playerId ?? crypto.randomUUID(), name: result.name!, team };
+    try { storeIdentity(localStorage, next); } catch (cause) { console.error("Storage unavailable", cause); }
+    setIdentity(next);
+  }
+  if (identity?.team) return <Game identity={identity} initialTouch={entryTouch.current} />;
   return <main className="entry"><h1>Bug Swarm</h1><p>Steer. Auto-fire. Survive.</p>
     <form onPointerDown={(event) => { if (event.pointerType === "touch") entryTouch.current = true; }} onSubmit={(event) => {
       event.preventDefault();
-      const result = validateName(name);
-      if (result.error) { setError(result.error); return; }
-      const next = { playerId: crypto.randomUUID(), name: result.name! };
-      try { storeIdentity(localStorage, next); } catch (cause) { console.error("Storage unavailable", cause); }
-      setIdentity(next);
+      const result = validateName(identity?.name ?? name);
+      setError(result.error ?? "Choose Tabs or Spaces to play.");
     }}>
       <label htmlFor="name">Your name on the leaderboard</label>
-      <input id="name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" maxLength={16} autoFocus aria-describedby="name-help name-error" />
+      <input id="name" value={identity?.name ?? name} readOnly={!!identity} onChange={(event) => setName(event.target.value)} autoComplete="off" maxLength={16} autoFocus={!identity} aria-describedby="name-help name-error" />
       <p id="name-help">2–16 letters, numbers, spaces, - or _</p>
-      <p id="name-error" role="alert">{error}</p><button type="submit">Play</button>
+      <p id="name-error" role="alert">{error}</p>
+      <p>{identity ? "Welcome back! Choose your team once." : "Choose your team to play."} Every score helps. Your team is permanent.</p>
+      <div className="team-choices">{TEAMS.map(team => <button key={team} type="button" style={{ background: TEAM_COLOURS[team] }} onClick={() => selectTeam(team)}>Join {TEAM_NAMES[team]}</button>)}</div>
     </form><p>Drag to steer on touch. Use WASD, arrows or your mouse on desktop. Your robot fires for you. Three hits end a run.</p>
   </main>;
 }
@@ -63,11 +70,12 @@ function Game({ identity, initialTouch }: { identity: Identity; initialTouch: bo
           if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) session.start(event.pointerType === "touch");
         }}>
         <h1>Game over</h1><p className="final-score">Score {view.score}</p>
+        <TeamRace view={view} />
         <p role="status">{view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
         <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
-        <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
         <p className="restart">Tap or press a key to play again</p>
         <button type="button" onClick={(event) => { if (event.detail === 0) session.start(); }}>Play again</button>
+        <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
         <h2>Live top 10</h2>
         {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
           <ol>{view.leaders.map((row) => <li key={row.playerId}><span>{row.name}</span><strong>{row.score}</strong></li>)}</ol> : <p>No saved scores yet</p>}
@@ -75,6 +83,17 @@ function Game({ identity, initialTouch }: { identity: Identity; initialTouch: bo
     </div>
     <footer>Drag · WASD / arrows · mouse <span>{debug || "F: frame readout"}</span></footer>
   </main>;
+}
+
+function TeamRace({ view }: { view: SessionView }) {
+  if (view.teamsStatus === "loading") return <p role="status">Loading team totals…</p>;
+  if (view.teamsStatus === "failed" || !view.teamTotals) return <p role="status">Couldn't load team totals</p>;
+  const totals = view.teamTotals, sum = totals.tabs + totals.spaces;
+  return <div className="team-race" aria-label="Tabs vs Spaces">
+    <div className="team-labels">{TEAMS.map(team => <span key={team} style={{ color: TEAM_COLOURS[team] }}>{TEAM_NAMES[team]} <strong>{totals[team]}</strong></span>)}</div>
+    <div className={`race-bar${sum ? "" : " empty"}`} aria-hidden="true">{TEAMS.map(team => <span key={team} style={{ width: `${sum ? totals[team] / sum * 100 : 50}%`, background: sum ? TEAM_COLOURS[team] : "#7f91a9" }} />)}</div>
+    {!sum && <p>No team scores yet</p>}
+  </div>;
 }
 
 function ChoiceDialog({ session, view, restoreFocus }: { session: Session; view: SessionView; restoreFocus: () => void }) {

@@ -6,6 +6,12 @@ test("validated browser identity persists; corrupt, blocked, or old invalid name
   expect(loadIdentity(storage)).toBeNull();
   const identity = { playerId: crypto.randomUUID(), name: "Robot" };
   storeIdentity(storage, identity); expect(loadIdentity(storage)).toEqual(identity);
+  for (const team of [null, "invalid", {}, 3]) {
+    saved.set(IDENTITY_KEY, JSON.stringify({ ...identity, team }));
+    expect(loadIdentity(storage)).toEqual(identity);
+  }
+  storeIdentity(storage, { ...identity, team: "spaces" });
+  expect(loadIdentity(storage)).toEqual({ ...identity, team: "spaces" });
   for (const value of ["{", "null", JSON.stringify({ ...identity, name: "5h1t" }), JSON.stringify({ ...identity, playerId: "invalid" })]) {
     saved.set(IDENTITY_KEY, value); expect(loadIdentity(storage)).toBeNull();
   }

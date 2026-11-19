@@ -1,10 +1,11 @@
-import type { Best, Finish, Identity, Leader, RunStarted, Saved } from "../../shared/api";
+import type { Best, Finish, Identity, Leader, RunStarted, Saved, TeamTotals } from "../../shared/api";
 
 export interface GameApi {
   start(identity: Identity): Promise<RunStarted>;
   finish(runId: string, result: Finish): Promise<Saved>;
   best(playerId: string): Promise<Best>;
   leaders(): Promise<Leader[]>;
+  teams(): Promise<TeamTotals>;
 }
 export async function request<T>(path: string, body?: unknown, fetcher: (input: string, init?: RequestInit) => Promise<Response> = fetch, timeout = 5000): Promise<T> {
   const abort = new AbortController();
@@ -29,4 +30,5 @@ export const api: GameApi = {
   finish: (id, finish) => request(`/api/runs/${id}/finish`, finish),
   best: (id) => request(`/api/players/${id}/best`),
   leaders: () => request("/api/leaderboard"),
+  teams: () => request("/api/teams"),
 };
