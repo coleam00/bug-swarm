@@ -1,0 +1,260 @@
+{
+  "browser": "Microsoft Edge 157.0.4341.60",
+  "serving": "Production entry handler and Vite transform pipeline, intercepted HTTP; no listener",
+  "productionReadyMs": 235.9659999999999,
+  "hideMs": 2152.9521999999997,
+  "observedRemainingHighlightMs": 2547.6607999999997,
+  "hiddenTeams": {
+    "tabs": 4975315,
+    "spaces": 4969145
+  },
+  "measurements": {
+    "1280x720": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 714,
+      "reducedMotionTransition": "0s"
+    },
+    "390x844": {
+      "viewport": [
+        390,
+        844
+      ],
+      "document": [
+        390,
+        1053
+      ],
+      "nameFontPx": [
+        23.4
+      ],
+      "scoreFontPx": [
+        30
+      ],
+      "teamFontPx": [
+        40
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 1041,
+      "reducedMotionTransition": "0s"
+    },
+    "844x390": {
+      "viewport": [
+        844,
+        390
+      ],
+      "document": [
+        844,
+        1097
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 1081,
+      "reducedMotionTransition": "0s"
+    },
+    "320x640": {
+      "viewport": [
+        320,
+        640
+      ],
+      "document": [
+        320,
+        1053
+      ],
+      "nameFontPx": [
+        20
+      ],
+      "scoreFontPx": [
+        30
+      ],
+      "teamFontPx": [
+        40
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 1041,
+      "reducedMotionTransition": "0s"
+    },
+    "partial-outage": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 714,
+      "reducedMotionTransition": "0s"
+    },
+    "outage": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 714,
+      "reducedMotionTransition": "0s"
+    },
+    "maximum-1280x720": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 714,
+      "reducedMotionTransition": "0s"
+    },
+    "maximum-390x844": {
+      "viewport": [
+        390,
+        844
+      ],
+      "document": [
+        390,
+        1053
+      ],
+      "nameFontPx": [
+        23.4
+      ],
+      "scoreFontPx": [
+        30
+      ],
+      "teamFontPx": [
+        40
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 1041,
+      "reducedMotionTransition": "0s"
+    },
+    "maximum-320x640": {
+      "viewport": [
+        320,
+        640
+      ],
+      "document": [
+        320,
+        1053
+      ],
+      "nameFontPx": [
+        20
+      ],
+      "scoreFontPx": [
+        30
+      ],
+      "teamFontPx": [
+        40
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 1041,
+      "reducedMotionTransition": "0s"
+    },
+    "dev": {
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "nameFontPx": [
+        40
+      ],
+      "scoreFontPx": [
+        40
+      ],
+      "teamFontPx": [
+        64
+      ],
+      "namesOverflow": false,
+      "teamsOverflow": false,
+      "footerBottom": 714,
+      "reducedMotionTransition": "0s"
+    }
+  },
+  "productionScripts": [
+    "/assets/index--QZSwLJr.js",
+    "/assets/Board-3stN9W8H.js",
+    "/assets/rules-BT55FlKn.js"
+  ],
+  "devScripts": [
+    "/src/web/main.tsx",
+    "/node_modules/.vite/deps/react_jsx-dev-runtime.js",
+    "/node_modules/.vite/deps/react.js",
+    "/node_modules/.vite/deps/react-dom_client.js",
+    "/node_modules/.vite/deps/chunk-REFQX4J5.js",
+    "/node_modules/.vite/deps/chunk-373CG7ZK.js",
+    "/src/web/board/Board.tsx"
+  ],
+  "apiReadCount": 27,
+  "nonGetRequests": 0,
+  "errors": []
+}

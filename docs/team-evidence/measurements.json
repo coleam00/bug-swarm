@@ -1,0 +1,203 @@
+{
+  "chrome": "156.0.8078.4",
+  "viewport": "390x844 touch; 844x390 landscape",
+  "entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 24,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 189,
+        "bottom": 465.40625,
+        "left": 24
+      },
+      {
+        "text": "Join Spaces",
+        "x": 201,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 366,
+        "bottom": 465.40625,
+        "left": 201
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "landscape-entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 166,
+        "y": 417.40625,
+        "width": 250,
+        "height": 48,
+        "top": 417.40625,
+        "right": 416,
+        "bottom": 465.40625,
+        "left": 166
+      },
+      {
+        "text": "Join Spaces",
+        "x": 428,
+        "y": 417.40625,
+        "width": 250,
+        "height": 48,
+        "top": 417.40625,
+        "right": 678,
+        "bottom": 465.40625,
+        "left": 428
+      }
+    ],
+    "overflow": false,
+    "width": 844,
+    "height": 390
+  },
+  "firstEntryMs": 224,
+  "real-finish": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 316,
+        "width": 115.03125,
+        "height": 48,
+        "top": 316,
+        "right": 252.515625,
+        "bottom": 364,
+        "left": 137.484375
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "hideVisibleMs": 2360,
+  "hidden-zero": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 348,
+        "width": 115.03125,
+        "height": 48,
+        "top": 348,
+        "right": 252.515625,
+        "bottom": 396,
+        "left": 137.484375
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "loading-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 252.515625,
+        "bottom": 336,
+        "left": 137.484375
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "populated-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 316,
+        "width": 115.03125,
+        "height": 48,
+        "top": 316,
+        "right": 252.515625,
+        "bottom": 364,
+        "left": 137.484375
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "failed-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 252.515625,
+        "bottom": 336,
+        "left": 137.484375
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "landscape-failed": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 319.390625,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 434.421875,
+        "bottom": 336,
+        "left": 319.390625
+      }
+    ],
+    "overflow": false,
+    "width": 844,
+    "height": 390
+  },
+  "legacy-entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 24,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 189,
+        "bottom": 465.40625,
+        "left": 24
+      },
+      {
+        "text": "Join Spaces",
+        "x": 201,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 366,
+        "bottom": 465.40625,
+        "left": 201
+      }
+    ],
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "returnEntryMs": 42,
+  "offlineEntryMs": 48
+}

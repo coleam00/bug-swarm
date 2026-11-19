@@ -1,5 +1,5 @@
-import type { Finish, Identity, Leader } from "../../shared/api";
-import type { GameApi } from "./api";
+import type { Finish, Identity, Leader, TeamTotals } from "../../shared/api";
+import { TeamConflictError, type GameApi } from "./api";
 import { createSimulation, chooseUpgrade, type Simulation } from "./simulation";
 import { acquiredUpgrades } from "./upgrades";
 import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
@@ -13,6 +13,7 @@ export interface SessionView {
   token: number; over: boolean; score: number; save: "pending" | "saved" | "failed";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
+  teamTotals: TeamTotals | null; teamsStatus: "loading" | "ready" | "failed";
   choice: Readonly<{ number: number; offer: readonly UpgradeId[] }> | null;
   upgrades: readonly AcquiredUpgrade[];
 }
@@ -26,12 +27,15 @@ export class Session {
   private leadersSequence = 0;
   private bestApplied = 0;
   private leadersApplied = 0;
-  constructor(readonly identity: Identity, private api: GameApi, private seed: () => number,
+  private teamsSequence = 0;
+  private teamsApplied = 0;
+  constructor(public identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error,
-    private arena: () => Arena = () => SQUARE_ARENA) {}
+    private arena: () => Arena = () => SQUARE_ARENA,
+    private identityChanged: (identity: Identity) => void = () => {}) {}
 
   private emptyView(token: number): SessionView {
-    return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", choice: null, upgrades: Object.freeze([]) };
+    return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -41,13 +45,25 @@ export class Session {
   private emit() { for (const listener of this.listeners) listener(); }
   private syncPoll() {
     if (this.poll) { clearInterval(this.poll); this.poll = undefined; }
-    if (this.listeners.size && this.view.over) this.poll = setInterval(() => void this.refreshLeaders(this.current!), 2000);
+    if (this.listeners.size && this.view.over) this.poll = setInterval(() => {
+      void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!);
+    }, 2000);
   }
   start(touch = false): LocalRun {
     const token = this.view.token + 1;
     const run: LocalRun = { token, simulation: createSimulation(this.seed(), this.arena()), start: Promise.resolve(null), touch };
     this.current = run; this.view = this.emptyView(token); this.syncPoll();
-    run.start = Promise.resolve().then(() => this.api.start(this.identity)).then(({ runId }) => {
+    run.start = Promise.resolve().then(async () => {
+      try { return await this.api.start(this.identity); }
+      catch (error) {
+        if (!(error instanceof TeamConflictError)) throw error;
+        // A stale entry tab or saved identity must yield to permanent membership.
+        // Repair even if this local run has since ended or restarted; retry once.
+        this.identity = { ...this.identity, team: error.team };
+        this.identityChanged(this.identity);
+        return this.api.start(this.identity);
+      }
+    }).then(({ runId }) => {
       run.runId = runId; return runId;
     }).catch((error) => {
       this.log(`Run start failed [${run.token}]`, error); return null;
@@ -76,7 +92,7 @@ export class Session {
     const upgrades = acquiredUpgrades(s.upgrades);
     run.result = Object.freeze({ playerId: this.identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: run.touch, upgrades });
     this.view = { ...this.view, over: true, score: s.score, choice: null, upgrades }; this.emit(); this.syncPoll();
-    void this.refreshBest(run); void this.refreshLeaders(run);
+    void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
     void this.save(run);
   }
   private async save(run: LocalRun) {
@@ -86,7 +102,7 @@ export class Session {
       await this.api.finish(id, run.result!);
       if (this.current !== run) return;
       this.view = { ...this.view, save: "saved" }; this.emit();
-      void this.refreshBest(run); void this.refreshLeaders(run);
+      void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
     } catch (error) {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);
       if (this.current !== run) return;
@@ -121,6 +137,20 @@ export class Session {
       if (this.current !== run || sequence < this.leadersApplied || !this.view.over) return;
       this.leadersApplied = sequence;
       this.view = { ...this.view, leaders: [], leadersStatus: "failed" }; this.emit();
+    }
+  }
+  async refreshTeams(run: LocalRun): Promise<void> {
+    const sequence = ++this.teamsSequence;
+    try {
+      const totals = await this.api.teams();
+      if (this.current !== run || sequence < this.teamsApplied || !this.view.over) return;
+      this.teamsApplied = sequence;
+      this.view = { ...this.view, teamTotals: totals, teamsStatus: "ready" }; this.emit();
+    } catch (error) {
+      this.log(`Team totals read failed [${run.runId ?? run.token}]`, error);
+      if (this.current !== run || sequence < this.teamsApplied || !this.view.over) return;
+      this.teamsApplied = sequence;
+      this.view = { ...this.view, teamTotals: null, teamsStatus: "failed" }; this.emit();
     }
   }
 }

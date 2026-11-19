@@ -1,0 +1,1747 @@
+{
+  "browser": "Microsoft Edge 157.0.4341.60",
+  "before": [
+    "Join line is 20px",
+    "Names and scores occupy different lines"
+  ],
+  "after": [
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 714,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "alignedRows": 10,
+      "minNameScoreGap": 0,
+      "leftmostText": 3.1875,
+      "rightmostText": 1240,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 375.78125,
+            "right": 614,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 666,
+            "right": 742.078125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 997.78125,
+            "right": 1236,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        600,
+        400
+      ],
+      "document": [
+        600,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 576,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        667,
+        375
+      ],
+      "document": [
+        667,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 643,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        390,
+        844
+      ],
+      "document": [
+        390,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 23.4,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 370,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        320,
+        640
+      ],
+      "document": [
+        320,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 20,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 300,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        844,
+        390
+      ],
+      "document": [
+        844,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 820,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        1050,
+        720
+      ],
+      "document": [
+        1050,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 1026,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        1051,
+        720
+      ],
+      "document": [
+        1051,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1011,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 261.28125,
+            "right": 499.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 551.5,
+            "right": 627.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 768.78125,
+            "right": 1007,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "six-digit",
+      "viewport": [
+        1279,
+        720
+      ],
+      "document": [
+        1279,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1239,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 375.28125,
+            "right": 613.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 665.5,
+            "right": 741.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 996.78125,
+            "right": 1235,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 714,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "alignedRows": 10,
+      "minNameScoreGap": 0,
+      "leftmostText": 3.1875,
+      "rightmostText": 1240,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 375.09375,
+            "right": 614,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 666,
+            "right": 742.078125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 997.09375,
+            "right": 1236,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        600,
+        400
+      ],
+      "document": [
+        600,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 576,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        667,
+        375
+      ],
+      "document": [
+        667,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 643,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        390,
+        844
+      ],
+      "document": [
+        390,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 23.4,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 370,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        320,
+        640
+      ],
+      "document": [
+        320,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 20,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 300,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        844,
+        390
+      ],
+      "document": [
+        844,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 820,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        1050,
+        720
+      ],
+      "document": [
+        1050,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 1026,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        1051,
+        720
+      ],
+      "document": [
+        1051,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1011,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 260.59375,
+            "right": 499.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 551.5,
+            "right": 627.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 768.09375,
+            "right": 1007,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "maximum",
+      "viewport": [
+        1279,
+        720
+      ],
+      "document": [
+        1279,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1239,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 374.59375,
+            "right": 613.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 665.5,
+            "right": 741.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 996.09375,
+            "right": 1235,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        1280,
+        720
+      ],
+      "document": [
+        1280,
+        720
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 714,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "alignedRows": 10,
+      "minNameScoreGap": 0,
+      "leftmostText": 3.1875,
+      "rightmostText": 1240,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 577.1875,
+            "right": 614,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 666,
+            "right": 742.078125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 1199.1875,
+            "right": 1236,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        600,
+        400
+      ],
+      "document": [
+        600,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 576,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 292,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 308,
+            "right": 580,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        667,
+        375
+      ],
+      "document": [
+        667,
+        1157
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1141,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 643,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 325.5,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 341.5,
+            "right": 647,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        390,
+        844
+      ],
+      "document": [
+        390,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 23.4,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 370,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 187,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 203,
+            "right": 374,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 39
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        320,
+        640
+      ],
+      "document": [
+        320,
+        1053
+      ],
+      "joinFont": 18,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1041,
+      "nameFont": 20,
+      "scoreFont": 30,
+      "leftmostText": 20,
+      "rightmostText": 300,
+      "totals": [
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 16,
+            "right": 152,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 65,
+            "bottom": 93,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 168,
+            "right": 304,
+            "top": 93,
+            "bottom": 141,
+            "height": 48
+          },
+          "font": 32
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        844,
+        390
+      ],
+      "document": [
+        844,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 820,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 414,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 430,
+            "right": 824,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        1050,
+        720
+      ],
+      "document": [
+        1050,
+        1125
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1109,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 24,
+      "rightmostText": 1026,
+      "totals": [
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 20,
+            "right": 517,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 49,
+            "bottom": 77,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 533,
+            "right": 1030,
+            "top": 77,
+            "bottom": 125,
+            "height": 48
+          },
+          "font": 40
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        1051,
+        720
+      ],
+      "document": [
+        1051,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1011,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 462.6875,
+            "right": 499.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 551.5,
+            "right": 627.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 970.1875,
+            "right": 1007,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    },
+    {
+      "fixture": "zero",
+      "viewport": [
+        1279,
+        720
+      ],
+      "document": [
+        1279,
+        1017
+      ],
+      "joinFont": 36,
+      "joinColor": "rgb(244, 248, 255)",
+      "linkColor": "rgb(134, 222, 209)",
+      "joinHref": "http://board.test",
+      "footerBottom": 1011,
+      "nameFont": 40,
+      "scoreFont": 40,
+      "leftmostText": 40,
+      "rightmostText": 1239,
+      "totals": [
+        {
+          "rect": {
+            "left": 44,
+            "right": 94.390625,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 576.6875,
+            "right": 613.5,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        },
+        {
+          "rect": {
+            "left": 665.5,
+            "right": 741.578125,
+            "top": 61,
+            "bottom": 89,
+            "height": 28
+          },
+          "font": 24
+        },
+        {
+          "rect": {
+            "left": 1198.1875,
+            "right": 1235,
+            "top": 43,
+            "bottom": 107,
+            "height": 64
+          },
+          "font": 64
+        }
+      ]
+    }
+  ],
+  "fallback": [
+    {
+      "nameRight": 424.0625,
+      "scoreLeft": 449.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 424.0625,
+      "scoreLeft": 449.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 424.0625,
+      "scoreLeft": 449.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 424.0625,
+      "scoreLeft": 449.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 424.0625,
+      "scoreLeft": 449.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 1046.0625,
+      "scoreLeft": 1071.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 1046.0625,
+      "scoreLeft": 1071.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 1046.0625,
+      "scoreLeft": 1071.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 1046.0625,
+      "scoreLeft": 1071.96875,
+      "overflow": false
+    },
+    {
+      "nameRight": 1046.0625,
+      "scoreLeft": 1071.96875,
+      "overflow": false
+    }
+  ],
+  "outageLayoutStable": true,
+  "apiPaths": [
+    "/api/leaderboard",
+    "/api/teams"
+  ],
+  "errors": []
+}

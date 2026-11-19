@@ -50,7 +50,7 @@
       "previousPicks": 1,
       "bounds": [
         {
-          "text": "1CI droneAdd firing drone 1",
+          "text": "1Test shieldRefill to block 2 hits",
           "width": 306,
           "height": 100,
           "left": 42,
@@ -61,23 +61,23 @@
           "client": 306
         },
         {
-          "text": "2Refactor bombClear bugs automatically; 22.5s recharge",
-          "width": 306,
-          "height": 103.71875,
-          "left": 42,
-          "right": 348,
-          "top": 425.140625,
-          "bottom": 528.859375,
-          "scroll": 306,
-          "client": 306
-        },
-        {
-          "text": "3Test shieldRefill to block 2 hits",
+          "text": "2CI droneAdd firing drone 1",
           "width": 306,
           "height": 100,
           "left": 42,
           "right": 348,
-          "top": 540.859375,
+          "top": 425.140625,
+          "bottom": 525.140625,
+          "scroll": 306,
+          "client": 306
+        },
+        {
+          "text": "3Refactor bombClear bugs automatically; 22.5s recharge",
+          "width": 306,
+          "height": 103.71875,
+          "left": 42,
+          "right": 348,
+          "top": 537.140625,
           "bottom": 640.859375,
           "scroll": 306,
           "client": 306
@@ -92,13 +92,13 @@
       "previousPicks": 4,
       "bounds": [
         {
-          "text": "1Test shieldRefill to block 4 hits (maximum capacity)",
+          "text": "1CI droneAdd firing drone 1",
           "width": 306,
-          "height": 103.71875,
+          "height": 100,
           "left": 42,
           "right": 348,
           "top": 311.28125,
-          "bottom": 415,
+          "bottom": 411.28125,
           "scroll": 306,
           "client": 306
         },
@@ -108,18 +108,18 @@
           "height": 103.71875,
           "left": 42,
           "right": 348,
-          "top": 427,
-          "bottom": 530.71875,
+          "top": 423.28125,
+          "bottom": 527,
           "scroll": 306,
           "client": 306
         },
         {
-          "text": "3CI droneAdd firing drone 1",
+          "text": "3Test shieldRefill to block 4 hits (maximum capacity)",
           "width": 306,
-          "height": 100,
+          "height": 103.71875,
           "left": 42,
           "right": 348,
-          "top": 542.71875,
+          "top": 539,
           "bottom": 642.71875,
           "scroll": 306,
           "client": 306
@@ -145,7 +145,7 @@
           "client": 278
         },
         {
-          "text": "2CI droneAdd firing drone 1",
+          "text": "2Refactor bombClear bugs automatically; 30s recharge",
           "width": 278,
           "height": 150,
           "left": 501,
@@ -156,7 +156,7 @@
           "client": 278
         },
         {
-          "text": "3Refactor bombClear bugs automatically; 30s recharge",
+          "text": "3CI droneAdd firing drone 1",
           "width": 278,
           "height": 150,
           "left": 791,
@@ -229,7 +229,7 @@
           "client": 278
         },
         {
-          "text": "2CI droneAdd firing drone 1",
+          "text": "2Refactor bombClear bugs automatically; 18s recharge",
           "width": 278,
           "height": 150,
           "left": 501,
@@ -240,7 +240,7 @@
           "client": 278
         },
         {
-          "text": "3Refactor bombClear bugs automatically; 18s recharge",
+          "text": "3CI droneAdd firing drone 1",
           "width": 278,
           "height": 150,
           "left": 791,

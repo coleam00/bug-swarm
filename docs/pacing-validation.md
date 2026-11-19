@@ -128,6 +128,8 @@ The current correction was measured separately in headless Chrome for Testing **
 
 All four fresh samples passed the 58 FPS criterion in both mean and lowest rolling rate, with exactly 150 bugs at every sampled draw and no browser errors. The contact loop removes the old compaction writes and adds no allocation or per-frame machinery. Cards and first/repeated upgrade effects were inspected at both 390×844 and 1280×800; touch selections applied the displayed charges, with no overflow or click-through. Chrome and Vite were stopped afterward. These fresh measurements do not erase the earlier recorded Chrome 157 stress dip.
 
-`bun run pacing` passes all targets; `bun run check` passes TypeScript and 144 tests; `bun run build` passes. These are factory desktop measurements under the owner's ruling, with no physical-device evidence requested.
+`bun run pacing` passes all targets; `bun run check` passes TypeScript and 187 tests (86,289 assertions); `bun run build` passes. These are factory desktop measurements under the owner's ruling, with no physical-device evidence requested.
+
+The branch incorporates current `main` at `2b326d6` so the draft remains mergeable with teams, capacity tooling and the livestream board. Conflicts were confined to command/documentation additions; both sets were retained. Production simulation, pacing and benchmark/renderer sources are unchanged by this integration, so the recorded simulation/performance evidence still applies. The full check, build and pacing command were rerun after the merge; Chrome card selection and first/repeated effects were rechecked through the new team-entry flow in both shapes. The earlier contact-repair artifact's 144-test count describes the pre-merge run.
 
 The PRD's five human runs remain the Phase 2 release validation; this deterministic/browser evidence does not replace them.
