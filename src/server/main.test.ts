@@ -18,6 +18,7 @@ const env = {
   PORT: undefined,
   DATA_DIR: undefined,
   NODE_ENV: undefined,
+  LOAD_TEST_START_LIMIT: undefined,
 };
 
 // Run the actual entry point without opening a TCP listener. Capture the options
@@ -41,8 +42,16 @@ for (const file of new Bun.Glob("assets/*").scanSync("dist")) {
   const response = await options.fetch(new Request("http://startup.test/" + file));
   assets.push({ path: file, status: response.status, type: response.headers.get("content-type") });
 }
+const starts = [];
+for (let i = 0; i < 32; i++) {
+  const response = await options.fetch(new Request("http://startup.test/api/runs", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerId: crypto.randomUUID(), name: "Robot", team: "tabs" }),
+  }));
+  starts.push(response.status);
+}
 await Bun.write("startup.json", JSON.stringify({
-  boards, assets,
+  boards, assets, starts,
   port: options.port,
   hostname: options.hostname,
   pageStatus: page.status,
@@ -71,11 +80,23 @@ afterAll(() => {
   rmSync(scratch, { recursive: true, force: true });
 });
 
+test("invalid load override fails before creating a database or starting a listener", () => {
+  const dataDir = join(scratch, "invalid-data");
+  const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
+    cwd: scratch, env: { ...env, DATA_DIR: dataDir, LOAD_TEST_START_LIMIT: "" },
+    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+  });
+  expect(child.exitCode).not.toBe(0);
+  expect(child.stderr.toString()).toContain("LOAD_TEST_START_LIMIT must be a positive safe integer");
+  expect(child.stdout.toString()).not.toContain("App on");
+  expect(existsSync(dataDir)).toBe(false);
+});
+
 test.each([
   { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
   {
     name: "production overrides",
-    overrides: { NODE_ENV: "production", PORT: "8080", DATA_DIR: join(scratch, "custom-data") },
+    overrides: { NODE_ENV: "production", PORT: "8080", DATA_DIR: join(scratch, "custom-data"), LOAD_TEST_START_LIMIT: "31" },
     port: 8080,
     dataDir: join(scratch, "custom-data"),
     hostname: "0.0.0.0",
@@ -95,6 +116,9 @@ test.each([
   const result = JSON.parse(readFileSync(join(scratch, "startup.json"), "utf8"));
   expect({ port: result.port, hostname: result.hostname }).toEqual({ port, hostname });
   expect(existsSync(resolve(scratch, dataDir, "app.db"))).toBe(true);
+  expect(result.starts.slice(0, 30)).toEqual(Array(30).fill(201));
+  expect(result.starts.slice(30)).toEqual(overrides.NODE_ENV === "production" ? [201, 429] : [429, 429]);
+  if (overrides.NODE_ENV === "production") expect(child.stderr.toString()).toContain("LOAD TEST");
   if (overrides.NODE_ENV !== "production") return; // Bundle assertions only need one startup case.
   expect(result.pageStatus).toBe(200);
   expect(result.html.toLowerCase()).toContain("<!doctype html>");

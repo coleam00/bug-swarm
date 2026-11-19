@@ -12,7 +12,7 @@
 - Container: `Dockerfile` builds the game and runs `bun run start`; `DATA_DIR` must be a persistent volume.
 - Health: `GET /health` answers `200 ok` once the app is ready.
 - Test everything: `bun run check` (`tsc --noEmit`, then `bun test`). CI runs exactly this.
-- The bet's command: `bun run stats`. Moderation: `bun run hide "<name>"`. Load test (Phase 3): `bun run load`.
+- The bet's command: `bun run stats`. Moderation: `bun run hide "<name>"`. Capacity: `bun run load -- --url <base url>`. Pre-stream cleanup: `bun run reset -- --yes`.
 
 ### Container
 
@@ -47,7 +47,7 @@ Persistent deployments should mount their chosen `DATA_DIR`; the example stores 
 - `src/server/rules.ts`: name rules and score plausibility (max points per second of real elapsed time), both pure and tested.
 - `src/server/blocked-words.ts`: the blocked-word list.
 - `src/server/main.ts`: production entry; reads `PORT` and `DATA_DIR` (default `data/`).
-- `scripts/stats.ts`, `scripts/hide.ts`; `scripts/load.ts` arrives in Phase 3.
+- `scripts/stats.ts`, `scripts/hide.ts`, `scripts/load.ts`, `scripts/reset.ts`: owner commands, capacity harness and confirmed gameplay reset.
 - Tests are `*.test.ts` beside the code.
 
 ## Data
@@ -62,7 +62,7 @@ Persistent deployments should mount their chosen `DATA_DIR`; the example stores 
 
 ### Owner commands
 
-Both commands use `DATA_DIR/app.db` (default `data/app.db`). Stats count accepted finishes only, never abandoned starts or legacy opens:
+Stats, hide and reset use `DATA_DIR/app.db` (default `data/app.db`). Stats count accepted finishes only, never abandoned starts or legacy opens:
 
 ```sh
 bun run stats
@@ -73,6 +73,16 @@ bun run hide "Test Robot"
 Filters may be used independently and require ISO timestamps with a timezone. Finish time is server time; since is inclusive and until is exclusive. The four stdout lines are `players`, `finished_runs`, `median_runs_per_player` (one decimal, over players with a finish), and `touch_share` (rounded whole percent). A missing database prints zeros without creating it. Bad flags fail to stderr with no partial report.
 
 Hide trims and lowercases the name, hides all players using it, and is idempotent. It accepts now-blocked names and never deletes history. A foreground game-over board observes it within five seconds through cache expiry and polling. Blocked-word matching separately ignores case and the substitutions 0/o, 1/i, 3/e, 4/a, 5/s.
+
+`bun run reset` refuses until passed exactly `--yes` (optionally after `--`). The refusal names the resolved database path. A confirmed reset deletes **all** players, runs (including abandoned ones) and events (including legacy opens) in one immediate transaction. It preserves hidden-name moderation, tables and indexes, and prints deleted counts after commit. A missing database succeeds with zeros without creating files. Stop the server before a pre-stream reset and restart afterwards to clear read caches and in-memory rate-limit buckets; unset the load-test override before restarting. Reset does not selectively remove `load-` names.
+
+### Capacity validation
+
+`bun run load -- --url http://127.0.0.1:43125 [--players 500] [--seconds 60]` writes one new `load-` player and one run per simulated player. The URL must be an HTTP(S) origin. Players start concurrently, die after 5–15 seconds (capped at one-third of shorter invocations), and finish with conservative elapsed-time scores accepted by the normal plausibility rules. At death and acknowledged save they read personal best, top 10 and team totals. Top 10 and teams then poll every two seconds through the deadline; a separate stream-board observer reads those same two data APIs immediately and every five seconds. `/board` is still planned in this checkout, so the observer follows the PRD data cadence without downloading HTML. This compressed HTTP workload leaves time for sustained game-over polling; it does not simulate a full gameplay duration.
+
+Each request measures through the entire response body, has a five-second timeout, refuses redirects and validates its expected status and essential JSON shape. At the deadline no new requests start; in-flight requests drain within their timeouts. SIGINT/SIGTERM stop scheduling and print a failing partial summary. Output includes requested/accepted players, total requests, failures by HTTP status or timeout/transport/invalid-response category, and count/p50/p95/p99 latency by route and overall (nearest rank over raw samples, including failures). Empty percentiles are `n/a`. A pass requires every player to start and finish, successful observations of every read route, no failed requests, zero 5xx and at least 95% of all requests succeeding in strictly under 200 ms. Failures or an incomplete workload exit nonzero.
+
+The default remains 30 starts per IP per ten minutes. For a dedicated benchmark server only, `LOAD_TEST_START_LIMIT=10000` explicitly raises that ceiling, also in production mode. It accepts only positive safe integers and is validated before opening the database; limits above 30 print a startup warning. No deployment default changes. Restart with a fresh scratch database between smoke and measured runs (reset alone does not clear the limiter). Reproduction commands and factory measurements: [docs/load-validation.md](docs/load-validation.md). The timed benchmark is manual; `bun run check` runs its short deterministic tests only.
 
 ## Hosting
 - Railway, from the `Dockerfile`, with a volume mounted at `DATA_DIR` and GitHub auto-deploy on `main`, so a merged change reaches players within minutes. One instance (SQLite needs one long-running process with a disk). The owner sets up the Railway project; the app only has to honor `PORT` and `DATA_DIR`.

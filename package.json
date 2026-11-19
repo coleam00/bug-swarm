@@ -8,7 +8,9 @@
     "start": "bun src/server/main.ts",
     "check": "tsc --noEmit && bun test",
     "stats": "bun scripts/stats.ts",
-    "hide": "bun scripts/hide.ts"
+    "hide": "bun scripts/hide.ts",
+    "load": "bun scripts/load.ts",
+    "reset": "bun scripts/reset.ts"
   },
   "dependencies": {
     "hono": "^4.6.0",
