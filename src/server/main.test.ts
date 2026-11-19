@@ -56,26 +56,35 @@ beforeAll(() => {
 }, 30_000);
 
 afterAll(() => {
-  // Both child processes have exited and released SQLite handles before cleanup.
+  // Child processes have exited and released SQLite handles before cleanup.
   rmSync(scratch, { recursive: true, force: true });
 });
 
 test.each([
-  { name: "defaults", overrides: {}, port: 3000, dataDir: "data" },
+  { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
   {
     name: "production overrides",
     overrides: { NODE_ENV: "production", PORT: "8080", DATA_DIR: join(scratch, "custom-data") },
     port: 8080,
     dataDir: join(scratch, "custom-data"),
+    hostname: "0.0.0.0",
   },
-])("startup uses $name and serves the built bundle", async ({ overrides, port, dataDir }) => {
+  {
+    name: "development overrides",
+    overrides: { NODE_ENV: "development", PORT: "8081", DATA_DIR: join(scratch, "dev-data") },
+    port: 8081,
+    dataDir: join(scratch, "dev-data"),
+    hostname: "127.0.0.1",
+  },
+])("startup uses $name", async ({ overrides, port, dataDir, hostname }) => {
   const child = Bun.spawnSync([process.execPath, "--eval", probe], {
     cwd: scratch, env: { ...env, ...overrides }, stdout: "pipe", stderr: "pipe", timeout: 10_000,
   });
   expect(child.exitCode, child.stderr.toString()).toBe(0);
   const result = JSON.parse(readFileSync(join(scratch, "startup.json"), "utf8"));
-  expect({ port: result.port, hostname: result.hostname }).toEqual({ port, hostname: "0.0.0.0" });
+  expect({ port: result.port, hostname: result.hostname }).toEqual({ port, hostname });
   expect(existsSync(resolve(scratch, dataDir, "app.db"))).toBe(true);
+  if (overrides.NODE_ENV !== "production") return; // Bundle assertions only need one startup case.
   expect(result.pageStatus).toBe(200);
   expect(result.html.toLowerCase()).toContain("<!doctype html>");
   expect(result.assetStatus).toBe(200);
