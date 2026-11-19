@@ -1,8 +1,86 @@
-# Upgrade-enabled pacing validation
+# Pacing validation
+
+## Current correction: issue #30
+
+The fixed broad harness was captured against unchanged combat at `0339ee9`, before tuning. [Complete before report](pacing-validation/issue-30-before.txt) and [complete after report](pacing-validation/issue-30-after.txt) contain all 2,000 cases, acquired builds, grouping summaries and gates. Older evidence below describes issue #21 and remains historical.
+
+### Workload and acceptance
+
+`bun run pacing` keeps its original 20 cases, seeds, evasive steering and first-card idle choices. It still requires idle death by 60 seconds, evasive medians of 60–180 seconds overall and in both shapes, all deaths by 240 seconds and valid scores.
+
+`bun run pacing --broad` (also `bun run pacing -- --broad`) crosses seeds **0–99 × five distinct full priorities × two shapes × idle/evasive**. There are 2,000 cases, including 1,000 evasive cases. The two drone-first priorities remain separate, and laser-first occurs once. Both modes choose the first offered upgrade in the full ordered priority; only movement differs. Default idle still takes the first offered card. Production simulation, arena geometry, seeded offers, fixed step, repulsion steering and 600-second diagnostic horizon are shared and unchanged.
+
+The broad command prints case records plus count, median, maximum and cutoff summaries for each mode overall, mode/shape, mode/priority and mode/priority/shape. Its gates require:
+
+- Overall evasive median **75–110 seconds**, inclusive.
+- Each full priority's evasive median **at least 55 seconds**, across both shapes.
+- Every idle run actually dead by **60 seconds**; every run actually dead by **240 seconds**.
+- Complete, unique mode/priority/shape combinations for every sampled seed, and valid scores for every run.
+
+A cutoff is a survivor, never a death. Missing groups cannot pass. Gates use unrounded elapsed times with a 1e-7-second inclusive-boundary tolerance. Evasive deaths strictly below `60 - 1e-7` count toward the under-60 share, divided by all evasive cases; within-tolerance values are on the boundary. Individual shape medians and this percentage are diagnostics. Any failed gate exits nonzero; unknown or extra arguments fail before running combat.
+
+CI asserts the full default matrix's original target object and runs a real ten-seed broad slice (200 cases), protecting each priority's 55-second floor, idle/death ceilings and scores. Enumeration and independent fixtures cover completeness, separate drone priorities, inclusive boundaries, hidden weak builds, cutoffs, invalid scores, reporting and command status. The full broad acceptance run stays outside `bun run check`. The existing 402-case first-card idle regression remains intact.
+
+### Broad results
+
+All values are gameplay seconds. Each priority has 200 evasive cases; each shape has 500.
+
+| Evasive priority | Before median | After median |
+| --- | ---: | ---: |
+| shield / drone / bomb / laser | 51.50 | 73.10 |
+| drone / bomb / shield / laser | 64.67 | 77.04 |
+| bomb / drone / laser / shield | 49.22 | 71.85 |
+| laser / shield / drone / bomb | 35.54 | 110.84 |
+| drone / laser / bomb / shield | 63.60 | 80.32 |
+| **Overall** | **54.85** | **76.73** |
+
+| Group | Median before → after | Maximum before → after |
+| --- | ---: | ---: |
+| evasive portrait (390×844) | 54.77 → 76.58 | 77.97 → 151.25 |
+| evasive landscape (1280×800) | 55.03 → 76.75 | 78.38 → 156.93 |
+| idle portrait | 23.82 → 13.89 | 55.25 → 18.97 |
+| idle landscape | 23.87 → 13.49 | 42.88 → 17.38 |
+| idle overall | 23.82 → 13.63 | 55.25 → 18.97 |
+| all runs | 36.02 → 43.35 | 78.38 → 156.93 |
+
+Evasive deaths under 60: **644/1,000 (64.4%) → 0/1,000 (0.0%)**. Cutoffs **0 → 0**; invalid scores **0 → 0**. All final broad gates pass. The final default matrix also passes: evasive median 78.69 seconds (portrait 77.78; landscape 79.60), idle maximum 15.90 and overall maximum 136.87.
+
+### Final combat rules and measured tradeoff
+
+Only the early spawn knots and one-time robot laser benefit change. Spawn intervals interpolate through **(0, 0.2), (20, 4), (30, 4), (60, 0.3), (120, 0.2), (180, 0.18)**. This intentionally starts with a brief base-bug burst, eases through the first upgrade/fast-bug introduction, then returns to the original 60-second pressure. The 60-second point, later knots, exponential tail, fast unlock/cadence and pursuit multiplier are unchanged. The cumulative six-spawns-per-second allowance still holds.
+
+The plan's initial 1.2/1.0/0.9-second opening with a 0.5 laser multiplier produced an evasive median of 68.32 seconds and idle maximum 92.98, failing both gates. Broader easing and longer contact recovery also let idle builds sustain. The final opening concentrates enough early attackers to end idle runs before their first upgrade, while moving players get a quiet window to thin the swarm through weapon kills. This departs from simply increasing all three opening intervals. Idle play ends earlier than before; the acceptance specifically measures moving survival. Contact recovery remains the original one second: no additional recovery rule was needed.
+
+The first laser gives **4× robot firing rate** (1.5 seconds × 0.25 = **0.375 seconds**), alongside two-target piercing. This single benefit is identical for every positive laser pick count. Later picks only increase penetration to `1 + picks`; they never stack firing speed or reset cooldowns. First acquisition clamps remaining robot cooldown to 0.375 seconds, grants no synchronous shot and leaves existing projectiles unchanged. The shared multiplier drives combat and the first card's text; repeat cards describe their additional penetration. Drones retain their independent 1.5-second cadence and shared penetration benefit.
+
+Three-hit health, persistent contact attackers, no contact scoring/removal, shield refill cap, bomb recharge/repick rules, choice pauses, upgrade counts, finish payloads and server plausibility rules are unchanged. Deterministic tests exercise actual firing counts, cooldown acquisition, non-stacking, unchanged drones/projectiles, late spawn/pursuit values and cumulative spawn limits.
+
+`bun run check`: TypeScript and **200 tests / 86,383 assertions** pass. `bun run build`, default pacing and full broad pacing pass.
+
+### Fresh Chrome evidence
+
+2026-11-19: factory Windows 11 Home 10.0.26200, AMD Ryzen 9 7950X3D (32 logical CPUs), RTX 3090 host; headless **Chrome for Testing 159.0.8154.6**. Viewport 1280×720, device/render DPR 1, world 800×450. All four existing benchmark profiles ran sequentially, each with a **10-second warmup and 60-second real RAF sample** (3,600 intervals). Checks, downloads and browser interaction completed outside sampling. [Raw reports](pacing-validation/issue-30-benchmark.json) retain every sample, population bounds, counters, update/draw/fixture timings and browser metadata.
+
+| Profile | Mean / lowest rolling FPS | Update mean / p95 ms | Draw mean / p95 ms | Fast bugs min–max |
+| --- | ---: | ---: | ---: | ---: |
+| normal | 59.999 / 59.988 | 0.040 / 0.100 | 0.652 / 1.200 | 32–39 |
+| first | 59.999 / 59.988 | 0.048 / 0.100 | 0.698 / 1.200 | 27–42 |
+| stress + burst | 59.999 / 59.988 | 0.089 / 0.200 | 1.168 / 2.200 | 23–43 |
+| double + late | 59.999 / 59.988 | 0.042 / 0.100 | 0.716 / 1.200 | 31–41 |
+
+**All four pass 58 FPS** in both mean and lowest rolling rate, with exactly **150 bugs at every draw**, no browser errors and no failed measured samples. Stress/burst reaches the fixed 1,024-particle and 256-label caps. The laser changes firing workload without adding a per-frame allocation structure. Its highest measured update p95 is 0.200 ms and draw p95 2.200 ms in stress/burst. The earlier historical failed Chrome 157 sample remains below under its original filename.
+
+This run used scratch homes/profiles/data and intercepted browser requests: the unchanged production benchmark entry was bundled with Bun and delivered to Chrome without a listening server, API or database. Installed Chrome refused remote debugging before any sample started; a separate scratch Chrome for Testing install completed all samples. Reproduce the existing fixture's protocol via [look-validation.md](look-validation.md#repeat-the-measurement), using normal, `?profile=first`, `?profile=stress&burst` and `?profile=double&late`, keeping checks and interaction separate from timed samples.
+
+[Card assertions](pacing-validation/issue-30-browser.json) and screenshots cover the production build at **390×844** ([first](pacing-validation/issue-30-cards-390-first.png), [repeat](pacing-validation/issue-30-cards-390-repeat.png)) and **1280×800** ([first](pacing-validation/issue-30-cards-1280-first.png), [repeat](pacing-validation/issue-30-cards-1280-repeat.png)). Explicit fixture offers isolate text/layout/selection from scheduling. First laser text states two-target piercing plus 4× robot firing; repeat text states three-target piercing. All text fits inside cards and all cards fit inside the viewport, without horizontal overflow. Portrait cards are 306×100–104 px; landscape cards are 278×150 px. Touch in portrait and fresh key 1 in landscape each select first/repeat laser, increment picks, close the dialog and restore canvas focus. There are no page/console errors. All browser contexts and processes were closed after validation. These are factory Chrome measurements, not human playtest evidence.
+
+## Historical issue #21 validation
+
+The following sections and their original raw filenames record the previous correction. Their constants and measurements describe that historical change, rather than the current issue #30 balance above.
 
 Validation compares baseline `032ed1c` with this change. The permanent harness was run before changing combat, then kept fixed during tuning. [Before](pacing-validation/before.txt) and [after](pacing-validation/after.txt) retain every case's seconds, death/cutoff status, score, priority and acquired build.
 
-## Reproduce the acceptance check
+### Reproduce the acceptance check
 
 Run `bun run pacing`. It imports the production simulation, arena sizing, fixed step, seeded offers, choice selection and acquired-build summary. There is no browser, API, database, forced offer, invulnerability or disabled choice in this harness. Default execution is exactly 20 runs: idle/evasive × five seeds × 390×844/1280×800 viewports.
 
@@ -18,7 +96,7 @@ Idle input is always zero, and idle choices always take the first offered card r
 
 Pending choices resolve immediately without advancing gameplay time. Runs step at `STEP` (1/60 second), shortening the final step at a 600-second diagnostic horizon. A survivor there is a cutoff, never a death; printed cutoff times and affected summaries are lower bounds. Targets use unrounded gameplay time with a 1e-7 second floating-point tolerance. The command prints separate PASS/FAIL results and exits nonzero for any failed target or invalid score.
 
-## Before and after
+### Before and after
 
 All times below are gameplay seconds. `≥600` denotes a survivor at the horizon. The baseline had eight idle failures and three cutoff survivors; the final run has neither.
 
@@ -59,7 +137,7 @@ PASS: all ten idle players actually died by 60 seconds. PASS: evasive medians in
 
 The baseline raw log conservatively prefixes medians with `≥` whenever the group contains a cutoff. Its medians above are exact: all central order statistics are completed deaths, below every censored time. The final reporter only prefixes medians when censoring affects a central order statistic.
 
-## Final rules and tuning
+### Final rules and tuning
 
 - Shield refills to `min(picks, 4)`, with no healing or accumulated charges. First/second picks grant one/two charges; two further picks grow capacity to four, then picks refill spent charges at that cap. Pick counts remain independent of resources and retain the existing finish format.
 - Bomb must be acquired. Acquisition arms the first clear; subsequent picks recalculate from the last detonation without an extra explosion. Recharge is `15 + 15/picks` seconds: 30, 22.5, 20, 18.75, … approaching 15. It waits for bugs when armed, pauses with choices and scores ten per victim, as do drones and robot shots.
@@ -77,7 +155,7 @@ That sample was insufficient: the next review reproduced seed 29514 surviving 71
 
 The reproducer now ends at **20.33 seconds**, confirmed by both the harness and a direct production-simulation loop. The 30-second spawn interval is gentler (0.7s) to retain moving survival time, while linear pursuit starts at 45 seconds with a 45-second scale. Firing cadence and upgrade effects are unchanged from the returned commit. An additional **1,000,000-case** idle sweep covers i=0–249,999, both seeds `i` and `Math.imul(i + 1, 0x9e3779b9) >>> 0`, and both required shapes: zero survivors/score failures/60-second failures, longest **59.27 seconds**. [Contact-repair evidence](pacing-validation/contact-repair-checks.json) retains the reproducer, sample definition, worst case, source hashes and mutation outcomes. This sample supports the contact-rule regression; it is not proof over every possible seed.
 
-## Broader build diagnostic and regression
+### Broader build diagnostic and regression
 
 The exported `runScenario` also exercised all 24 permutations of the four upgrade priorities over all five seeds and both shapes (240 evasive runs). Twenty further runs alternate preferred drone/bomb or shield/bomb by choice number, starting with drone or shield. If the preferred card is missing, select the other member of the pair, then fall back to registry order. All use the same production offers, movement, fixed step and 600-second horizon. Across these 260 runs: median **46.10 seconds**, longest **77.18 seconds**, zero cutoffs, zero runs over 240 seconds, and all scores pass server validation.
 
@@ -89,7 +167,7 @@ The prior return-check repairs added a separate 400-case idle regression (seeds 
 
 The latest repair adds seed 29514 in both shapes (402 idle regression cases total) and independently specified `targets()` fixtures: inclusive 60/180-second median limits, idle death at 60 versus 61, a 240 versus 241-second outlier with valid medians, invalid 59/181-second medians overall and in either viewport while the combined median is valid, missing groups, and rejected score validation. Widening either ceiling, changing the median conjunction to a disjunction, disabling score validation, or restoring passive contact clears is rejected by the corresponding test. No output wording is asserted.
 
-## Chrome validation
+### Chrome validation
 
 Chrome uses a scratch profile/home/data directory and a Vite-only server started for this task; API requests in the UI fixture are intercepted, and no database is opened. First, second and capped refill cards were inspected and selected by touch at 390×844 and 1280×800. All card bounds fit the viewport with no horizontal overflow and targets at least 44 px. The production renderer shows one/two shield outlines, one/two drones, piercing streaks and the bomb ring after first/repeated picks in both shapes. [Browser assertions](pacing-validation/browser.json) include card text/bounds and effect state.
 
@@ -115,7 +193,7 @@ The stress sample's mean exceeded 58 FPS but its lowest rolling window failed th
 
 The fixed control met 58 FPS in both mean and lowest rolling rate. The earlier dip did not recur in this comparison; it remains recorded above rather than being counted as a passing sample. Both versions use the same per-frame code; timings include the changed combat/effect workload. Normal, double and late samples passed the rolling threshold. All samples held 150 bugs at every draw with no page/console errors. Double/stress/late counters confirm blocks, bomb clears, piercing kills and drone firing; burst mode reached the fixed 1,024-particle and 256-label caps. Chrome and Vite were stopped after validation.
 
-### Contact-pressure correction: fresh Chrome evidence
+#### Contact-pressure correction: fresh Chrome evidence
 
 The current correction was measured separately in headless Chrome for Testing **159.0.8154.6** on the same Windows/Ryzen factory desktop, with a scratch home/profile and an owned Vite-only server. The same viewport 1280×720, DPR 1, 150-bug fixture, sequential profiles, 10-second warmup and 60-second real RAF sampling protocol apply. No project checks or interaction workload ran concurrently. The robot, both bug kinds, first/repeated upgrades and contact effects use the production code; only fixture replenishment/durability keep the benchmark alive. [Fresh raw reports](pacing-validation/contact-benchmark.json) retain all samples.
 

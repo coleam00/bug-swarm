@@ -1,11 +1,12 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS } from "../src/shared/upgrades";
 import { createSimulation, IDLE, step } from "../src/web/game/simulation";
-import { evasiveInput, median, resolveChoice, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, VIEWPORTS, type Result } from "./pacing";
+import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, printReport, PRIORITIES, priorityKey, resolveChoice, runBroadMatrix, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, under60, VIEWPORTS, type Result } from "./pacing";
 
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
   const rows = runMatrix();
   expect(rows).toHaveLength(20);
+  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
   for (const seed of [1, 42, 12345, 7, 99]) for (const mode of ["idle", "evasive"] as const)
     for (const viewport of [[390, 844], [1280, 800]])
       expect(rows.filter(r => r.seed === seed && r.mode === mode && r.viewport[0] === viewport[0] && r.viewport[1] === viewport[1])).toHaveLength(1);
@@ -14,6 +15,105 @@ test("default matrix keeps all five seeds, modes, shapes and distinct upgrade pr
   for (const priority of priorities) expect([...priority].sort()).toEqual([...UPGRADE_IDS].sort());
   expect(priorities.some(p => p[0] === TEST_SHIELD)).toBe(true);
   expect(priorities.some(p => p[0] === CI_DRONE && p[1] === REFACTOR_BOMB)).toBe(true);
+});
+
+test("broad enumeration crosses 100 seeds, five full priorities, both shapes and modes exactly once", () => {
+  const cases = broadScenarios();
+  expect(cases).toHaveLength(2000);
+  expect(new Set(cases.map(s => `${s.seed}/${s.mode}/${s.viewport.join("x")}/${priorityKey(s.priority)}`)).size).toBe(2000);
+  expect([...new Set(cases.map(s => s.seed))]).toEqual(Array.from({ length: 100 }, (_, i) => i));
+  for (const mode of ["idle", "evasive"] as const) for (const viewport of VIEWPORTS) for (const priority of PRIORITIES)
+    expect(cases.filter(s => s.mode === mode && s.viewport === viewport && s.priority === priority)).toHaveLength(100);
+  expect(PRIORITIES.filter(p => p[0] === REVIEW_LASER)).toHaveLength(1);
+  expect(PRIORITIES.filter(p => p[0] === CI_DRONE)).toHaveLength(2);
+});
+
+test("ten-seed broad slice protects every build's evasive floor and idle, death and score ceilings", () => {
+  const rows = runBroadMatrix(Array.from({ length: 10 }, (_, i) => i));
+  expect(rows).toHaveLength(200);
+  const gates = broadTargets(rows);
+  expect(Object.entries(gates).filter(([name]) => name !== "evasiveMedian75to110").every(([, pass]) => pass)).toBe(true);
+  // Broad idle uses its named priority, unlike the legacy first-card matrix.
+  const scenario = broadScenarios([0]).find(s => s.mode === "idle" && s.priority[0] === REVIEW_LASER)!;
+  expect(rows.find(r => r.mode === "idle" && r.seed === 0 && r.viewport === scenario.viewport && r.priority === scenario.priority))
+    .toEqual(runScenario(scenario, 600, offer => selectCard("evasive", offer, scenario.priority)));
+});
+
+function broadFixture(evasive = 90): Result[] {
+  return broadScenarios([0]).map(s => ({ ...reported(s.mode, s.viewport, s.mode === "idle" ? 60 : evasive), ...s }));
+}
+test.each([75, 110])("broad gates accept inclusive %i-second overall median, 60s idle and 240s maximum", duration => {
+  const rows = broadFixture(duration);
+  expect(Object.values(broadTargets(rows)).every(Boolean)).toBe(true);
+  rows.find(r => r.mode === "evasive")!.elapsed = 240;
+  expect(broadTargets(rows).allDead240).toBe(true);
+});
+test("broad report finds a weak priority hidden by a passing overall median", () => {
+  const rows = broadFixture();
+  for (const r of rows) if (r.mode === "evasive" && r.priority[0] === REVIEW_LASER) r.elapsed = 54.9;
+  const gates = broadTargets(rows);
+  expect(gates.evasiveMedian75to110).toBe(true);
+  expect(gates[`evasiveMedian55:${priorityKey(SCENARIOS[3].priority)}`]).toBe(false);
+  for (const r of rows) if (r.mode === "evasive" && r.priority[0] === REVIEW_LASER) r.elapsed = 55;
+  expect(Object.values(broadTargets(rows)).every(Boolean)).toBe(true);
+});
+test.each([74.99, 110.01])("broad overall median rejects %f seconds", duration => {
+  expect(broadTargets(broadFixture(duration)).evasiveMedian75to110).toBe(false);
+});
+test("broad gates reject missing and duplicate combinations, cutoffs, ceilings and invalid scores", () => {
+  expect(Object.values(broadTargets([])).every(v => !v)).toBe(true);
+  const missing = broadFixture().slice(1);
+  expect(broadTargets(missing).completeGroups).toBe(false);
+  missing.push(missing[0]!);
+  expect(broadTargets(missing).completeGroups).toBe(false);
+  const rows = broadFixture();
+  rows[0]!.elapsed = 60.001;
+  expect(broadTargets(rows).idle60).toBe(false);
+  rows[0]!.elapsed = 60; rows[0]!.dead = false;
+  expect(broadTargets(rows).idle60).toBe(false);
+  expect(broadTargets(rows).allDead240).toBe(false);
+  rows[0]!.dead = true;
+  rows.find(r => r.mode === "evasive")!.elapsed = 240.001;
+  expect(broadTargets(rows).allDead240).toBe(false);
+  rows[0]!.validScore = false;
+  expect(broadTargets(rows).scoresPlausible).toBe(false);
+});
+test("under-60 diagnostics use raw times, boundary tolerance and only evasive runs in the denominator", () => {
+  const rows = broadFixture();
+  const evasive = rows.filter(r => r.mode === "evasive");
+  [59.999, 60, 60 - 1e-8, 60 + 1e-8].forEach((t, i) => evasive[i]!.elapsed = t);
+  expect(under60(rows)).toEqual({ count: 1, total: 10, percent: 10 });
+  evasive[0]!.dead = false;
+  expect(under60(rows)).toEqual({ count: 0, total: 10, percent: 0 });
+});
+test("command selects the requested workload and returns failure for unknown flags or failed gates", () => {
+  const selected: boolean[] = [], reportedModes: boolean[] = [];
+  const run = (broad: boolean) => { selected.push(broad); return broadFixture(); };
+  const report = (_rows: readonly Result[], broad = false) => { reportedModes.push(broad); };
+  expect(pacingCommand([], run, report)).toBe(0);
+  expect(pacingCommand(["--"], run, report)).toBe(0);
+  expect(pacingCommand(["--broad"], run, report)).toBe(0);
+  expect(pacingCommand(["--", "--broad"], run, report)).toBe(0);
+  expect(selected).toEqual([false, false, true, true]); expect(reportedModes).toEqual(selected);
+  for (const args of [["--unknown"], ["--broad", "extra"], ["--broad", "--broad"]])
+    expect(pacingCommand(args, run, report)).toBe(1);
+  expect(selected).toHaveLength(4);
+  expect(pacingCommand(["--broad"], () => broadFixture(74), report)).toBe(1);
+});
+test("broad output retains case records and every mode/shape/full-priority summary and gate", () => {
+  const lines: string[] = [], log = spyOn(console, "log").mockImplementation(line => { lines.push(String(line)); });
+  try { printReport(broadFixture(), true); } finally { log.mockRestore(); }
+  expect(lines.filter(line => /seed=/.test(line))).toHaveLength(20);
+  expect(lines).toContain("evasive overall: count=10 median=90.00s longest=90.00s cutoffs=0");
+  for (const mode of ["idle", "evasive"]) for (const priority of PRIORITIES) {
+    const label = `${mode} priority=${priorityKey(priority)}`;
+    expect(lines.some(line => line.startsWith(`${label}: count=2 median=`))).toBe(true);
+    for (const viewport of VIEWPORTS)
+      expect(lines.some(line => line.startsWith(`${label} ${viewport.join("x")}: count=1 median=`))).toBe(true);
+  }
+  expect(lines).toContain("evasive under60: 0/10 (0.0%)");
+  expect(lines.filter(line => line.startsWith("PASS evasiveMedian55:"))).toHaveLength(5);
+  expect(lines.some(line => line.startsWith("FAIL"))).toBe(false);
 });
 
 test("two-seed upgraded pacing replays deterministically, ends idle by 60s and both priorities by 240s", () => {

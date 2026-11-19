@@ -15,18 +15,28 @@ test("bugs chase the robot", () => {
   expect(s.bugs[0]!.x).toBeGreaterThan(0); expect(s.bugs[0]!.y).toBeLessThan(300);
 });
 
-test("spawn rate increases across equal windows and keeps countdown overshoot", () => {
+test("opening relief leads into growing late pressure and keeps countdown overshoot", () => {
   const a = createSimulation(1), b = createSimulation(1);
   a.invulnerableUntil = b.invulnerableUntil = Infinity;
   for (let i = 0; i < 30 / STEP; i++) step(a, IDLE, STEP);
   const early = a.nextId - 1;
   for (let i = 0; i < 30 / STEP; i++) step(a, IDLE, STEP);
-  expect(a.nextId - 1 - early).toBeGreaterThan(early);
+  const middle = a.nextId - 1 - early;
   // Different step boundaries must preserve the spawn sequence and future countdown.
   for (let i = 0; i < 60 / 0.25; i++) step(b, IDLE, 0.25);
   expect(b.nextId).toBe(a.nextId); expect(b.eligibleSpawns).toBe(a.eligibleSpawns);
   expect(b.seed).toBe(a.seed); expect(b.spawnIn).toBeCloseTo(a.spawnIn, 8);
-  expect(spawnInterval(15)).toBeCloseTo(0.825); expect(spawnInterval(45)).toBeCloseTo(0.5);
+  expect(spawnInterval(0)).toBe(0.2);
+  expect(spawnInterval(15)).toBeCloseTo(3.05);
+  expect(spawnInterval(20)).toBe(4); expect(spawnInterval(30)).toBe(4);
+  expect(spawnInterval(45)).toBeCloseTo(2.15);
+  // The easing ends at the original late knots and exponential tail.
+  expect(spawnInterval(60)).toBe(0.3); expect(spawnInterval(120)).toBe(0.2);
+  expect(spawnInterval(180)).toBe(0.18);
+  expect(spawnInterval(240)).toBeCloseTo(1 / 6 + (0.18 - 1 / 6) * Math.exp(-1), 12);
+  const beforeLate = a.nextId;
+  for (let i = 0; i < 30 / STEP; i++) step(a, IDLE, STEP);
+  expect(a.nextId - beforeLate).toBeGreaterThan(Math.max(early, middle));
   expect(spawnInterval(180)).toBeLessThan(spawnInterval(120));
   expect(spawnInterval(240)).toBeLessThan(spawnInterval(180));
   expect(spawnInterval(600)).toBeLessThan(spawnInterval(240));
@@ -58,6 +68,9 @@ test("scheduled spawns stay inside the cumulative six-per-second score allowance
 
 test("late pursuit accelerates both existing and newly spawned bugs, preserving their speed ratio", () => {
   expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(45)).toBe(1);
+  expect(bugSpeedMultiplier(60)).toBeCloseTo(4 / 3, 12);
+  expect(bugSpeedMultiplier(120)).toBeCloseTo(28 / 9, 12);
+  expect(bugSpeedMultiplier(180)).toBe(8);
   expect(bugSpeedMultiplier(60)).toBeGreaterThan(bugSpeedMultiplier(45));
   expect(bugSpeedMultiplier(180)).toBeGreaterThan(bugSpeedMultiplier(120));
   expect(bugSpeedMultiplier(240)).toBeGreaterThan(bugSpeedMultiplier(180));
@@ -82,7 +95,7 @@ test("late pursuit accelerates both existing and newly spawned bugs, preserving 
 test("no fast bug before 30s; the first eligible scheduled spawn and then every fourth are fast", () => {
   const s = createSimulation(1); s.fireIn = Infinity; s.invulnerableUntil = Infinity;
   let previous = s.nextId, eligible = 0;
-  while (s.time < 40) {
+  while (s.time < 50) {
     const at = s.time + s.spawnIn;
     step(s, IDLE, STEP);
     if (s.nextId === previous) continue;

@@ -1,7 +1,7 @@
 import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
-import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, shieldCapacity, bombRecharge, type UpgradeId } from "../../shared/upgrades";
+import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, shieldCapacity, bombRecharge, laserFireMultiplier, type UpgradeId } from "../../shared/upgrades";
 import { createUpgrades, openChoice, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
@@ -37,6 +37,8 @@ export function chooseUpgrade(state: Simulation, choiceNumber: number, id: Upgra
   if (id === REFACTOR_BOMB) state.bombReadyAt = state.upgrades.counts[REFACTOR_BOMB] === 1
     ? state.time : state.bombLastAt + bombRecharge(state.upgrades.counts[REFACTOR_BOMB]);
   if (id === CI_DRONE) state.drones.push({ fireIn: 0 });
+  if (id === REVIEW_LASER && state.upgrades.counts[REVIEW_LASER] === 1)
+    state.fireIn = Math.min(state.fireIn, FIRE_INTERVAL * laserFireMultiplier(1));
   return true;
 }
 // Both drawing and firing use this calculation; the caller reuses its output.
@@ -111,7 +113,7 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   }
   state.fireIn -= dt;
   if (state.fireIn <= 1e-9) {
-    state.fireIn += FIRE_INTERVAL;
+    state.fireIn += FIRE_INTERVAL * laserFireMultiplier(state.upgrades.counts[REVIEW_LASER]);
     fire(state, state.robot);
   }
   // Reuse the simulation-owned scratch point; no per-frame drone positions.
