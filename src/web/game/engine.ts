@@ -29,13 +29,13 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     ratio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0); loop.reset(); fx.resetClock();
-    renderer.resize(width, height, ratio);
+    renderer.resize(width, height, ratio, session.current?.simulation.arena);
   };
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
   const restart = (touch: boolean) => { clear(); token = session.start(touch).token; };
   const locate = (event: PointerEvent) => {
     const box = canvas.getBoundingClientRect();
-    target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height));
+    target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height, session.current?.simulation.arena));
   };
   const down = (event: PointerEvent) => {
     if (event.button !== 0) return;

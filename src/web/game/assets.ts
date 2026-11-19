@@ -1,4 +1,4 @@
-import { ARENA_SIZE } from "./config";
+import type { Arena } from "./arena";
 
 export type CanvasFactory = () => HTMLCanvasElement;
 const makeCanvas: CanvasFactory = () => document.createElement("canvas");
@@ -14,27 +14,29 @@ export class Assets {
   readonly labelWidth: number;
   readonly labelHeight: number;
 
-  constructor(density: number, scale: number, factory: CanvasFactory = makeCanvas) {
+  constructor(density: number, scale: number, arena: Arena, factory: CanvasFactory = makeCanvas) {
+    const { width, height } = arena;
     const surface = (width: number, height: number): HTMLCanvasElement => {
       const canvas = factory();
       canvas.width = Math.ceil(width * density); canvas.height = Math.ceil(height * density);
       canvas.getContext("2d")!.scale(density, density);
       return canvas;
     };
-    this.floor = surface(ARENA_SIZE, ARENA_SIZE);
+    this.floor = surface(width, height);
     const floor = this.floor.getContext("2d")!;
-    floor.fillStyle = "#101d2a"; floor.fillRect(0, 0, ARENA_SIZE, ARENA_SIZE);
+    floor.fillStyle = "#101d2a"; floor.fillRect(0, 0, width, height);
     floor.beginPath();
-    for (let i = 0; i <= ARENA_SIZE; i += 40) {
-      floor.moveTo(i, 0); floor.lineTo(i, ARENA_SIZE); floor.moveTo(0, i); floor.lineTo(ARENA_SIZE, i);
-    }
+    for (let x = 0; x <= width; x += 40) { floor.moveTo(x, 0); floor.lineTo(x, height); }
+    for (let y = 0; y <= height; y += 40) { floor.moveTo(0, y); floor.lineTo(width, y); }
     floor.lineWidth = 4; floor.strokeStyle = "#173542"; floor.stroke();
     floor.lineWidth = 0.8; floor.strokeStyle = "#26515c"; floor.stroke();
-    this.vignette = surface(ARENA_SIZE, ARENA_SIZE);
+    this.vignette = surface(width, height);
     const edge = this.vignette.getContext("2d")!;
+    // Normalize the radial mask so its falloff follows every world aspect ratio.
+    edge.scale(width / 600, height / 600);
     const gradient = edge.createRadialGradient(300, 300, 130, 300, 300, 415);
     gradient.addColorStop(0, "#030a1200"); gradient.addColorStop(0.7, "#030a1230"); gradient.addColorStop(1, "#030a12df");
-    edge.fillStyle = gradient; edge.fillRect(0, 0, ARENA_SIZE, ARENA_SIZE);
+    edge.fillStyle = gradient; edge.fillRect(0, 0, 600, 600);
     const glow = (colour: string): HTMLCanvasElement => {
       const canvas = surface(64, 64), ctx = canvas.getContext("2d")!;
       const light = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);

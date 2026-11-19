@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BUG_SPEED, STEP } from "../config";
+import { BUG_DEFINITIONS, STEP } from "../config";
 import { FixedStepper } from "../loop";
 import { createSimulation, IDLE, step, type Bug } from "../simulation";
 import { Effects } from "./index";
@@ -13,36 +13,36 @@ function fixture() {
   return { state, fx, feedback, advance, shot };
 }
 
-test("shot-only multiple kills report precise post-movement positions and squash counts", () => {
+test.each(["base", "fast"] as const)("%s shot-only kills report precise post-movement positions and squash counts", (kind) => {
   const h = fixture();
-  h.state.bugs.push({ id: 1, x: 100, y: 300 }, { id: 2, x: 500, y: 300 }, { id: 3, x: 300, y: 100 });
+  h.state.bugs.push({ id: 1, kind, x: 100, y: 300 }, { id: 2, kind, x: 500, y: 300 }, { id: 3, kind, x: 300, y: 100 });
   h.shot(100, 300); h.shot(300, 100); h.advance();
   expect(h.state.squashes).toBe(2); expect(h.fx.labels.count).toBe(2); expect(h.fx.particles.count).toBe(16);
-  expect(h.fx.labels.x[0]).toBeCloseTo(100 + BUG_SPEED * STEP); expect(h.fx.labels.y[0]).toBe(300);
-  expect(h.fx.labels.x[1]).toBe(300); expect(h.fx.labels.y[1]).toBeCloseTo(100 + BUG_SPEED * STEP);
+  expect(h.fx.labels.x[0]).toBeCloseTo(100 + BUG_DEFINITIONS[kind].speed * STEP); expect(h.fx.labels.y[0]).toBe(300);
+  expect(h.fx.labels.x[1]).toBe(300); expect(h.fx.labels.y[1]).toBeCloseTo(100 + BUG_DEFINITIONS[kind].speed * STEP);
   expect(h.fx.flash).toBe(0); expect(h.state.hits).toBe(0);
 });
 
 test.each([false, true])("contact removals never award squash feedback (invulnerable=%s)", (invulnerable) => {
   const h = fixture(); h.state.invulnerableUntil = invulnerable ? 10 : 0;
-  h.state.bugs.push({ id: 1, x: 300, y: 300 }, { id: 2, x: 310, y: 300 }); h.advance();
+  h.state.bugs.push({ id: 1, kind: "base", x: 300, y: 300 }, { id: 2, kind: "base", x: 310, y: 300 }); h.advance();
   expect(h.state.bugs).toHaveLength(0); expect(h.fx.labels.count).toBe(0); expect(h.fx.particles.count).toBe(0);
   expect(h.state.hits).toBe(invulnerable ? 0 : 1); expect(h.fx.flash).toBe(invulnerable ? 0 : 0.1);
   if (!invulnerable) { h.fx.flash = 0; h.fx.shake.reset(); }
-  h.state.bugs.push({ id: 3, x: 300, y: 300 }); h.advance();
+  h.state.bugs.push({ id: 3, kind: "base", x: 300, y: 300 }); h.advance();
   expect(h.fx.flash).toBe(0); expect(h.fx.shake.remaining).toBe(0);
 });
 
 test("a shot kill inside contact range gets +10; a simultaneous contact gets one hit", () => {
   const h = fixture();
-  h.state.bugs.push({ id: 1, x: 310, y: 300 }, { id: 2, x: 290, y: 300 });
+  h.state.bugs.push({ id: 1, kind: "base", x: 310, y: 300 }, { id: 2, kind: "base", x: 290, y: 300 });
   h.shot(320, 300); h.advance();
   expect(h.state.squashes).toBe(1); expect(h.fx.labels.count).toBe(1); expect(h.fx.labels.x[0]).toBeGreaterThan(300);
   expect(h.state.hits).toBe(1); expect(h.fx.flash).toBe(0.1); expect(h.fx.shake.remaining).toBe(0.16);
 });
 
 test("a shot takes precedence over contact and produces no hit flash", () => {
-  const h = fixture(); h.state.bugs.push({ id: 1, x: 310, y: 300 }); h.shot(320, 300); h.advance();
+  const h = fixture(); h.state.bugs.push({ id: 1, kind: "base", x: 310, y: 300 }); h.shot(320, 300); h.advance();
   expect(h.fx.labels.count).toBe(1); expect(h.state.hits).toBe(0); expect(h.fx.flash).toBe(0);
 });
 
@@ -57,7 +57,7 @@ test("a bug spawned and squashed in the same step is observed", () => {
 
 test("five catch-up steps retain every squash and movement trail before a draw", () => {
   const h = fixture(), loop = new FixedStepper(h.feedback), moving = { x: 1, y: 0, target: null };
-  h.state.bugs.push({ id: 1, x: 100, y: 300 }, { id: 2, x: 500, y: 300 });
+  h.state.bugs.push({ id: 1, kind: "base", x: 100, y: 300 }, { id: 2, kind: "base", x: 500, y: 300 });
   h.shot(100, 300);
   // This shot cannot reach the second bug on the first step, but does in catch-up.
   h.state.shots.push({ x: 450, y: 300, vx: 600, vy: 0, life: 1 });
@@ -71,14 +71,14 @@ test("five catch-up steps retain every squash and movement trail before a draw",
 
 test("bounded snapshot overflow omits only untracked cosmetics", () => {
   const fx = new Effects(), feedback = new Feedback(fx, 2);
-  const bugs: Bug[] = [{ id: 1, x: 1, y: 2 }, { id: 2, x: 3, y: 4 }, { id: 3, x: 5, y: 6 }];
+  const bugs: Bug[] = [{ id: 1, kind: "base", x: 1, y: 2 }, { id: 2, kind: "base", x: 3, y: 4 }, { id: 3, kind: "base", x: 5, y: 6 }];
   feedback.beforeShots(bugs, 0); feedback.afterShots([bugs[1]!], 2);
   expect(fx.labels.count).toBe(1); expect(fx.labels.x[0]).toBe(1);
   fx.reset(); feedback.reset(); feedback.afterShots([], 0); expect(fx.labels.count).toBe(0);
 });
 
 test("terminal hit emits once, stops new trails, decays after death and restarts cleanly", () => {
-  const h = fixture(); h.state.hits = 2; h.state.bugs.push({ id: 1, x: 300, y: 300 });
+  const h = fixture(); h.state.hits = 2; h.state.bugs.push({ id: 1, kind: "base", x: 300, y: 300 });
   const loop = new FixedStepper(h.feedback); h.fx.advance(0); loop.advance(0, h.state, IDLE);
   h.fx.advance(17); loop.advance(17, h.state, IDLE);
   expect(h.state.dead).toBe(true); expect(h.fx.flash).toBe(0.1); expect(h.fx.trails.count).toBe(0);
@@ -91,8 +91,12 @@ test("terminal hit emits once, stops new trails, decays after death and restarts
   expect(h.fx.labels.count).toBe(0); expect(h.fx.trails.count).toBe(0); expect(h.fx.flash).toBe(0);
 });
 
-test.each([1, 42, 12345])("observation never changes complete seeded simulation state (%i)", (seed) => {
-  const plain = createSimulation(seed), observed = createSimulation(seed), fx = new Effects(), feedback = new Feedback(fx);
+test.each([
+  { seed: 1, arena: { width: 450, height: 800 } },
+  { seed: 42, arena: { width: 800, height: 450 } },
+  { seed: 12345, arena: { width: 600, height: 600 } },
+])("observation never changes complete simulation state (seed $seed, $arena)", ({ seed, arena }) => {
+  const plain = createSimulation(seed, arena), observed = createSimulation(seed, arena), fx = new Effects(), feedback = new Feedback(fx);
   const input = { x: 0, y: 0, target: null };
   for (let i = 0; i < 3600; i++) {
     input.x = Math.sin(i / 75); input.y = Math.cos(i / 93);

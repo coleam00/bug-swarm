@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test";
-import { isId, nameKey, plausible, validFinish, validateName } from "./rules";
+import { isId, nameKey, plausible, validFinish, validateName, MAX_SQUASHES_PER_SECOND } from "./rules";
 const finish = { playerId: crypto.randomUUID(), score: 62, squashes: 6, seconds: 2, touch: true };
+
+test("faster spawning retains the six squashes per second cap: boundary accepted, one more rejected", () => {
+  expect(MAX_SQUASHES_PER_SECOND).toBe(6);
+  const seconds = 60, squashes = MAX_SQUASHES_PER_SECOND * seconds;
+  const boundary = { ...finish, seconds, squashes, score: squashes * 10 + seconds };
+  expect(plausible(boundary, 1000, 61000)).toBe(true);
+  expect(plausible({ ...boundary, squashes: squashes + 1, score: boundary.score + 10 }, 1000, 61000)).toBe(false);
+});
 test("name rules trim and allow exactly the published character set and lengths", () => {
   expect(validateName("  Robot-7_ ok  ")).toEqual({ name: "Robot-7_ ok" });
   for (const name of [null, "a", "12345678901234567", "🤖", "a<b", "a\nb", "éé", "  "]) expect(validateName(name).error).toBeDefined();

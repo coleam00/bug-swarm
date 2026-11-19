@@ -1,4 +1,5 @@
-import { ARENA_SIZE, ROBOT_RADIUS } from "./config";
+import { ROBOT_RADIUS } from "./config";
+import { SQUARE_ARENA, type Arena } from "./arena";
 import { viewport, type Viewport } from "./input";
 import { Assets, type CanvasFactory } from "./assets";
 import { BUG_STYLES } from "./styles";
@@ -12,24 +13,30 @@ export class Renderer {
   private height = 0;
   private ratio = 0;
   constructor(private readonly ctx: CanvasRenderingContext2D, private readonly factory?: CanvasFactory) {}
-  resize(width: number, height: number, ratio: number): void {
-    if (this.assets && width === this.width && height === this.height && ratio === this.ratio) return;
+  resize(width: number, height: number, ratio: number, arena: Arena = SQUARE_ARENA): void {
+    if (this.assets && width === this.width && height === this.height && ratio === this.ratio &&
+      arena.width === this.view.arena.width && arena.height === this.view.arena.height) return;
     this.width = width; this.height = height; this.ratio = ratio;
-    this.view = viewport(width, height);
+    this.view = viewport(width, height, arena);
     this.assets?.dispose();
-    this.assets = new Assets(Math.max(0.1, this.view.scale * ratio), Math.max(0.01, this.view.scale), this.factory);
+    this.assets = new Assets(Math.max(0.1, this.view.scale * ratio), Math.max(0.01, this.view.scale), arena, this.factory);
   }
   draw(state: Simulation, fx: Effects): void {
+    // A restart may change world shape without changing the canvas's CSS size.
+    if (this.view.arena.width !== state.arena.width || this.view.arena.height !== state.arena.height) {
+      this.resize(this.width, this.height, this.ratio, state.arena);
+    }
     const ctx = this.ctx, art = this.assets;
     if (!art) return;
     const view = this.view;
+    const { width, height } = state.arena;
     ctx.fillStyle = "#080f19"; ctx.fillRect(0, 0, this.width, this.height);
     ctx.save(); ctx.translate(view.left, view.top); ctx.scale(view.scale, view.scale);
-    ctx.beginPath(); ctx.rect(0, 0, ARENA_SIZE, ARENA_SIZE); ctx.clip();
+    ctx.beginPath(); ctx.rect(0, 0, width, height); ctx.clip();
     // Clip stays fixed while the world shakes. Overscan hides translated strips.
-    ctx.fillStyle = "#101d2a"; ctx.fillRect(-8, -8, ARENA_SIZE + 16, ARENA_SIZE + 16);
+    ctx.fillStyle = "#101d2a"; ctx.fillRect(-8, -8, width + 16, height + 16);
     ctx.translate(fx.shake.x, fx.shake.y);
-    ctx.drawImage(art.floor, 0, 0, ARENA_SIZE, ARENA_SIZE);
+    ctx.drawImage(art.floor, 0, 0, width, height);
     ctx.globalCompositeOperation = "lighter";
     const trails = fx.trails;
     for (let i = 0; i < trails.capacity; i++) {
@@ -39,26 +46,26 @@ export class Renderer {
       ctx.drawImage(art.core, trails.x[i]! - 18, trails.y[i]! - 18, 36, 36);
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
-    const style = BUG_STYLES.base;
     for (const bug of state.bugs) {
+      const style = BUG_STYLES[bug.kind], size = style.length / 12;
       const gait = Math.sin(fx.time * style.gait + bug.id * 2.4);
       ctx.save(); ctx.translate(bug.x, bug.y);
       ctx.rotate(Math.atan2(state.robot.y - bug.y, state.robot.x - bug.x));
       ctx.beginPath();
       for (let side = -1; side <= 1; side += 2) {
         for (let leg = -1; leg <= 1; leg++) {
-          const stride = gait * (leg === 0 ? -3 : 3) * side;
-          ctx.moveTo(leg * 6, side * 5);
-          ctx.lineTo(leg * 8 + stride, side * 12);
-          ctx.lineTo(leg * 10 + stride - 3, side * style.leg);
+          const stride = gait * (leg === 0 ? -3 : 3) * side * size;
+          ctx.moveTo(leg * 6 * size, side * 5 * size);
+          ctx.lineTo(leg * 8 * size + stride, side * 12 * size);
+          ctx.lineTo((leg * 10 - 3) * size + stride, side * style.leg);
         }
       }
-      ctx.strokeStyle = style.legs; ctx.lineWidth = 2; ctx.stroke();
-      ctx.fillStyle = "#502f43"; ctx.beginPath(); ctx.ellipse(9, 0, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = style.legs; ctx.lineWidth = 2 * size; ctx.stroke();
+      ctx.fillStyle = "#502f43"; ctx.beginPath(); ctx.ellipse(9 * size, 0, 5 * size, 6 * size, 0, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = style.body; ctx.beginPath(); ctx.ellipse(-1, 0, style.length, style.width, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(-11, 0); ctx.lineTo(7, 0); ctx.strokeStyle = "#663b50"; ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.beginPath(); ctx.ellipse(-2, -3, 6, 2, -0.15, 0, Math.PI * 2); ctx.fillStyle = style.highlight; ctx.fill();
-      ctx.fillStyle = "#ffe6c5"; ctx.fillRect(10, -4, 2, 2); ctx.fillRect(10, 2, 2, 2);
+      ctx.beginPath(); ctx.moveTo(-11 * size, 0); ctx.lineTo(7 * size, 0); ctx.strokeStyle = "#663b50"; ctx.lineWidth = 1.5 * size; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(-2 * size, -3 * size, 6 * size, 2 * size, -0.15, 0, Math.PI * 2); ctx.fillStyle = style.highlight; ctx.fill();
+      ctx.fillStyle = "#ffe6c5"; ctx.fillRect(10 * size, -4 * size, 2 * size, 2 * size); ctx.fillRect(10 * size, 2 * size, 2 * size, 2 * size);
       ctx.restore();
     }
     // Cached glows and bright centres; no per-object shadowBlur.
@@ -97,13 +104,13 @@ export class Renderer {
       ctx.fillStyle = "#ffe1a4"; ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
-    ctx.drawImage(art.vignette, 0, 0, ARENA_SIZE, ARENA_SIZE);
+    ctx.drawImage(art.vignette, 0, 0, width, height);
     const labels = fx.labels, w = art.labelWidth, h = art.labelHeight;
     for (let i = 0; i < labels.capacity; i++) {
       if (labels.life[i]! <= 0) continue;
       ctx.globalAlpha = Math.min(1, labels.life[i]! / 0.2);
-      const x = Math.max(w / 2 + 5, Math.min(ARENA_SIZE - w / 2 - 5, labels.x[i]!));
-      const y = Math.max(h / 2 + 5, Math.min(ARENA_SIZE - h / 2 - 5, labels.y[i]! - 18));
+      const x = Math.max(w / 2 + 5, Math.min(width - w / 2 - 5, labels.x[i]!));
+      const y = Math.max(h / 2 + 5, Math.min(height - h / 2 - 5, labels.y[i]! - 18));
       ctx.drawImage(art.label, x - w / 2, y - h / 2, w, h);
     }
     ctx.restore();

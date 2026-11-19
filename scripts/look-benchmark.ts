@@ -4,29 +4,32 @@ import { Effects } from "../src/web/game/fx";
 import { Feedback } from "../src/web/game/fx/feedback";
 import { FixedStepper } from "../src/web/game/loop";
 import { createSimulation } from "../src/web/game/simulation";
+import { arenaForViewport } from "../src/web/game/arena";
 
 const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!;
 const readout = document.querySelector("pre")!;
 const renderer = new Renderer(ctx), fx = new Effects(), feedback = new Feedback(fx), loop = new FixedStepper(feedback);
-const state = createSimulation(73), input = { x: 0, y: 0, target: null };
+const state = createSimulation(73, arenaForViewport(innerWidth, innerHeight)), input = { x: 0, y: 0, target: null };
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
 const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];
 let start: number | null = null, previous: number | null = null, sampleStart: number | null = null;
 let rollingStart = 0, rollingFrames = 0, lastShot = 0, lastHit = 0, lastBurst = 0, lastReadout = 0;
 let peakParticles = 0, peakTrails = 0, peakLabels = 0, minBugs = Infinity, maxBugs = 0;
+let minFastBugs = Infinity, maxFastBugs = 0;
 let stopped = false;
 let frame = 0;
 function resize() {
   const ratio = Math.min(devicePixelRatio || 1, 2);
   canvas.width = Math.round(innerWidth * ratio); canvas.height = Math.round(innerHeight * ratio);
-  ctx.setTransform(ratio, 0, 0, ratio, 0, 0); renderer.resize(innerWidth, innerHeight, ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0); renderer.resize(innerWidth, innerHeight, ratio, state.arena);
   loop.reset(); fx.resetClock();
 }
 function replenish() {
   while (state.bugs.length < 150) {
     const id = state.nextId++, angle = id * 2.3999632297;
-    state.bugs.push({ id, x: 300 + Math.cos(angle) * 280, y: 300 + Math.sin(angle) * 280 });
+    state.bugs.push({ id, kind: id % 4 === 0 ? "fast" : "base",
+      x: state.arena.width * (0.5 + Math.cos(angle) * 0.46), y: state.arena.height * (0.5 + Math.sin(angle) * 0.46) });
   }
 }
 function fixture(timestamp: number) {
@@ -41,7 +44,7 @@ function fixture(timestamp: number) {
     state.invulnerableUntil = 0; lastHit = timestamp;
   }
   if (burst && timestamp - lastBurst >= 1000) {
-    for (let i = 0; i < 300; i++) fx.squash(120 + i % 20 * 18, 180 + Math.floor(i / 20) * 14);
+    for (let i = 0; i < 300; i++) fx.squash(state.arena.width * (0.2 + i % 20 * 0.03), state.arena.height * (0.2 + Math.floor(i / 20) * 0.04));
     lastBurst = timestamp;
   }
 }
@@ -55,7 +58,8 @@ function report() {
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),
     fixtureMeanMs: mean(fixtures), fixtureP95Ms: percentile(fixtures, 0.95),
-    peakParticles, peakTrails, peakLabels, minBugs, maxBugs,
+    peakParticles, peakTrails, peakLabels, minBugs, maxBugs, minFastBugs, maxFastBugs,
+    worldWidth: state.arena.width, worldHeight: state.arena.height,
     viewport: [innerWidth, innerHeight], dpr: devicePixelRatio, renderDpr: Math.min(devicePixelRatio || 1, 2), userAgent: navigator.userAgent };
 }
 function tick(timestamp: number) {
@@ -77,6 +81,9 @@ function tick(timestamp: number) {
     intervals.push(timestamp - previous); updates.push(updated - prepared); draws.push(rendered - replenished);
     fixtures.push(prepared - begin + replenished - updated);
     minBugs = Math.min(minBugs, state.bugs.length); maxBugs = Math.max(maxBugs, state.bugs.length);
+    let fastBugs = 0;
+    for (const bug of state.bugs) if (bug.kind === "fast") fastBugs++;
+    minFastBugs = Math.min(minFastBugs, fastBugs); maxFastBugs = Math.max(maxFastBugs, fastBugs);
     peakParticles = Math.max(peakParticles, fx.particles.count); peakTrails = Math.max(peakTrails, fx.trails.count); peakLabels = Math.max(peakLabels, fx.labels.count);
     rollingFrames++;
     if (timestamp - rollingStart >= 1000) { rolling.push(rollingFrames * 1000 / (timestamp - rollingStart)); rollingFrames = 0; rollingStart = timestamp; }
