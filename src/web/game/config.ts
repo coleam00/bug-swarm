@@ -28,3 +28,4 @@ export const FIRE_INTERVAL = 1;
 export const SHOT_SPEED = 420;
 export const SHOT_LIFETIME = 3;
 export const STEP = 1 / 60;
+export const BOMB_RECHARGE = 30;

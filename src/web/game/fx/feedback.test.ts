@@ -72,9 +72,9 @@ test("five catch-up steps retain every squash and movement trail before a draw",
 test("bounded snapshot overflow omits only untracked cosmetics", () => {
   const fx = new Effects(), feedback = new Feedback(fx, 2);
   const bugs: Bug[] = [{ id: 1, kind: "base", x: 1, y: 2 }, { id: 2, kind: "base", x: 3, y: 4 }, { id: 3, kind: "base", x: 5, y: 6 }];
-  feedback.beforeShots(bugs, 0); feedback.afterShots([bugs[1]!], 2);
+  feedback.beforeKills(bugs, 0); feedback.afterKills([bugs[1]!], 2);
   expect(fx.labels.count).toBe(1); expect(fx.labels.x[0]).toBe(1);
-  fx.reset(); feedback.reset(); feedback.afterShots([], 0); expect(fx.labels.count).toBe(0);
+  fx.reset(); feedback.reset(); feedback.afterKills([], 0); expect(fx.labels.count).toBe(0);
 });
 
 test("terminal hit emits once, stops new trails, decays after death and restarts cleanly", () => {

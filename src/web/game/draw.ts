@@ -102,6 +102,11 @@ export class Renderer {
     }
     ctx.restore();
     const particles = fx.particles;
+    if (fx.ring.life > 0) {
+      ctx.globalAlpha = fx.ring.life / 0.5; ctx.strokeStyle = "#b6a5ff"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(fx.ring.x, fx.ring.y, (1 - fx.ring.life / 0.5) * fx.ring.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.globalCompositeOperation = "lighter";
     for (let i = 0; i < particles.capacity; i++) {
       if (particles.life[i]! <= 0) continue;

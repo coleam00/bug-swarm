@@ -326,3 +326,16 @@ test("shield bubble exists only with charges; two charges add a second outline",
   s.state.shieldCharges = 2; expect(outlines()).toHaveLength(2);
   s.state.shieldCharges = 0; expect(outlines()).toHaveLength(0);
 });
+
+
+test("bomb ring expands across the arena, fades and expires", () => {
+  const s = scene(); s.fx.advance(0); s.fx.bomb(250, 200, 850);
+  const ring = () => s.render().find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[0] === 250));
+  expect(ring()).toBeDefined();
+  const first = ring()!; s.fx.advance(80); s.fx.advance(160); s.fx.advance(240);
+  const later = ring()!;
+  expect(later.path[0]!.args[2]!).toBeGreaterThan(first.path[0]!.args[2]!);
+  expect(later.globalAlpha).toBeLessThan(first.globalAlpha);
+  for (let t = 320; t <= 640; t += 80) s.fx.advance(t);
+  expect(ring()).toBeUndefined();
+});

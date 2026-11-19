@@ -1,7 +1,7 @@
 import { STEP } from "./config";
-import { step, type Input, type Simulation, type ShotObserver } from "./simulation";
+import { step, type Input, type Simulation, type KillObserver } from "./simulation";
 
-export interface StepObserver extends ShotObserver {
+export interface StepObserver extends KillObserver {
   beforeStep(state: Readonly<Simulation>): void;
   afterStep(state: Readonly<Simulation>, dt: number): void;
 }
