@@ -1,28 +1,28 @@
-import { ROBOT_RADIUS, ROBOT_SPEED, BUG_RADIUS, BUG_SPEED, SPAWN_INTERVAL, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME } from "./config";
+import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
 
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
-export interface Bug extends Point { id: number }
+export interface Bug extends Point { id: number; kind: BugKind }
 export interface Shot extends Point { vx: number; vy: number; life: number }
 export interface Simulation {
   readonly arena: Arena;
   seed: number; nextId: number; time: number; seconds: number; score: number; squashes: number;
-  hits: number; dead: boolean; invulnerableUntil: number; spawnIn: number; fireIn: number;
+  hits: number; dead: boolean; invulnerableUntil: number; spawnIn: number; fireIn: number; eligibleSpawns: number;
   robot: Point; bugs: Bug[]; shots: Shot[];
 }
 export const IDLE: Input = { x: 0, y: 0, target: null };
 export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Simulation {
   return { arena: Object.freeze({ ...arena }), seed: seed >>> 0, nextId: 1, time: 0, seconds: 0, score: 0, squashes: 0, hits: 0,
-    dead: false, invulnerableUntil: 0, spawnIn: SPAWN_INTERVAL, fireIn: FIRE_INTERVAL,
+    dead: false, invulnerableUntil: 0, spawnIn: spawnInterval(0), fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
     robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [] };
 }
 export function random(state: Simulation): number {
   state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
   return state.seed / 4294967296;
 }
-export function spawnBug(state: Simulation): void {
+export function spawnBug(state: Simulation, kind: BugKind = BUG_KINDS[0].id): void {
   const { width, height } = state.arena;
   let position = random(state) * 2 * (width + height);
   let x: number, y: number;
@@ -30,7 +30,7 @@ export function spawnBug(state: Simulation): void {
   else if ((position -= width) < height) { x = width; y = position; }
   else if ((position -= height) < width) { x = width - position; y = height; }
   else { x = 0; y = height - (position - width); }
-  state.bugs.push({ id: state.nextId++, x, y });
+  state.bugs.push({ id: state.nextId++, kind, x, y });
 }
 export function nearestBug(state: Simulation): Bug | undefined {
   let nearest: Bug | undefined, distance = Infinity;
@@ -61,10 +61,16 @@ export function step(state: Simulation, input: Input, dt: number): void {
     state.robot.y = Math.max(ROBOT_RADIUS, Math.min(state.arena.height - ROBOT_RADIUS, state.robot.y + dy / distance * travel));
   }
   state.spawnIn -= dt;
-  while (state.spawnIn <= 1e-9) { spawnBug(state); state.spawnIn += SPAWN_INTERVAL; }
+  while (state.spawnIn <= 1e-9) {
+    // Keep countdown overshoot: cadence and unlocks use scheduled time, not the frame boundary.
+    const at = state.time + state.spawnIn;
+    const fast = at + 1e-9 >= BUG_KINDS[1].unlockAt && state.eligibleSpawns++ % FAST_BUG_EVERY === 0;
+    spawnBug(state, fast ? BUG_KINDS[1].id : BUG_KINDS[0].id);
+    state.spawnIn += spawnInterval(at);
+  }
   for (const bug of state.bugs) {
     const bx = state.robot.x - bug.x, by = state.robot.y - bug.y, length = Math.hypot(bx, by);
-    const amount = Math.min(BUG_SPEED * dt, length);
+    const amount = Math.min(BUG_DEFINITIONS[bug.kind].speed * dt, length);
     if (length) { bug.x += bx / length * amount; bug.y += by / length * amount; }
   }
   state.fireIn -= dt;
@@ -82,7 +88,7 @@ export function step(state: Simulation, input: Input, dt: number): void {
     let hit = -1, closest = Infinity;
     for (let i = 0; i < state.bugs.length; i++) {
       const bug = state.bugs[i]!;
-      if (segmentDistanceSquared(shot.x, shot.y, nx, ny, bug) <= (BUG_RADIUS + 3) ** 2) {
+      if (segmentDistanceSquared(shot.x, shot.y, nx, ny, bug) <= (BUG_DEFINITIONS[bug.kind].radius + 3) ** 2) {
         const distance = (bug.x - shot.x) ** 2 + (bug.y - shot.y) ** 2;
         if (distance < closest) { closest = distance; hit = i; }
       }
@@ -94,7 +100,7 @@ export function step(state: Simulation, input: Input, dt: number): void {
   state.shots.length = kept;
   kept = 0;
   for (const bug of state.bugs) {
-    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_RADIUS + ROBOT_RADIUS) ** 2) {
+    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2) {
       if (state.time >= state.invulnerableUntil) {
         state.hits++; state.invulnerableUntil = state.time + 1;
         if (state.hits === 3) state.dead = true;
