@@ -11,12 +11,12 @@ test("requests have a deadline even when the transport ignores abort", async () 
 });
 test("request sends JSON, reads server responses and surfaces errors", async () => {
   const fetcher = (async (_path: unknown, options?: RequestInit) => {
-    expect(JSON.parse(String(options?.body))).toEqual({ name: "Robot" });
+    expect(JSON.parse(String(options?.body))).toEqual({ name: "Robot", team: "tabs" as const });
     expect(options?.method).toBe("POST"); expect(new Headers(options?.headers).get("content-type")).toBe("application/json");
     expect(options?.cache).toBe("no-store");
     return Response.json({ runId: "server" });
   }) as typeof fetch;
-  expect(await request("/api/runs", { name: "Robot" }, fetcher)).toEqual({ runId: "server" });
+  expect(await request("/api/runs", { name: "Robot", team: "tabs" as const }, fetcher)).toEqual({ runId: "server" });
   await expect(request("/api/leaderboard", undefined, async () => new Response("down", { status: 503 }))).rejects.toThrow("503");
 });
 test("the deadline also covers a response body that never completes", async () => {
@@ -29,7 +29,7 @@ test("exported client starts, finishes and reads scores against the in-process s
   const app = createApp(db, { now: () => now });
   globalThis.fetch = ((path: string, init?: RequestInit) => app.request(path, init)) as typeof fetch;
   try {
-    const identity = { playerId: crypto.randomUUID(), name: "Robot" };
+    const identity = { playerId: crypto.randomUUID(), name: "Robot", team: "tabs" as const };
     const { runId } = await api.start(identity);
     expect(getRun(db, runId)?.player_id).toBe(identity.playerId);
     now += 60000;
@@ -39,5 +39,6 @@ test("exported client starts, finishes and reads scores against the in-process s
     expect(JSON.parse(getRun(db, runId)!.upgrades)).toEqual(upgrades);
     expect(await api.leaders()).toEqual([{ playerId: identity.playerId, name: identity.name, score: 60 }]);
     expect(await api.best(identity.playerId)).toEqual({ best: 60 });
+    expect(await api.teams()).toEqual({ tabs: 60, spaces: 0 });
   } finally { globalThis.fetch = originalFetch; db.close(); }
 });

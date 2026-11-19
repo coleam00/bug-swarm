@@ -9,11 +9,11 @@ test("bet counts accepted finishes, hidden players, grouped median, rounding and
   const db = openDb(":memory:");
   try {
     const add = (player: string, at: number, touch: boolean) => {
-      const id = startRun(db, player, `Robot${player}`, 0)!;
+      const id = (startRun(db, player, `Robot${player}`, 0, "tabs") as { runId: string }).runId;
       const result = { playerId: player, score: 1, squashes: 0, seconds: 1, touch };
       finishRun(db, id, result, at); finishRun(db, id, result, at);
     };
-    recordEvent(db, "opened"); startRun(db, "abandoned", "Abandoned", 0);
+    recordEvent(db, "opened"); startRun(db, "abandoned", "Abandoned", 0, "tabs");
     expect(report(db)).toBe("players: 0\nfinished_runs: 0\nmedian_runs_per_player: 0.0\ntouch_share: 0%");
     add("a", 1000, true); add("a", 2000, true); add("a", 3000, true); add("b", 4000, false);
     const before = report(db);
@@ -46,7 +46,7 @@ test("stats CLI has exact stdout, fails cleanly and doesn't create a missing dat
     const playerId = crypto.randomUUID();
     try {
       for (const at of ["2026-11-28T14:59:59Z", "2026-11-28T15:00:00Z", "2026-11-28T15:01:00Z"]) {
-        const id = startRun(db, playerId, "Robot", 0)!;
+        const id = (startRun(db, playerId, "Robot", 0, "tabs") as { runId: string }).runId;
         finishRun(db, id, { playerId, score: 1, squashes: 0, seconds: 1, touch: true }, Date.parse(at));
       }
     } finally { db.close(); }

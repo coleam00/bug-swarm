@@ -1,8 +1,9 @@
 import { Hono } from "hono";
 import type { Database } from "bun:sqlite";
-import { countEvents, finishRun, getRun, leaderboard, personalBest, startRun } from "./db";
+import { countEvents, finishRun, getRun, leaderboard, personalBest, startRun, teamTotals } from "./db";
+import { isTeam } from "../shared/teams";
 import { isId, plausible, parseFinish, validateName } from "./rules";
-import type { Leader } from "../shared/api";
+import type { Leader, TeamTotals } from "../shared/api";
 
 export const START_LIMIT = 30;
 export const START_WINDOW_MS = 10 * 60 * 1000;
@@ -24,6 +25,7 @@ export function createApp(db: Database, options: AppOptions = {}) {
   const log = options.log ?? console.error;
   const buckets = new Map<string, number[]>();
   let cached: { at: number; rows: Leader[] } | undefined;
+  let cachedTeams: { at: number; totals: TeamTotals } | undefined;
   const app = new Hono<{ Variables: { clientIp: string } }>();
   app.onError((error, c) => {
     log(`API failed ${c.req.method} ${c.req.path}`, error);
@@ -72,9 +74,11 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (!body || !isId(body.playerId)) return c.json({ error: "Invalid player id." }, 400);
     const name = validateName(body.name);
     if (name.error) return c.json({ error: name.error }, 400);
-    const runId = startRun(db, body.playerId, name.name!, time);
-    if (!runId) return c.json({ error: "This player id already has a different name." }, 409);
-    return c.json({ runId }, 201);
+    if ("team" in body && !isTeam(body.team)) return c.json({ error: "Choose Tabs or Spaces." }, 400);
+    const result = startRun(db, body.playerId, name.name!, time, body.team);
+    if ("error" in result && result.error === "team-conflict") return c.json({ error: "This player already belongs to another team.", code: result.error, team: result.team }, 409);
+    if ("error" in result) return c.json({ error: result.error === "team-required" ? "Choose Tabs or Spaces." : "This player id already has a different name." }, result.error === "team-required" ? 400 : 409);
+    return c.json(result, 201);
   });
   app.post("/api/runs/:runId/finish", async (c) => {
     const id = c.req.param("runId");
@@ -93,12 +97,18 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (!plausible(finish, run.started_at_ms, time)) return c.json({ error: "Score is impossible for this run's elapsed time." }, 400);
     finishRun(db, id, finish, time);
     cached = undefined;
+    cachedTeams = undefined;
     return c.json({ saved: true });
   });
   app.get("/api/leaderboard", (c) => {
     const time = now();
     if (!cached || time - cached.at >= 1000 || time < cached.at) cached = { at: time, rows: leaderboard(db) };
     return c.json(cached.rows);
+  });
+  app.get("/api/teams", (c) => {
+    const time = now();
+    if (!cachedTeams || time - cachedTeams.at >= 1000 || time < cachedTeams.at) cachedTeams = { at: time, totals: teamTotals(db) };
+    return c.json(cachedTeams.totals);
   });
   app.get("/api/players/:playerId/best", (c) => {
     const id = c.req.param("playerId");
