@@ -1,0 +1,28 @@
+# Bug Swarm runs on Rasmus's factory pack (Wirasm/archon-software-factory) with Codex in every seat.
+# Each pack stage asks for a role alias that falls back to a tier, e.g. model: ['@builder', large].
+defaultAssistant: codex
+
+tiers:
+  large: { provider: codex, model: gpt-6-astra, effort: high }
+  medium: { provider: codex, model: gpt-6-astra, effort: medium }
+  small: { provider: codex, model: gpt-6.1-terra, effort: medium }
+
+aliases:
+  # Writes the code.
+  '@builder': { provider: codex, model: gpt-6.1-sol, effort: high }
+  # Thinks: plans, reviews, checks, judges.
+  '@planner': { provider: codex, model: gpt-6-astra, effort: high }
+  '@investigator': { provider: codex, model: gpt-6-astra, effort: high }
+  '@reviewer': { provider: codex, model: gpt-6-astra, effort: high }
+  '@product-reviewer': { provider: codex, model: gpt-6-astra, effort: high }
+  '@test-checker': { provider: codex, model: gpt-6-astra, effort: high }
+  '@manager': { provider: codex, model: gpt-6-astra, effort: high }
+  '@judge': { provider: codex, model: gpt-6-astra, effort: medium }
+  '@host': { provider: codex, model: gpt-6-astra, effort: medium }
+  '@validator': { provider: codex, model: gpt-6-astra, effort: medium }
+  '@lander': { provider: codex, model: gpt-6-astra, effort: medium }
+  '@link': { provider: codex, model: gpt-6-astra, effort: medium }
+  '@verdict': { provider: codex, model: gpt-6.1-terra, effort: medium }
+
+worktree:
+  baseBranch: main

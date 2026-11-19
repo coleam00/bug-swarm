@@ -1,0 +1,20 @@
+# Bug Swarm's settings for Rasmus's factory pack (Wirasm/archon-software-factory).
+# Every setting the pack declares is written down; empty means the pack's default applies alone.
+# Paths are relative to the repository root.
+settings:
+  triage_policy: ""
+  plan_policy: engineering.md
+  build_policy: engineering.md
+  review_policy: engineering.md
+  test_policy: engineering.md
+  product_policy: direction.md
+  propose_policy: ""
+  # GitHub starts CI on every push by itself, so the host needs nothing started.
+  host_policy: ""
+  # Shadow in the pack: recorded, nothing acts on them. The operator merges.
+  admit_policy: .archon/policy/admit.md
+  land_policy: .archon/policy/land.md
+  discoveries_policy: .archon/policy/discoveries.md
+  # Shadow in the pack: run by script each check round, recorded.
+  checks_file: .archon/factory-checks.yaml
+  validate_command: "bun run check && bun run build"

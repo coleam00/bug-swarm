@@ -1,0 +1,7 @@
+# The checks this repository declares for the factory pack (settings: checks_file).
+# Run by script on each check round's commit, as a shadow. CI runs the same on Linux and Windows.
+checks:
+  - name: check
+    run: bun run check
+  - name: build
+    run: bun run build
