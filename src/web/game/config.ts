@@ -1,0 +1,10 @@
+export const ARENA_SIZE = 600;
+export const ROBOT_RADIUS = 14;
+export const ROBOT_SPEED = 180;
+export const BUG_RADIUS = 12;
+export const BUG_SPEED = 40;
+export const SPAWN_INTERVAL = 0.8;
+export const FIRE_INTERVAL = 1;
+export const SHOT_SPEED = 420;
+export const SHOT_LIFETIME = 3;
+export const STEP = 1 / 60;
