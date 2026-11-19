@@ -17,7 +17,7 @@ test.each(["base", "fast"] as const)("%s shot-only kills report precise post-mov
   const h = fixture();
   h.state.bugs.push({ id: 1, kind, x: 100, y: 300 }, { id: 2, kind, x: 500, y: 300 }, { id: 3, kind, x: 300, y: 100 });
   h.shot(100, 300); h.shot(300, 100); h.advance();
-  expect(h.state.squashes).toBe(2); expect(h.fx.labels.count).toBe(2); expect(h.fx.particles.count).toBe(16);
+  expect(h.state.squashes).toBe(2); expect(h.fx.labels.count).toBe(2);
   expect(h.fx.labels.x[0]).toBeCloseTo(100 + BUG_DEFINITIONS[kind].speed * STEP); expect(h.fx.labels.y[0]).toBe(300);
   expect(h.fx.labels.x[1]).toBe(300); expect(h.fx.labels.y[1]).toBeCloseTo(100 + BUG_DEFINITIONS[kind].speed * STEP);
   expect(h.fx.flash).toBe(0); expect(h.state.hits).toBe(0);

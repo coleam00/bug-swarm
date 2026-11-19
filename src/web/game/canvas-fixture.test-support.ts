@@ -5,7 +5,7 @@ export interface Gradient {
 }
 export interface PathCommand { op: string; args: number[] }
 interface PaintState {
-  fillStyle: string | Gradient; strokeStyle: string | Gradient; lineWidth: number;
+  fillStyle: string | Gradient; strokeStyle: string | Gradient; lineWidth: number; shadowBlur: number;
   globalAlpha: number; globalCompositeOperation: string; font: string;
   textAlign: string; textBaseline: string; transform: number[];
 }
@@ -14,6 +14,7 @@ export class RecordingContext {
   fillStyle: string | Gradient = "#000";
   strokeStyle: string | Gradient = "#000";
   lineWidth = 1;
+  shadowBlur = 0;
   globalAlpha = 1;
   globalCompositeOperation = "source-over";
   font = "10px sans-serif";
@@ -25,7 +26,7 @@ export class RecordingContext {
   private readonly stack: PaintState[] = [];
   get depth(): number { return this.stack.length; }
   private state(): PaintState {
-    return { fillStyle: this.fillStyle, strokeStyle: this.strokeStyle, lineWidth: this.lineWidth,
+    return { fillStyle: this.fillStyle, strokeStyle: this.strokeStyle, lineWidth: this.lineWidth, shadowBlur: this.shadowBlur,
       globalAlpha: this.globalAlpha, globalCompositeOperation: this.globalCompositeOperation,
       font: this.font, textAlign: this.textAlign, textBaseline: this.textBaseline, transform: [...this.transform] };
   }

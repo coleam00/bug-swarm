@@ -102,7 +102,7 @@ test("held keys cannot restart at death; a fresh key or touch immediately starts
   } finally { h.cleanup(); }
 });
 
-test("visibility drops hidden elapsed time and DPR resize rebuilds caches without resetting the run", () => {
+test("visibility drops hidden elapsed time and DPR resize updates canvas dimensions without resetting the run", () => {
   const h = harness();
   try {
     h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
