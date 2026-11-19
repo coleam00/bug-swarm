@@ -1,14 +1,16 @@
 import { expect, test } from "bun:test";
 import { mountGame } from "./engine";
 import { Session } from "./session";
+import { canvasFixture } from "./canvas-fixture.test-support";
 
 function harness() {
   const names = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;
   const previous = names.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
-  const win = new EventTarget(), doc = Object.assign(new EventTarget(), { hidden: false });
+  const fixture = canvasFixture();
+  const win = new EventTarget(), doc = Object.assign(new EventTarget(), { hidden: false, createElement: fixture.factory });
   let callback: FrameRequestCallback | undefined, cancelled = 0, disconnected = false;
   const captures = new Set<number>();
-  const context = { fillStyle: "", fillRect() {}, save() {}, restore() {}, translate() {}, scale() {}, beginPath() {}, arc() {}, fill() {}, setTransform() {} };
+  const context = fixture.context;
   const canvas = Object.assign(new EventTarget(), {
     width: 0, height: 0, getContext: () => context, getBoundingClientRect: () => ({ left: 10, top: 20, width: 390, height: 700 }),
     setPointerCapture: (id: number) => captures.add(id), hasPointerCapture: (id: number) => captures.has(id), releasePointerCapture: (id: number) => captures.delete(id),
@@ -73,5 +75,20 @@ test("held keys cannot restart at death; a fresh key or touch immediately starts
     h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 390, clientY: 370 });
     expect(h.session.view.over).toBe(false); expect(h.session.current!.touch).toBe(true); h.tick(85); h.tick(102);
     expect(h.session.current!.simulation.robot.x).toBeGreaterThan(300);
+  } finally { h.cleanup(); }
+});
+
+test("visibility drops hidden elapsed time and DPR resize rebuilds caches without resetting the run", () => {
+  const h = harness();
+  try {
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
+    const s = h.session.current!.simulation, x = s.robot.x, time = s.time;
+    h.doc.hidden = true; h.event(h.doc, "visibilitychange", {}); h.tick(10000);
+    expect(s.time).toBe(time);
+    h.doc.hidden = false; h.event(h.doc, "visibilitychange", {}); h.tick(20000); h.tick(20017);
+    expect(s.robot.x).toBe(x); expect(s.time).toBeCloseTo(time + 1 / 60);
+    Object.assign(h.win, { devicePixelRatio: 3 }); h.event(h.win, "resize", {});
+    expect(h.canvas.width).toBe(780); expect(h.session.current!.simulation).toBe(s);
+    expect(s.robot.x).toBe(x);
   } finally { h.cleanup(); }
 });

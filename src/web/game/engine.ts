@@ -1,4 +1,6 @@
-import { draw } from "./draw";
+import { Renderer } from "./draw";
+import { Effects } from "./fx";
+import { Feedback } from "./fx/feedback";
 import { keyboardInput, mapPointer, MOVEMENT_KEYS, viewport } from "./input";
 import { FixedStepper } from "./loop";
 import type { Point } from "./simulation";
@@ -13,18 +15,21 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   let width = 1, height = 1, ratio = 1, lastHud = "", showDebug = false;
   let sampleStart: number | null = null;
   let frames = 0, updateCost = 0, drawCost = 0, token = session.view.token;
-  const loop = new FixedStepper();
+  const fx = new Effects(), feedback = new Feedback(fx);
+  const renderer = new Renderer(ctx);
+  const loop = new FixedStepper(feedback);
   const clear = () => {
     const captured = pointer; pointer = null;
     if (captured !== null && canvas.hasPointerCapture(captured)) canvas.releasePointerCapture(captured);
-    keys.clear(); heldAtDeath.clear(); target = null; loop.reset();
+    keys.clear(); heldAtDeath.clear(); target = null; loop.reset(); fx.reset(); feedback.reset();
     sampleStart = null; frames = 0; updateCost = 0; drawCost = 0;
   };
   const resize = () => {
     const box = canvas.getBoundingClientRect(); width = box.width; height = box.height;
     ratio = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); loop.reset();
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); loop.reset(); fx.resetClock();
+    renderer.resize(width, height, ratio);
   };
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
   const restart = (touch: boolean) => { clear(); token = session.start(touch).token; };
@@ -69,8 +74,10 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     const run = session.current;
     if (run && !document.hidden) {
       if (token !== run.token) { clear(); token = run.token; }
+      const hasInterval = sampleStart !== null;
       if (sampleStart === null) sampleStart = timestamp;
       const begin = performance.now();
+      fx.advance(timestamp);
       if (!session.view.over) {
         loop.advance(timestamp, run.simulation, keyboardInput(keys, target));
         if (run.simulation.dead) {
@@ -79,11 +86,11 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
         }
       }
       const updated = performance.now();
-      draw(ctx, run.simulation, width, height);
+      renderer.draw(run.simulation, fx);
       const rendered = performance.now();
       const s = run.simulation, hudKey = `${s.score}/${s.hits}/${s.seconds}`;
       if (hudKey !== lastHud) { lastHud = hudKey; hud({ score: s.score, hits: s.hits, seconds: s.seconds }); }
-      frames++; updateCost += updated - begin; drawCost += rendered - updated;
+      if (hasInterval) { frames++; updateCost += updated - begin; drawCost += rendered - updated; }
       if (timestamp - sampleStart >= 1000) {
         if (showDebug) debug(`${(frames * 1000 / (timestamp - sampleStart)).toFixed(0)} FPS · update ${(updateCost / frames).toFixed(2)} ms · draw ${(drawCost / frames).toFixed(2)} ms`);
         frames = 0; updateCost = 0; drawCost = 0; sampleStart = timestamp;
@@ -95,14 +102,16 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   canvas.addEventListener("pointerup", release); canvas.addEventListener("pointercancel", release);
   canvas.addEventListener("lostpointercapture", release);
   window.addEventListener("keydown", keydown); window.addEventListener("keyup", keyup);
+  window.addEventListener("resize", resize);
   window.addEventListener("blur", clear); document.addEventListener("visibilitychange", visibility);
   frame = requestAnimationFrame(tick);
   return () => {
-    cancelAnimationFrame(frame); observer.disconnect(); clear();
+    cancelAnimationFrame(frame); observer.disconnect(); clear(); renderer.dispose();
     canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", move);
     canvas.removeEventListener("pointerup", release); canvas.removeEventListener("pointercancel", release);
     canvas.removeEventListener("lostpointercapture", release);
     window.removeEventListener("keydown", keydown); window.removeEventListener("keyup", keyup);
+    window.removeEventListener("resize", resize);
     window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", visibility);
   };
 }

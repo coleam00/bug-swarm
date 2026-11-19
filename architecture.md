@@ -33,7 +33,9 @@ Persistent deployments should mount their chosen `DATA_DIR`; the example stores 
 - Browser game -> HTTP API -> one SQLite file.
 - `src/web/App.tsx`: name entry, the canvas/HUD, the game-over screen. Team entry arrives in Phase 3.
 - `src/web/game/`: the game in plain TypeScript.
-  - The simulation (robot, bugs, shots, hits) is pure: it advances by a time step from input and seeded state, with no canvas, DOM or clock access, so `bun test` covers it. Phase 1 uses a steady spawn rate and placeholder circles; ramp, upgrades and effects arrive in Phase 2.
+  - The simulation (robot, bugs, shots, hits) is pure: it advances by a time step from input and seeded state, with no canvas, DOM or clock access, so `bun test` covers it. It currently uses a steady spawn rate; ramp and upgrades are separate Phase 2 items.
+  - `draw.ts` owns the procedural renderer; `assets.ts` caches the grid, vignette, glows and score glyph on detached canvases at resize. `styles.ts` holds bug colours and visual dimensions, including a prepared fast style with no new gameplay kind.
+  - `fx/` owns fixed-capacity particles (1024), trail samples (128), floating labels (256), hit flash and shake. Full pools drop new emissions and reuse expired slots. The read-only projectile checkpoints and fixed-step comparisons in `fx/feedback.ts` distinguish shot squashes from contact removals without changing simulation rules or its random seed. Visual time continues after death and resets with focus/run lifecycle.
   - The loop runs on `requestAnimationFrame` with a fixed time step and draws the state to the canvas, scaled to the screen in portrait or landscape.
   - Input: touch drag (the robot moves toward the finger), WASD and arrow keys, mouse steering, F for the rolling FPS and update/draw-time readout. Keys take priority over the mouse. The arena stays 600 by 600 logical units across rotation.
   - The API client starts a run and submits its score without blocking the loop; failures are logged and the game-over screen says the score wasn't saved.
@@ -80,4 +82,7 @@ Hide trims and lowercases the name, hides all players using it, and is idempoten
 
 ## Decisions deferred
 - Spawn rates, bug speed and upgrade strength: start from the PRD's targets (idle player loses within 60 s, typical run 1 to 3 minutes) and tune after Phase 2.
-- Art: drawn in code on the canvas (see `direction.md`, "The look"). Effects live in `src/web/game/fx/` (particles, trails, screen shake, floating text), pooled so they allocate nothing per frame.
+
+## Rendering validation
+
+`scripts/look-benchmark.html` is a developer-only Vite page using the production renderer, fixed stepper and effects. It keeps 150 bugs present without an API or database. It is excluded from the production entry points. Reproduction steps, measurements and device limitations are in [docs/look-validation.md](docs/look-validation.md).
