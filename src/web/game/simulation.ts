@@ -1,7 +1,7 @@
 import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
-import { REVIEW_LASER, type UpgradeId } from "../../shared/upgrades";
+import { REVIEW_LASER, TEST_SHIELD, type UpgradeId } from "../../shared/upgrades";
 import { createUpgrades, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
@@ -20,15 +20,18 @@ export interface Simulation {
   hits: number; dead: boolean; invulnerableUntil: number; spawnIn: number; fireIn: number; eligibleSpawns: number;
   robot: Point; bugs: Bug[]; shots: Shot[];
   upgrades: UpgradeState;
+  shieldCharges: number;
 }
 export const IDLE: Input = { x: 0, y: 0, target: null };
 export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Simulation {
   return { arena: Object.freeze({ ...arena }), seed: seed >>> 0, nextId: 1, time: 0, seconds: 0, score: 0, squashes: 0, hits: 0,
     dead: false, invulnerableUntil: 0, spawnIn: spawnInterval(0), fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
-    robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [], upgrades: createUpgrades(seed) };
+    robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [], upgrades: createUpgrades(seed), shieldCharges: 0 };
 }
 export function chooseUpgrade(state: Simulation, choiceNumber: number, id: UpgradeId): boolean {
-  return !state.dead && selectUpgrade(state.upgrades, choiceNumber, id);
+  if (state.dead || !selectUpgrade(state.upgrades, choiceNumber, id)) return false;
+  if (id === TEST_SHIELD) state.shieldCharges = state.upgrades.counts[TEST_SHIELD];
+  return true;
 }
 export function random(state: Simulation): number {
   state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
@@ -127,7 +130,9 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Sho
   for (const bug of state.bugs) {
     if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2) {
       if (state.time >= state.invulnerableUntil) {
-        state.hits++; state.invulnerableUntil = state.time + 1;
+        if (state.shieldCharges > 0) state.shieldCharges--;
+        else state.hits++;
+        state.invulnerableUntil = state.time + 1;
         if (state.hits === 3) state.dead = true;
       }
     } else state.bugs[kept++] = bug;

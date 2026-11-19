@@ -80,6 +80,13 @@ export class Renderer {
     ctx.globalCompositeOperation = "source-over";
     const robot = state.robot;
     ctx.save(); ctx.translate(robot.x, robot.y);
+    if (state.shieldCharges > 0) {
+      ctx.fillStyle = "#7acfff20"; ctx.strokeStyle = "#8cdaff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (state.shieldCharges > 1) {
+        ctx.beginPath(); ctx.arc(0, 0, 29, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
     ctx.fillStyle = "#314757"; ctx.strokeStyle = "#84b6bd"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(-ROBOT_RADIUS, -ROBOT_RADIUS, ROBOT_RADIUS * 2, ROBOT_RADIUS * 2, 7); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#152532"; ctx.fillRect(-18, -8, 5, 16); ctx.fillRect(13, -8, 5, 16);

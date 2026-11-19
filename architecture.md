@@ -94,3 +94,5 @@ Hide trims and lowercases the name, hides all players using it, and is idempoten
 `game/upgrades.ts` maintains counts and three distinct seeded offers. Its independent LCG starts at `seed XOR 0x9e3779b9`, leaving spawn randomness untouched. Choice numbers reject delayed selections. Scheduling remains inactive until the upgrade integration change supplies all four combat rules and the choice overlay.
 
 Review laser gives new shots `1 + picks` penetrations and a longer procedural streak. Swept collisions resolve by segment entry time, then bug id; victims are removed once, preserving survivor ordering for feedback. Shots retain their creation-time budget and lifetime. The benchmark accepts `?profile=laser` to exercise this path with two picks.
+
+Test shield refills available charges to its pick count. A would-be damaging contact consumes one charge instead of health and starts the existing one-second invulnerability period; grouped or invulnerable contacts consume nothing further and never score. A translucent bubble shows remaining protection, with a second outline for multiple charges. `?profile=shield` exercises blocks with two picks.

@@ -315,3 +315,14 @@ test("review laser stretches both its bright streak and cached glow", () => {
   expect(laser[0]!).toBeGreaterThan(normal[0]! * 2);
   expect(laser[1]!).toBeGreaterThan(normal[1]!);
 });
+
+
+test("shield bubble exists only with charges; two charges add a second outline", () => {
+  const s = scene();
+  const outlines = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && hasShape(p, "arc"));
+  expect(outlines()).toHaveLength(0);
+  s.state.shieldCharges = 1; expect(outlines()).toHaveLength(1);
+  expect(colour(outlines()[0]!.strokeStyle).alpha).toBeGreaterThan(0.5);
+  s.state.shieldCharges = 2; expect(outlines()).toHaveLength(2);
+  s.state.shieldCharges = 0; expect(outlines()).toHaveLength(0);
+});
