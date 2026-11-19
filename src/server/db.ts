@@ -56,7 +56,7 @@ export function countEvents(db: Database): Record<EventType, number> {
 
 export interface Run {
   id: string; player_id: string; started_at_ms: number; ended_at_ms: number | null;
-  score: number | null; squashes: number | null; seconds: number | null; touch: number | null;
+  score: number | null; squashes: number | null; seconds: number | null; touch: number | null; upgrades: string;
 }
 export function getRun(db: Database, id: string): Run | null {
   return db.query("SELECT * FROM runs WHERE id = ?").get(id) as Run | null;
@@ -74,8 +74,8 @@ export function startRun(db: Database, playerId: string, name: string, now: numb
 }
 export function finishRun(db: Database, id: string, finish: Finish, now: number): boolean {
   return db.transaction(() => {
-    const result = db.query(`UPDATE runs SET ended_at_ms = ?, score = ?, squashes = ?, seconds = ?, touch = ?
-      WHERE id = ? AND ended_at_ms IS NULL`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), id);
+    const result = db.query(`UPDATE runs SET ended_at_ms = ?, score = ?, squashes = ?, seconds = ?, touch = ?, upgrades = ?
+      WHERE id = ? AND ended_at_ms IS NULL`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), JSON.stringify(finish.upgrades ?? []), id);
     if (!result.changes) return false;
     db.query("INSERT INTO events(type, at, run_id) VALUES (?, ?, ?)").run(EVENT_TYPES[2], new Date(now).toISOString(), id);
     return true;

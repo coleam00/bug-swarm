@@ -86,3 +86,9 @@ Hide trims and lowercases the name, hides all players using it, and is idempoten
 ## Rendering validation
 
 `scripts/look-benchmark.html` is a developer-only Vite page using the production renderer, fixed stepper and effects. It keeps 150 bugs present without an API or database. It is excluded from the production entry points. Reproduction steps, measurements and device limitations are in [docs/look-validation.md](docs/look-validation.md).
+
+## Upgrade contract and choices
+
+`src/shared/upgrades.ts` owns the four ids, names and 20-second interval. Finish requests carry acquired upgrades as `{ id, count }` entries, once each in registry order. Counts record picks, independent of remaining combat resources. The server accepts legacy omitted upgrades as `[]`, validates total picks against survival seconds, normalizes ordering and includes the normalized build in identical-retry comparisons. The existing `runs.upgrades` JSON column and its linked `run_ended` event commit together. No additional event payload or migration is needed. Choice pauses need no server-clock change: elapsed time is an upper bound.
+
+`game/upgrades.ts` maintains counts and three distinct seeded offers. Its independent LCG starts at `seed XOR 0x9e3779b9`, leaving spawn randomness untouched. Choice numbers reject delayed selections. Scheduling remains inactive until the upgrade integration change supplies all four combat rules and the choice overlay.

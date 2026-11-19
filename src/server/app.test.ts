@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
 import { countEvents, getRun, hideName, openDb, recordEvent } from "./db";
+import { UPGRADE_IDS } from "../shared/upgrades";
 
 let dir: string;
 let db: Database;
@@ -33,6 +34,21 @@ test("events are counted by type, with zeros for types not seen", async () => {
 });
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+test("finish persists canonical builds with one linked event, accepts equivalent retries and rejects changed builds", async () => {
+  let time = 0;
+  const app = createApp(db, { now: () => time });
+  const playerId = crypto.randomUUID();
+  const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot" }))).json() as { runId: string };
+  time = 60000;
+  const upgrades = UPGRADE_IDS.slice(0, 2).map(id => ({ id, count: 1 }));
+  const result = { playerId, score: 40, squashes: 0, seconds: 40, touch: false, upgrades };
+  const send = (data: unknown) => app.request(`/api/runs/${runId}/finish`, post(data));
+  expect((await send({ ...result, upgrades: [...upgrades].reverse() })).status).toBe(200);
+  expect((await send(result)).status).toBe(200);
+  expect((await send({ ...result, upgrades: [upgrades[0]] })).status).toBe(409);
+  expect(db.query("SELECT r.upgrades FROM runs r JOIN events e ON e.run_id = r.id WHERE e.type = ?").all("run_ended"))
+    .toEqual([{ upgrades: JSON.stringify(upgrades) }]);
+});
 test("server start, ownership, elapsed-time scoring, idempotency and conflicting replay", async () => {
   let time = 1000;
   const app = createApp(db, { now: () => time });
@@ -49,6 +65,7 @@ test("server start, ownership, elapsed-time scoring, idempotency and conflicting
   expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, score: 62, seconds: 2 }))).status).toBe(409);
   expect(countEvents(db)).toEqual({ opened: 0, run_started: 1, run_ended: 1 });
   expect(getRun(db, runId)?.touch).toBe(1);
+  expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, upgrades: [] }))).status).toBe(200);
   expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 61 });
   expect((await app.request("/api/runs", post({ ...identity, name: "Other" }))).status).toBe(409);
 });
