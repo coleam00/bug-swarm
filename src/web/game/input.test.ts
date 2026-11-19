@@ -2,17 +2,22 @@ import { expect, test } from "bun:test";
 import { keyboardInput, mapPointer, viewport } from "./input";
 import { createSimulation, IDLE } from "./simulation";
 import { FixedStepper } from "./loop";
-import { arenaForViewport } from "./arena";
 
-test.each([[390, 844], [844, 390]])("pointer maps the %i x %i arena, including corners and letterboxing after rotation", (w, h) => {
-  const arena = arenaForViewport(w, h);
-  for (const [displayW, displayH] of [[w, h], [h, w]]) {
-    const v = viewport(displayW!, displayH!, arena);
-    expect(mapPointer(displayW! / 2, displayH! / 2, v).x).toBeCloseTo(arena.width / 2);
-    expect(mapPointer(displayW! / 2, displayH! / 2, v).y).toBeCloseTo(arena.height / 2);
-    expect(mapPointer(v.left, v.top, v)).toEqual({ x: 0, y: 0 });
-    expect(mapPointer(v.left + arena.width * v.scale, v.top + arena.height * v.scale, v).x).toBeCloseTo(arena.width);
-    expect(mapPointer(-100, 10000, v)).toEqual({ x: 0, y: arena.height });
+test.each([
+  { arena: { width: 450, height: 800 }, screen: [390, 844], points: [
+    [0, 226 / 3, 0, 0], [390, 2306 / 3, 450, 800], [78, 746 / 3, 90, 200], [195, 422, 225, 400], [-100, 900, 0, 800],
+  ] },
+  { arena: { width: 800, height: 450 }, screen: [844, 390], points: [
+    [226 / 3, 0, 0, 0], [2306 / 3, 390, 800, 450], [746 / 3, 78, 200, 90], [422, 195, 400, 225], [-100, 900, 0, 450],
+  ] },
+  { arena: { width: 450, height: 800 }, screen: [844, 390], points: [
+    [312.3125, 0, 0, 0], [531.6875, 390, 450, 800], [356.1875, 97.5, 90, 200], [422, 195, 225, 400], [844, -10, 450, 0],
+  ] },
+])("pointer maps independent screen coordinates for $arena in $screen", ({ arena, screen, points }) => {
+  const v = viewport(screen[0]!, screen[1]!, arena);
+  for (const [x, y, expectedX, expectedY] of points) {
+    const point = mapPointer(x!, y!, v);
+    expect(point.x).toBeCloseTo(expectedX!, 6); expect(point.y).toBeCloseTo(expectedY!, 6);
   }
 });
 
