@@ -8,11 +8,26 @@
 ## How it runs
 - Install: `bun install`
 - Develop: `bun run dev` (Vite dev server for the game, with the API server beside it)
-- Start (production mode): `bun run start`: one Bun process serves the API, the built game from `dist/`, and `/board`, on `PORT` (default 3000).
+- Start (production mode): `bun run start`: one Bun process serves the API, the built game from `dist/`, and `/board`, on `0.0.0.0` and `PORT` (default 3000). `bun run dev` keeps the API on `127.0.0.1`.
 - Container: `Dockerfile` builds the game and runs `bun run start`; `DATA_DIR` must be a persistent volume.
 - Health: `GET /health` answers `200 ok` once the app is ready.
 - Test everything: `bun run check` (`tsc --noEmit`, then `bun test`). CI runs exactly this.
 - The bet's command: `bun run stats`. Moderation: `bun run hide "<name>"`. Load test (Phase 3): `bun run load`.
+
+### Container
+
+Build and run with a persistent data directory:
+
+```sh
+docker build -t bug-swarm .
+docker volume create bug-swarm-data
+docker run --rm --name bug-swarm-smoke -e PORT=8080 -e DATA_DIR=/data -p 8080:8080 -v bug-swarm-data:/data bug-swarm
+```
+
+Open `http://localhost:8080/`; `http://localhost:8080/health` answers `200 ok`.
+The image builds the web bundle and runs `bun run start` in production mode.
+Without `DATA_DIR`, the default relative `data/` directory resolves to `/app/data` in the image.
+Persistent deployments should mount their chosen `DATA_DIR`; the example stores `/data/app.db` in the named volume and reuses it across restarts.
 
 ## Shape
 - Browser game -> HTTP API -> one SQLite file.

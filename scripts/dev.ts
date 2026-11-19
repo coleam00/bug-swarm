@@ -3,7 +3,11 @@
 export {};
 
 const procs = [
-  Bun.spawn(["bun", "--watch", "src/server/main.ts"], { stdout: "inherit", stderr: "inherit" }),
+  Bun.spawn(["bun", "--watch", "src/server/main.ts"], {
+    env: { ...process.env, NODE_ENV: "development" },
+    stdout: "inherit",
+    stderr: "inherit",
+  }),
   Bun.spawn(["bun", "x", "vite"], { stdout: "inherit", stderr: "inherit" }),
 ];
 const stopAll = () => procs.forEach((p) => p.kill());
