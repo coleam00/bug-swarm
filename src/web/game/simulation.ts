@@ -5,6 +5,12 @@ import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
 export interface Bug extends Point { id: number; kind: BugKind }
+// Read-only checkpoints around projectile resolution, before contact removals.
+// Observers must not mutate the simulation or retain its array as a snapshot.
+export interface ShotObserver {
+  beforeShots(bugs: readonly Readonly<Bug>[], squashes: number): void;
+  afterShots(bugs: readonly Readonly<Bug>[], squashes: number): void;
+}
 export interface Shot extends Point { vx: number; vy: number; life: number }
 export interface Simulation {
   readonly arena: Arena;
@@ -47,7 +53,7 @@ function segmentDistanceSquared(x: number, y: number, nx: number, ny: number, po
 }
 
 // Mutates reusable working state. No clock, DOM, network, or unseeded random source.
-export function step(state: Simulation, input: Input, dt: number): void {
+export function step(state: Simulation, input: Input, dt: number, observer?: ShotObserver): void {
   if (state.dead || dt <= 0) return;
   state.time += dt;
   let dx = input.x, dy = input.y, distance = Math.hypot(dx, dy);
@@ -82,6 +88,7 @@ export function step(state: Simulation, input: Input, dt: number): void {
       state.shots.push({ ...state.robot, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME });
     }
   }
+  observer?.beforeShots(state.bugs, state.squashes);
   let kept = 0;
   for (const shot of state.shots) {
     const nx = shot.x + shot.vx * dt, ny = shot.y + shot.vy * dt;
@@ -98,6 +105,7 @@ export function step(state: Simulation, input: Input, dt: number): void {
     if (shot.life > 0) state.shots[kept++] = shot;
   }
   state.shots.length = kept;
+  observer?.afterShots(state.bugs, state.squashes);
   kept = 0;
   for (const bug of state.bugs) {
     if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2) {

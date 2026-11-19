@@ -1,17 +1,21 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { Renderer } from "./draw";
 import { mountGame } from "./engine";
 import { Session } from "./session";
+import { canvasFixture } from "./canvas-fixture.test-support";
 import { arenaForViewport } from "./arena";
 
 function harness(screenShaped = false) {
   const names = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;
   const previous = names.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
-  const win = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844 }), doc = Object.assign(new EventTarget(), { hidden: false });
+  const fixture = canvasFixture();
+  const win = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844 });
+  const doc = Object.assign(new EventTarget(), { hidden: false, createElement: fixture.factory });
   const box = { left: 10, top: 20, width: 390, height: 700 };
   let onResize = () => {};
   let callback: FrameRequestCallback | undefined, cancelled = 0, disconnected = false;
   const captures = new Set<number>();
-  const context = { fillStyle: "", fillRect() {}, save() {}, restore() {}, translate() {}, scale() {}, beginPath() {}, arc() {}, fill() {}, setTransform() {} };
+  const context = fixture.context;
   const canvas = Object.assign(new EventTarget(), {
     width: 0, height: 0, getContext: () => context, getBoundingClientRect: () => box,
     setPointerCapture: (id: number) => captures.add(id), hasPointerCapture: (id: number) => captures.has(id), releasePointerCapture: (id: number) => captures.delete(id),
@@ -96,4 +100,45 @@ test("held keys cannot restart at death; a fresh key or touch immediately starts
     expect(h.session.view.over).toBe(false); expect(h.session.current!.touch).toBe(true); h.tick(85); h.tick(102);
     expect(h.session.current!.simulation.robot.x).toBeGreaterThan(300);
   } finally { h.cleanup(); }
+});
+
+test("visibility drops hidden elapsed time and DPR resize updates canvas dimensions without resetting the run", () => {
+  const h = harness();
+  try {
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
+    const s = h.session.current!.simulation, x = s.robot.x, time = s.time;
+    h.doc.hidden = true; h.event(h.doc, "visibilitychange", {}); h.tick(10000);
+    expect(s.time).toBe(time);
+    h.doc.hidden = false; h.event(h.doc, "visibilitychange", {}); h.tick(20000); h.tick(20017);
+    expect(s.robot.x).toBe(x); expect(s.time).toBeCloseTo(time + 1 / 60);
+    Object.assign(h.win, { devicePixelRatio: 3 }); h.event(h.win, "resize", {});
+    expect(h.canvas.width).toBe(780); expect(h.session.current!.simulation).toBe(s);
+    expect(s.robot.x).toBe(x);
+  } finally { h.cleanup(); }
+});
+
+test("engine delivers movement and simulated squash/hit feedback to rendering and advances effects on later frames", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+  const renderedEffects = () => draw.mock.calls.at(-1)![1];
+  try {
+    const state = h.session.current!.simulation; state.spawnIn = state.fireIn = 100;
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
+    expect(renderedEffects().trails.count).toBeGreaterThan(0);
+    h.event(h.win, "keyup", { key: "d" });
+    state.hits = 2;
+    state.bugs.push({ id: 1, kind: "base", x: 100, y: 300 }, { id: 2, kind: "base", x: state.robot.x, y: state.robot.y });
+    state.shots.push({ x: 100, y: 300, vx: 1, vy: 0, life: 1 }); h.tick(34);
+    const fx = renderedEffects(), labelY = fx.labels.y[0]!, particleX = fx.particles.x[0]!, particleY = fx.particles.y[0]!, life = fx.labels.life[0]!;
+    expect(state.squashes).toBe(1); expect(state.hits).toBe(3); expect(h.session.view.over).toBe(true);
+    expect(fx.labels.count).toBe(1); expect(fx.particles.count).toBeGreaterThan(0);
+    expect(fx.flash).toBeGreaterThan(0); expect(Math.hypot(fx.shake.x, fx.shake.y)).toBeGreaterThan(0);
+    h.tick(51);
+    expect(renderedEffects()).toBe(fx); expect(fx.labels.y[0]!).toBeLessThan(labelY);
+    expect(Math.hypot(fx.particles.x[0]! - particleX, fx.particles.y[0]! - particleY)).toBeGreaterThan(0);
+    expect(fx.labels.life[0]!).toBeLessThan(life);
+    expect(fx.flash).toBeLessThan(0.1);
+    for (let frame = 0; frame < 45; frame++) h.tick(68 + frame * 17);
+    expect(fx.trails.count).toBe(0); expect(fx.labels.count).toBe(0); expect(fx.particles.count).toBe(0);
+    expect(fx.flash).toBe(0); expect(fx.shake.remaining).toBe(0);
+  } finally { h.cleanup(); draw.mockRestore(); }
 });
