@@ -1,26 +1,13 @@
 import { expect, test } from "bun:test";
-import { BUG_KINDS, ROBOT_RADIUS, STEP, FAST_BUG_EVERY, spawnInterval } from "./config";
+import { BUG_KINDS, ROBOT_RADIUS, STEP, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier } from "./config";
 import { createSimulation as createLiveSimulation, IDLE, nearestBug, spawnBug, step } from "./simulation";
-import { arenaForViewport } from "./arena";
-import { plausible } from "../../server/rules";
-// Retain Phase 1/swarm pacing baselines without acquiring upgrades.
+// Isolate individual combat rules; upgraded pacing lives in scripts/pacing.test.ts.
 const createSimulation: typeof createLiveSimulation = (...args) => {
   const state = createLiveSimulation(...args); state.upgrades.nextChoiceAt = Infinity; return state;
 };
 const [BASE, FAST] = BUG_KINDS;
 const BUG_RADIUS = BASE.radius;
 
-test.each([1, 42, 12345, 7, 99])("seed %i replays deterministically and idle loses in 30–60 seconds in every arena", (seed) => {
-  for (const arena of [arenaForViewport(1, 1), arenaForViewport(390, 844), arenaForViewport(844, 390)]) {
-    const a = createSimulation(seed, arena), b = createSimulation(seed, arena);
-    while (!a.dead && a.time < 90) { step(a, IDLE, STEP); step(b, IDLE, STEP); }
-    expect(a).toEqual(b);
-    expect(a.time).toBeGreaterThanOrEqual(30); expect(a.time).toBeLessThanOrEqual(60);
-    expect(a.hits).toBe(3);
-    expect(plausible({ playerId: "fixture", score: a.score, squashes: a.squashes, seconds: a.seconds, touch: false }, 0, a.time * 1000)).toBe(true);
-    const frozen = structuredClone(a); step(a, IDLE, STEP); expect(a).toEqual(frozen);
-  }
-});
 test("bugs chase the robot", () => {
   const s = createSimulation(1);
   s.bugs = [{ id: 1, kind: BASE.id, x: 0, y: 300 }];
@@ -40,35 +27,43 @@ test("spawn rate increases across equal windows and keeps countdown overshoot", 
   for (let i = 0; i < 60 / 0.25; i++) step(b, IDLE, 0.25);
   expect(b.nextId).toBe(a.nextId); expect(b.eligibleSpawns).toBe(a.eligibleSpawns);
   expect(b.seed).toBe(a.seed); expect(b.spawnIn).toBeCloseTo(a.spawnIn, 8);
-  expect(spawnInterval(15)).toBeCloseTo(0.9); expect(spawnInterval(45)).toBeCloseTo(0.6);
-  expect(spawnInterval(180)).toBe(spawnInterval(120));
+  expect(spawnInterval(15)).toBeCloseTo(0.85); expect(spawnInterval(45)).toBeCloseTo(0.475);
+  expect(spawnInterval(180)).toBeLessThan(spawnInterval(120));
+  expect(spawnInterval(240)).toBeLessThan(spawnInterval(180));
+  expect(spawnInterval(600)).toBeLessThan(spawnInterval(240));
+  expect(spawnInterval(600)).toBeGreaterThanOrEqual(1 / 6);
 });
 
-test.each([1, 42, 12345, 7, 99])("seed %i grows a live swarm and overwhelms moving, dodging steering in 60–180s", (seed) => {
-  for (const arena of [arenaForViewport(1, 1), arenaForViewport(390, 844), arenaForViewport(844, 390)]) {
-    const s = createSimulation(seed, arena), inset = 100;
-    const corners = [{ x: inset, y: inset }, { x: arena.width - inset, y: inset },
-      { x: arena.width - inset, y: arena.height - inset }, { x: inset, y: arena.height - inset }];
-    let corner = 0, earlyPopulation = 0, laterPopulation = 0;
-    while (!s.dead && s.time < 180) {
-      const target = corners[corner]!;
-      if (Math.hypot(s.robot.x - target.x, s.robot.y - target.y) < 30) corner = (corner + 1) % 4;
-      let dx = corners[corner]!.x - s.robot.x, dy = corners[corner]!.y - s.robot.y;
-      const length = Math.hypot(dx, dy) || 1; dx /= length; dy /= length;
-      // Walk around the arena, steering away from bugs within 60 units and the walls.
-      for (const bug of s.bugs) {
-        const x = s.robot.x - bug.x, y = s.robot.y - bug.y, distance = Math.hypot(x, y) || 1;
-        if (distance < 60) { const strength = 5 * (1 - distance / 60); dx += x / distance * strength; dy += y / distance * strength; }
-      }
-      dx += 3 * Math.max(0, 1 - s.robot.x / 60) - 3 * Math.max(0, 1 - (arena.width - s.robot.x) / 60);
-      dy += 3 * Math.max(0, 1 - s.robot.y / 60) - 3 * Math.max(0, 1 - (arena.height - s.robot.y) / 60);
-      step(s, { x: dx, y: dy, target: null }, STEP);
-      if (s.time < 20) earlyPopulation = s.bugs.length;
-      if (s.time < 60) laterPopulation = s.bugs.length;
-    }
-    expect(laterPopulation).toBeGreaterThan(earlyPopulation);
-    expect(s.dead).toBe(true); expect(s.time).toBeGreaterThanOrEqual(60); expect(s.time).toBeLessThanOrEqual(180);
-    expect(plausible({ playerId: "fixture", score: s.score, squashes: s.squashes, seconds: s.seconds, touch: false }, 0, s.time * 1000)).toBe(true);
+test("scheduled spawns stay inside the cumulative six-per-second score allowance", () => {
+  const s = createSimulation(42); s.invulnerableUntil = Infinity;
+  // Keep the fixture small while exercising the production spawn schedule past its final knot.
+  while (s.time < 600) {
+    step(s, IDLE, STEP);
+    expect(s.nextId - 1).toBeLessThanOrEqual(Math.floor(6 * s.time + 1e-7));
+    expect(s.squashes).toBeLessThanOrEqual(s.nextId - 1);
+    s.bugs.length = 0;
+  }
+});
+
+test("late pursuit accelerates both existing and newly spawned bugs, preserving their speed ratio", () => {
+  expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(60)).toBe(1);
+  expect(bugSpeedMultiplier(180)).toBeGreaterThan(bugSpeedMultiplier(120));
+  expect(bugSpeedMultiplier(240)).toBeGreaterThan(bugSpeedMultiplier(180));
+  for (const time of [120, 180, 240]) {
+    const distances = BUG_KINDS.map(kind => {
+      const s = createSimulation(1); s.time = time; s.spawnIn = s.fireIn = Infinity;
+      s.bugs.push({ id: 1, kind: kind.id, x: 10, y: s.robot.y });
+      step(s, IDLE, STEP);
+      const distance = s.bugs[0]!.x - 10;
+      expect(distance).toBeCloseTo(kind.speed * bugSpeedMultiplier(time + STEP) * STEP);
+      return distance;
+    });
+    expect(distances[1]! / distances[0]!).toBeCloseTo(FAST.speed / BASE.speed);
+    const s = createSimulation(42); s.time = time; s.spawnIn = 0; s.fireIn = Infinity;
+    const expected = createSimulation(42); spawnBug(expected, FAST.id);
+    const origin = { ...expected.bugs[0]! };
+    step(s, IDLE, STEP);
+    expect(Math.hypot(s.bugs[0]!.x - origin.x, s.bugs[0]!.y - origin.y)).toBeCloseTo(FAST.speed * bugSpeedMultiplier(time + STEP) * STEP);
   }
 });
 
@@ -155,6 +150,7 @@ test("contact consumes three hits with invulnerability, no squash credit, and se
   s.bugs.push({ id: 4, kind: BASE.id, x: 300, y: 300 }); step(s, IDLE, STEP); expect(s.hits).toBe(2);
   for (let i = 0; i < 61; i++) step(s, IDLE, STEP);
   s.bugs.push({ id: 5, kind: BASE.id, x: 300, y: 300 }); step(s, IDLE, STEP); expect(s.dead).toBe(true);
+  const frozen = structuredClone(s); step(s, IDLE, STEP); expect(s).toEqual(frozen);
 });
 test("shots expire, even if they never find a bug", () => {
   const s = createSimulation(1); s.fireIn = 100; s.spawnIn = 100;

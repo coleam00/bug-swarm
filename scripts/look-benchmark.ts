@@ -3,7 +3,7 @@ import { Renderer } from "../src/web/game/draw";
 import { Effects } from "../src/web/game/fx";
 import { Feedback } from "../src/web/game/fx/feedback";
 import { FixedStepper } from "../src/web/game/loop";
-import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, UPGRADE_IDS } from "../src/shared/upgrades";
+import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, UPGRADE_IDS, shieldCapacity } from "../src/shared/upgrades";
 import { openChoice } from "../src/web/game/upgrades";
 import { chooseUpgrade, createSimulation } from "../src/web/game/simulation";
 import { arenaForViewport } from "../src/web/game/arena";
@@ -28,6 +28,9 @@ if (["first", "double", "stress"].includes(profile)) {
 }
 // Fixture-only: measurement must continue without a modal choice.
 state.upgrades.nextChoiceAt = Infinity;
+// Exercise the late pursuit ramp without waiting three minutes before warmup.
+const late = new URLSearchParams(location.search).has("late");
+if (late) state.time = 180;
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
 const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];
@@ -61,7 +64,7 @@ function fixture(timestamp: number) {
   }
   if (timestamp - lastHit >= 2000) {
     const bug = state.bugs[state.bugs.length - 1]!; bug.x = state.robot.x; bug.y = state.robot.y;
-    if (state.upgrades.counts[TEST_SHIELD]) state.shieldCharges = state.upgrades.counts[TEST_SHIELD];
+    if (state.upgrades.counts[TEST_SHIELD]) state.shieldCharges = shieldCapacity(state.upgrades.counts[TEST_SHIELD]);
     state.invulnerableUntil = 0; lastHit = timestamp;
   }
   if (burst && timestamp - lastBurst >= 1000) {
@@ -74,7 +77,7 @@ function percentile(values: number[], fraction: number) {
 }
 function mean(values: number[]) { return values.reduce((sum, value) => sum + value, 0) / (values.length || 1); }
 function report() {
-  return { profile, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
+  return { profile, late, gameplaySeconds: state.time, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
     meanFps: 1000 / mean(intervals), lowestRollingFps: Math.min(...rolling),
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),

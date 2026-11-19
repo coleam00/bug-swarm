@@ -8,6 +8,7 @@
     "start": "bun src/server/main.ts",
     "check": "tsc --noEmit && bun test",
     "stats": "bun scripts/stats.ts",
+    "pacing": "bun scripts/pacing.ts",
     "hide": "bun scripts/hide.ts"
   },
   "dependencies": {

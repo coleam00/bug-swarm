@@ -1,5 +1,7 @@
 # Procedural look validation
 
+The subsequent balance change's current pacing tests, updated shield/bomb rules and fresh normal/double/stress-burst/late-speed Chrome measurements are in [pacing-validation.md](pacing-validation.md). That change replaces the historical no-upgrade duration fixtures described below with an upgrade-enabled regression harness. The measurements below remain the evidence recorded for their respective earlier changes.
+
 The renderer uses Canvas 2D commands only. The full rectangular world's grid and vignette, glows and score glyph are cached on detached canvases; actors and legs are drawn procedurally. Base beetles are coral; fast beetles are smaller, bright gold and have a quicker gait, selected through `BUG_STYLES[bug.kind]`. Collision dimensions and all simulation rules remain those merged from main in #10. The original look change added no image assets, rendering dependencies or upgrade visuals. The later upgrade integration and its fresh evidence are recorded separately below.
 
 ## Evidence required by the owner
