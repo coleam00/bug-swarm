@@ -7,7 +7,7 @@ import { createUpgrades, openChoice, selectUpgrade, type UpgradeState } from "./
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
 export interface Bug extends Point { id: number; kind: BugKind }
-// Read-only checkpoints around scored bomb/projectile resolution, before contact removals.
+// Read-only checkpoints around scored bomb/projectile resolution, before contact damage.
 // Observers must not mutate the simulation or retain its array as a snapshot.
 export interface KillObserver {
   beforeKills(bugs: readonly Readonly<Bug>[], squashes: number): void;
@@ -156,18 +156,17 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   }
   state.shots.length = kept;
   observer?.afterKills(state.bugs, state.squashes);
-  kept = 0;
+  // Contact costs protection/health, never a free enemy removal. Surviving
+  // attackers can hit again after immunity unless the player moves or kills them.
   for (const bug of state.bugs) {
-    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2) {
-      if (state.time >= state.invulnerableUntil) {
-        if (state.shieldCharges > 0) state.shieldCharges--;
-        else state.hits++;
-        state.invulnerableUntil = state.time + 1;
-        if (state.hits === 3) state.dead = true;
-      }
-    } else state.bugs[kept++] = bug;
+    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2 &&
+      state.time >= state.invulnerableUntil) {
+      if (state.shieldCharges > 0) state.shieldCharges--;
+      else state.hits++;
+      state.invulnerableUntil = state.time + 1;
+      if (state.hits === 3) state.dead = true;
+    }
   }
-  state.bugs.length = kept;
   state.seconds = Math.floor(state.time + 1e-9);
   state.score = state.squashes * POINTS_PER_SQUASH + state.seconds * POINTS_PER_SECOND;
   if (!state.dead && state.time + 1e-9 >= state.upgrades.nextChoiceAt) {

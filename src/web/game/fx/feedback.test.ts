@@ -23,10 +23,10 @@ test.each(["base", "fast"] as const)("%s shot-only kills report precise post-mov
   expect(h.fx.flash).toBe(0); expect(h.state.hits).toBe(0);
 });
 
-test.each([false, true])("contact removals never award squash feedback (invulnerable=%s)", (invulnerable) => {
+test.each([false, true])("contacts never award squash feedback (invulnerable=%s)", (invulnerable) => {
   const h = fixture(); h.state.invulnerableUntil = invulnerable ? 10 : 0;
   h.state.bugs.push({ id: 1, kind: "base", x: 300, y: 300 }, { id: 2, kind: "base", x: 310, y: 300 }); h.advance();
-  expect(h.state.bugs).toHaveLength(0); expect(h.fx.labels.count).toBe(0); expect(h.fx.particles.count).toBe(0);
+  expect(h.fx.labels.count).toBe(0); expect(h.fx.particles.count).toBe(0);
   expect(h.state.hits).toBe(invulnerable ? 0 : 1); expect(h.fx.flash).toBe(invulnerable ? 0 : 0.1);
   if (!invulnerable) { h.fx.flash = 0; h.fx.shake.reset(); }
   h.state.bugs.push({ id: 3, kind: "base", x: 300, y: 300 }); h.advance();

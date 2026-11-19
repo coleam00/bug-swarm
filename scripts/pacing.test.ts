@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS } from "../src/shared/upgrades";
 import { createSimulation, IDLE, step } from "../src/web/game/simulation";
-import { evasiveInput, median, resolveChoice, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, VIEWPORTS } from "./pacing";
+import { evasiveInput, median, resolveChoice, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, VIEWPORTS, type Result } from "./pacing";
 
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
   const rows = runMatrix();
@@ -29,14 +29,51 @@ test("two-seed upgraded pacing replays deterministically, ends idle by 60s and b
   expect(Object.values(targets(rows)).every(Boolean)).toBe(true);
 });
 
-test("idle first-card builds end by 60s across consecutive and spread 32-bit seeds, including seed 5", () => {
-  const seeds = [...Array.from({ length: 100 }, (_, i) => i),
+test("idle first-card builds end by 60s across reported, consecutive and spread 32-bit seeds", () => {
+  const seeds = [29514, ...Array.from({ length: 100 }, (_, i) => i),
     ...Array.from({ length: 100 }, (_, i) => Math.imul(i + 1, 0x9e3779b9) >>> 0)];
   for (const seed of seeds) for (const viewport of VIEWPORTS) {
     const r = runScenario({ ...SCENARIOS[0], seed, viewport, mode: "idle" });
     expect({ seed, viewport, dead: r.dead, within60: r.elapsed <= 60 + 1e-7, validScore: r.validScore })
       .toEqual({ seed, viewport, dead: true, within60: true, validScore: true });
   }
+});
+
+// Independent result fixtures exercise classification, without relying on today's balance.
+function reported(mode: Result["mode"], viewport: Result["viewport"], elapsed: number): Result {
+  return { mode, viewport, elapsed, seed: 1, priority: [TEST_SHIELD, CI_DRONE, REFACTOR_BOMB, REVIEW_LASER],
+    dead: true, score: Math.floor(elapsed), seconds: Math.floor(elapsed), squashes: 0, spawned: 0, build: [], validScore: true };
+}
+function reportFixture(portrait: readonly number[], landscape = portrait, idle = 60): Result[] {
+  return [reported("idle", [390, 844], idle),
+    ...portrait.map(t => reported("evasive", [390, 844], t)),
+    ...landscape.map(t => reported("evasive", [1280, 800], t))];
+}
+test.each([60, 180])("target report accepts the inclusive %i-second evasive boundary", duration => {
+  expect(targets(reportFixture([duration]))).toEqual({ idle60: true, evasiveMedian60to180: true,
+    allDead240: true, scoresPlausible: true });
+});
+test("idle target rejects a completed run beyond 60 seconds", () => {
+  expect(targets(reportFixture([120], [120], 61))).toEqual({ idle60: false, evasiveMedian60to180: true,
+    allDead240: true, scoresPlausible: true });
+});
+test("overall ceiling checks the longest run even when both medians are valid", () => {
+  const atLimit = reportFixture([60, 120, 240]);
+  expect(targets(atLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
+  const overLimit = reportFixture([60, 120, 241]);
+  expect(targets(overLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: false, scoresPlausible: true });
+});
+test.each([59, 181])("evasive median rejects %i seconds overall and within either viewport", duration => {
+  expect(targets(reportFixture([duration])).evasiveMedian60to180).toBe(false);
+  // Combined medians are 89.5 or 150.5, so only the individual viewport is invalid.
+  expect(targets(reportFixture([duration], [120])).evasiveMedian60to180).toBe(false);
+  expect(targets(reportFixture([120], [duration])).evasiveMedian60to180).toBe(false);
+});
+test("target report rejects missing groups and invalid scores", () => {
+  expect(targets([])).toEqual({ idle60: false, evasiveMedian60to180: false, allDead240: false, scoresPlausible: false });
+  expect(targets(reportFixture([120], [])).evasiveMedian60to180).toBe(false);
+  const rows = reportFixture([120]); rows[0]!.validScore = false;
+  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: false });
 });
 
 test.each([

@@ -8,10 +8,13 @@ test("shield blocks one, strengthens on repeat picks and caps refills at four; n
   const contact = () => {
     s.bugs.push({ id: s.nextId++, kind: "base", ...s.robot }, { id: s.nextId++, kind: "fast", ...s.robot });
     step(s, IDLE, 0.01);
+    const remaining = s.bugs.length;
+    s.bugs.length = 0; // Isolate contact probes; persistence is covered in simulation.test.ts.
+    return remaining;
   };
   pick(s, TEST_SHIELD); expect(s.shieldCharges).toBe(1);
-  contact(); expect(s.shieldCharges).toBe(0); expect(s.hits).toBe(1);
-  expect(s.bugs).toHaveLength(0); expect(s.squashes).toBe(0);
+  expect(contact()).toBe(2); expect(s.shieldCharges).toBe(0); expect(s.hits).toBe(1);
+  expect(s.squashes).toBe(0);
   pick(s, TEST_SHIELD); expect(s.shieldCharges).toBe(2);
   contact(); expect(s.shieldCharges).toBe(2); // invulnerable contacts cost nothing
   step(s, IDLE, 0.99); contact(); expect(s.shieldCharges).toBe(1);

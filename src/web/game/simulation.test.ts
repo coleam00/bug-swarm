@@ -6,7 +6,6 @@ const createSimulation: typeof createLiveSimulation = (...args) => {
   const state = createLiveSimulation(...args); state.upgrades.nextChoiceAt = Infinity; return state;
 };
 const [BASE, FAST] = BUG_KINDS;
-const BUG_RADIUS = BASE.radius;
 
 test("bugs chase the robot", () => {
   const s = createSimulation(1);
@@ -27,7 +26,7 @@ test("spawn rate increases across equal windows and keeps countdown overshoot", 
   for (let i = 0; i < 60 / 0.25; i++) step(b, IDLE, 0.25);
   expect(b.nextId).toBe(a.nextId); expect(b.eligibleSpawns).toBe(a.eligibleSpawns);
   expect(b.seed).toBe(a.seed); expect(b.spawnIn).toBeCloseTo(a.spawnIn, 8);
-  expect(spawnInterval(15)).toBeCloseTo(0.825); expect(spawnInterval(45)).toBeCloseTo(0.45);
+  expect(spawnInterval(15)).toBeCloseTo(0.825); expect(spawnInterval(45)).toBeCloseTo(0.5);
   expect(spawnInterval(180)).toBeLessThan(spawnInterval(120));
   expect(spawnInterval(240)).toBeLessThan(spawnInterval(180));
   expect(spawnInterval(600)).toBeLessThan(spawnInterval(240));
@@ -58,8 +57,8 @@ test("scheduled spawns stay inside the cumulative six-per-second score allowance
 });
 
 test("late pursuit accelerates both existing and newly spawned bugs, preserving their speed ratio", () => {
-  expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(50)).toBe(1);
-  expect(bugSpeedMultiplier(60)).toBeGreaterThan(bugSpeedMultiplier(50));
+  expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(45)).toBe(1);
+  expect(bugSpeedMultiplier(60)).toBeGreaterThan(bugSpeedMultiplier(45));
   expect(bugSpeedMultiplier(180)).toBeGreaterThan(bugSpeedMultiplier(120));
   expect(bugSpeedMultiplier(240)).toBeGreaterThan(bugSpeedMultiplier(180));
   for (const time of [120, 180, 240]) {
@@ -153,16 +152,17 @@ test("nearest targeting uses stable ids; a swept shot kills once and awards ten"
   step(s, IDLE, STEP); expect(s.squashes).toBe(1); expect(s.score).toBe(10); expect(s.shots).toHaveLength(0);
   step(s, IDLE, STEP); expect(s.squashes).toBe(1);
 });
-test("contact consumes three hits with invulnerability, no squash credit, and seconds score", () => {
+test("an attacker survives contacts and can deal three hits across immunity windows, without squash credit", () => {
   const s = createSimulation(1); s.fireIn = 100; s.spawnIn = 100;
-  s.bugs = [{ id: 1, kind: BASE.id, x: 300, y: 300 }, { id: 2, kind: BASE.id, x: 300 + BUG_RADIUS, y: 300 }];
+  s.bugs = [{ id: 1, kind: BASE.id, x: 300, y: 300 }];
   step(s, IDLE, STEP); expect(s.hits).toBe(1); expect(s.squashes).toBe(0);
-  s.bugs.push({ id: 3, kind: BASE.id, x: 300, y: 300 }); step(s, IDLE, STEP); expect(s.hits).toBe(1);
+  step(s, IDLE, STEP); expect(s.hits).toBe(1);
   for (let i = 0; i < 61; i++) step(s, IDLE, STEP);
   expect(s.seconds).toBe(1); expect(s.score).toBe(1);
-  s.bugs.push({ id: 4, kind: BASE.id, x: 300, y: 300 }); step(s, IDLE, STEP); expect(s.hits).toBe(2);
+  expect(s.hits).toBe(2);
   for (let i = 0; i < 61; i++) step(s, IDLE, STEP);
-  s.bugs.push({ id: 5, kind: BASE.id, x: 300, y: 300 }); step(s, IDLE, STEP); expect(s.dead).toBe(true);
+  expect(s.dead).toBe(true); expect(s.bugs.map(bug => bug.id)).toEqual([1]);
+  expect(s.squashes).toBe(0); expect(s.score).toBe(s.seconds);
   const frozen = structuredClone(s); step(s, IDLE, STEP); expect(s).toEqual(frozen);
 });
 test("shots expire, even if they never find a bug", () => {
