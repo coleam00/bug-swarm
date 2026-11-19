@@ -136,3 +136,27 @@ Fresh post-change measurements used headless Chrome **156.0.8078.4**, Windows 11
 Both profiles acquired four laser/shield/bomb picks and nine drones. Activity counters (warmup plus sample) were respectively **68 / 69 shield blocks**, **10 / 10 bomb detonations**, **3364 / 3334 upgraded projectile kills**, and **630 / 639 drone shots**. Pool peaks and bug bounds cover the sample only. Both mean and lowest rolling FPS exceed 58; no effects simplification was needed. [Raw reports](upgrade-validation/issue-28-benchmark.json) retain full precision and all counters. No page errors or API requests occurred; this developer-only fixture has no submission path, and the production build contains no benchmark entry or `lookBenchmark` hook.
 
 `bun run check` passed **184 tests, 13,915 assertions**, with TypeScript clean; `bun run build` passed. The built application also passed the [fresh phone-layout and keyboard F probe](team-validation.md#phase-2-finish-issue-28-2026-11-19). The [1280×720 screenshot](team-evidence/issue-28/debug-desktop.png) shows the complete readout within the viewport, and a second F press restored the hint. These factory Chrome measurements satisfy the issue's owner ruling; the operator's own browser check remains required before merge.
+
+### Review follow-up (2026-11-19)
+
+Review reported an initial Chrome 156 normal-stress rolling minimum of **56.994 FPS**, followed by **59.988** when repeated without concurrent review commands; its burst run reached **59.994**. Product review's Chrome 153 normal run also reached **59.988**, but its additional 300-synthetic-squashes/second saturation runs reached **54.10** and **53.99** (means **59.43** and **59.62**). Those below-floor observations remain on record; the initial passing measurements above do not invalidate them.
+
+To check recurrence under the documented measurement conditions, a preselected sequence of **three normal stress trials and one burst trial** ran on the same factory machine and **Chrome 156.0.8078.4** as the initial review, with fresh scratch home/profile/data. All four reports are retained, with no retries or discarded samples. Each used the unchanged benchmark, 1280×720, DPR 1, 10-second warmup and 60-second sample. Checks/build finished first; no project checks, browser probes or review commands ran alongside these trials. Only the benchmark runner and its Vite/Chrome processes ran for this validation, and all were closed afterward.
+
+| Trial | Mean FPS | Lowest rolling FPS | Sample ms / intervals | Bugs min–max | Fast bugs min–max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| normal 1 | 59.982 | 59.000 | 60001.1 / 3599 | 150–150 | 26–42 |
+| normal 2 | 59.999 | 59.986 | 60001.1 / 3600 | 150–150 | 25–43 |
+| normal 3 | 59.982 | 59.020 | 60001.0 / 3599 | 150–150 | 23–43 |
+| burst | 59.899 | 58.000 | 60001.0 / 3594 | 150–150 | 25–42 |
+
+| Trial | Update mean / p95 ms | Draw mean / p95 ms | Fixture mean / p95 ms | Peak particles / trails / labels / rings | Blocks / bombs / upgraded kills / drone shots |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| normal 1 | 0.108 / 0.200 | 1.223 / 2.200 | 0.003 / 0.000 | 1024 / 6 / 200 / 1 | 69 / 10 / 3383 / 630 |
+| normal 2 | 0.114 / 0.200 | 1.241 / 2.100 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 | 67 / 10 / 3384 / 639 |
+| normal 3 | 0.111 / 0.200 | 1.142 / 2.100 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 | 67 / 10 / 3378 / 639 |
+| burst | 0.119 / 0.200 | 1.591 / 3.000 | 0.006 / 0.000 | 1024 / 6 / 256 / 1 | 67 / 10 / 3384 / 639 |
+
+Every trial used four laser/shield/bomb picks and nine drones, with no page errors or API requests. Activity counters include warmup; population bounds and peaks cover sampling only. [All follow-up raw reports](upgrade-validation/issue-28-followup-benchmark.json) retain full precision. The below-58 normal dip did **not recur in three isolated normal samples**; the burst trial also met the unchanged **≥58** floor, at exactly 58 in its lowest window. Render/update p95 costs remained well below the 16.67 ms frame budget. Concurrent machine scheduling is a plausible explanation for the review dip, consistent with its own isolated repeat, but no trace establishes its cause and these finite samples cannot guarantee absence of future scheduling stalls. No renderer or emission change was justified by this reproduction. The older Chrome 153 saturation results are not claimed to have passed. The operator's browser check remains required before merge.
+
+The choice-screen test now advances both the sampling-initialization tick and a full additional second before checking that F stayed suppressed. Enabling F during a choice is rejected by that assertion. Nearby numeric assertions allow equivalent label placement/punctuation; effect composition remains in pool tests and immediate disable clearing remains in the existing F frame-rate test. The simplified wiring test still rejects missing bug counts, wrong effect counts, repeated-key toggles and effects surviving restart. `bun run check` passes **184 tests, 13,913 assertions**; `bun run build` passes with the same application assets. Production code and game-over layout are unchanged by this repair, so the existing phone evidence still applies.
