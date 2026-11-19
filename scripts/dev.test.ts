@@ -31,6 +31,7 @@ await Bun.write("launch.json", JSON.stringify(calls));
         XDG_CONFIG_HOME: join(home, ".config"),
         XDG_CACHE_HOME: join(home, ".cache"),
         NODE_ENV: "production",
+        LOAD_TEST_START_LIMIT: undefined,
         PORT: "8081",
         DATA_DIR: dataDir,
       },
@@ -44,7 +45,7 @@ await Bun.write("launch.json", JSON.stringify(calls));
     expect(api).toBeDefined();
     expect(api!.options.env?.NODE_ENV).toBe("development");
     expect(readConfig(api!.options.env ?? {})).toEqual({
-      hostname: "127.0.0.1", port: 8081, dataDir,
+      hostname: "127.0.0.1", port: 8081, dataDir, startLimit: 30,
     });
   } finally {
     rmSync(scratch, { recursive: true, force: true });

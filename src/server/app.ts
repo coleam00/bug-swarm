@@ -8,6 +8,7 @@ import type { Leader, TeamTotals } from "../shared/api";
 export const START_LIMIT = 30;
 export const START_WINDOW_MS = 10 * 60 * 1000;
 export interface AppOptions {
+  startLimit?: number;
   now?: () => number;
   clientIp?: (request: Request) => string;
   log?: (message: string, error: unknown) => void;
@@ -63,7 +64,7 @@ export function createApp(db: Database, options: AppOptions = {}) {
     }
     const ip = c.get("clientIp");
     const starts = buckets.get(ip) ?? [];
-    if (starts.length >= START_LIMIT) {
+    if (starts.length >= (options.startLimit ?? START_LIMIT)) {
       c.header("Retry-After", String(Math.max(1, Math.ceil((starts[0]! + START_WINDOW_MS - time) / 1000))));
       return c.json({ error: "Too many runs. Try again shortly." }, 429);
     }
