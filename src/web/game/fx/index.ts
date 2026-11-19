@@ -10,6 +10,10 @@ export class Effects {
   readonly shake = new Shake();
   flash = 0;
   readonly ring = { life: 0, x: 0, y: 0, radius: 0 };
+  get liveCount(): number {
+    return this.particles.count + this.trails.count + this.labels.count
+      + Number(this.ring.life > 0) + Number(this.flash > 0) + Number(this.shake.remaining > 0);
+  }
   time = 0;
   // Keep the clock numeric across resets; NaN marks the first visual frame.
   private previous = NaN;

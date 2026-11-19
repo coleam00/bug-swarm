@@ -116,3 +116,23 @@ In a disposable copy, 15 broken variants were rejected: missing modal opening, d
 
 
 The subsequent shield review exposed a missed case in that audit: stroke-colour alpha alone did not guard a zero canvas globalAlpha. The existing shield test now applies visibleStroke to every outline with one and two charges, checking effective opacity, floor contrast and positive line width. In a disposable copy, nine broken variants failed (all-shield, single-charge, double-charge and second-outline transparency; transparent/camouflaged shield colours; invisible laser, bomb and drones). Three harmless shield controls passed: a different bright palette, HSL colour and 0.8 global opacity. The latest bun run check passes 135 tests with 13,326 assertions, and bun run build retains the same production bundle. Browser/FPS measurements were not repeated for this test-only correction.
+
+## Phase 2 finish (issue #28, 2026-11-19)
+
+F now includes the current bug population and live effects alongside FPS and update/draw timings. Effects are occupied particle, trail and label slots, plus one each for an active bomb ring, hit flash and shake. Projectiles, drones and shield outlines are excluded. The getter uses existing pool counts without scans, allocation or a second counter; it is read only at the existing one-second refresh while F is enabled. There is no added per-frame work. Focused tests cover exact populations, independent transients, replacement, expiry/reset, changing debug populations, repeat suppression, disabling, choice-modal input and restart cleanup.
+
+Fresh post-change measurements used headless Chrome **156.0.8078.4**, Windows 11 Home **10.0.26200**, AMD Ryzen 9 7950X3D desktop. Viewport **1280×720**, device/render DPR **1**, logical world **800×450**. The existing `?profile=stress` and `?profile=stress&burst` ran sequentially, each with **10 seconds warmup + 60 seconds sample**, after checks/build completed. No concurrent checks or browser workloads ran. Vite alone bound to 127.0.0.1:5191 with strictPort; Chrome used scratch home/profile directories. Both browser and our Vite process stopped after measurement.
+
+| Profile | Mean FPS | Lowest rolling FPS | Sample (ms) / intervals | Bugs min–max | Fast bugs min–max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| stress | 59.999 | 59.994 | 60001.0 / 3600 | 150–150 | 22–44 |
+| stress + burst | 59.999 | 59.994 | 60000.9 / 3600 | 150–150 | 24–42 |
+
+| Profile | Update mean / p95 (ms) | Draw mean / p95 (ms) | Fixture mean / p95 (ms) | Peak particles / trails / labels / rings |
+| --- | ---: | ---: | ---: | ---: |
+| stress | 0.093 / 0.200 | 0.849 / 1.400 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 |
+| stress + burst | 0.092 / 0.200 | 1.203 / 2.100 | 0.005 / 0.000 | 1024 / 6 / 256 / 1 |
+
+Both profiles acquired four laser/shield/bomb picks and nine drones. Activity counters (warmup plus sample) were respectively **68 / 69 shield blocks**, **10 / 10 bomb detonations**, **3364 / 3334 upgraded projectile kills**, and **630 / 639 drone shots**. Pool peaks and bug bounds cover the sample only. Both mean and lowest rolling FPS exceed 58; no effects simplification was needed. [Raw reports](upgrade-validation/issue-28-benchmark.json) retain full precision and all counters. No page errors or API requests occurred; this developer-only fixture has no submission path, and the production build contains no benchmark entry or `lookBenchmark` hook.
+
+`bun run check` passed **184 tests, 13,915 assertions**, with TypeScript clean; `bun run build` passed. The built application also passed the [fresh phone-layout and keyboard F probe](team-validation.md#phase-2-finish-issue-28-2026-11-19). The [1280×720 screenshot](team-evidence/issue-28/debug-desktop.png) shows the complete readout within the viewport, and a second F press restored the hint. These factory Chrome measurements satisfy the issue's owner ruling; the operator's own browser check remains required before merge.

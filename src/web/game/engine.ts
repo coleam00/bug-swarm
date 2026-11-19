@@ -115,7 +115,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
       if (hudKey !== lastHud) { lastHud = hudKey; hud({ score: s.score, hits: s.hits, seconds: s.seconds }); }
       if (hasInterval) { frames++; updateCost += updated - begin; drawCost += rendered - updated; }
       if (timestamp - sampleStart >= 1000) {
-        if (showDebug) debug(`${(frames * 1000 / (timestamp - sampleStart)).toFixed(0)} FPS · update ${(updateCost / frames).toFixed(2)} ms · draw ${(drawCost / frames).toFixed(2)} ms`);
+        if (showDebug) debug(`${(frames * 1000 / (timestamp - sampleStart)).toFixed(0)} FPS · ${s.bugs.length} bugs · ${fx.liveCount} effects · update ${(updateCost / frames).toFixed(2)} ms · draw ${(drawCost / frames).toFixed(2)} ms`);
         frames = 0; updateCost = 0; drawCost = 0; sampleStart = timestamp;
       }
     }

@@ -1,0 +1,94 @@
+[
+  {
+    "chrome": "156.0.8078.4",
+    "pageErrors": [],
+    "apiCalls": [],
+    "result": {
+      "profile": "stress",
+      "mode": "normal",
+      "sampleMs": 60001.00000000001,
+      "frames": 3600,
+      "meanFps": 59.99900001666638,
+      "lowestRollingFps": 59.99400059993965,
+      "updateMeanMs": 0.0927500002251731,
+      "updateP95Ms": 0.20000004768371582,
+      "drawMeanMs": 0.8494722225599819,
+      "drawP95Ms": 1.399999976158142,
+      "fixtureMeanMs": 0.002749999827808804,
+      "fixtureP95Ms": 0,
+      "blocks": 68,
+      "detonations": 10,
+      "laserKills": 3364,
+      "droneShots": 630,
+      "peakRings": 1,
+      "peakParticles": 1024,
+      "peakTrails": 6,
+      "peakLabels": 204,
+      "minBugs": 150,
+      "maxBugs": 150,
+      "minFastBugs": 22,
+      "maxFastBugs": 44,
+      "worldWidth": 800,
+      "worldHeight": 450,
+      "viewport": [
+        1280,
+        720
+      ],
+      "dpr": 1,
+      "renderDpr": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    },
+    "upgrades": {
+      "review-laser": 4,
+      "test-shield": 4,
+      "refactor-bomb": 4,
+      "ci-drone": 9
+    }
+  },
+  {
+    "chrome": "156.0.8078.4",
+    "pageErrors": [],
+    "apiCalls": [],
+    "result": {
+      "profile": "stress",
+      "mode": "burst",
+      "sampleMs": 60000.899999999994,
+      "frames": 3600,
+      "meanFps": 59.9991000134998,
+      "lowestRollingFps": 59.99400059993965,
+      "updateMeanMs": 0.09152777668502596,
+      "updateP95Ms": 0.20000004768371582,
+      "drawMeanMs": 1.202749999496672,
+      "drawP95Ms": 2.100000023841858,
+      "fixtureMeanMs": 0.004666667050785489,
+      "fixtureP95Ms": 0,
+      "blocks": 69,
+      "detonations": 10,
+      "laserKills": 3334,
+      "droneShots": 639,
+      "peakRings": 1,
+      "peakParticles": 1024,
+      "peakTrails": 6,
+      "peakLabels": 256,
+      "minBugs": 150,
+      "maxBugs": 150,
+      "minFastBugs": 24,
+      "maxFastBugs": 42,
+      "worldWidth": 800,
+      "worldHeight": 450,
+      "viewport": [
+        1280,
+        720
+      ],
+      "dpr": 1,
+      "renderDpr": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    },
+    "upgrades": {
+      "review-laser": 4,
+      "test-shield": 4,
+      "refactor-bomb": 4,
+      "ci-drone": 9
+    }
+  }
+]

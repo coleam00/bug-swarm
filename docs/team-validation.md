@@ -42,3 +42,20 @@ Mutation checks confirmed that accepting a blocked name, moving the race below t
 Build with `bun run build`. In a fresh scratch directory, install `playwright-core` (validation tooling only; it is not a project dependency). Set `SCRATCH` to that directory and optionally `CHROME` to a Chrome for Testing executable, then run `bun docs/team-validation.probe.ts` from the repository. The script writes evidence under `docs/team-evidence/`.
 
 The [probe](team-validation.probe.ts) creates a fresh database directory for each run and gives Chrome and the hide command a scratch home. It opens no HTTP listener: Playwright intercepts the synthetic HTTPS origin and dispatches API requests directly through the real Hono app; static requests read the built bundle. Chrome uses Playwright's temporary profile and debugging pipe. Every request is intercepted, and the browser and SQLite handle close before exit. No existing service or operator database is used. On this machine the system Chrome channel rejected debugging startup; the completed run used the Chrome for Testing executable instead.
+
+## Phase 2 finish (issue #28, 2026-11-19)
+
+Fresh validation of the production build used headless Chrome **156.0.8078.4** on the factory Windows desktop, **390×844** touch portrait and **844×390** landscape. The owner's race-first order is preserved: score, team race, save/best/restart content and Play again, upgrade summary, then top 10. No App markup or styles changed. All four upgrade names and acquired counts were visible in portrait; the existing App test also retains repeated-pick and empty-build coverage.
+
+Reused the probe above in scratch tooling, redirecting imports to this checkout and output to `team-evidence/issue-28/`. The scratch copy additionally captured all-upgrade zero totals, summary/score/race rectangles and keyboard F at 1280×720. It used a fresh SQLite database, scratch home/profile directories and intercepted requests to the in-process Hono app; no API listener or existing service was used. Browser and database handles closed on completion.
+
+| Portrait case | Play again size | Bottom edge | Upgrade summary bottom |
+| --- | ---: | ---: | ---: |
+| Loading totals, all four upgrades | 115.03×48 px | 336 px | 398 px |
+| Populated totals, all four upgrades | 115.03×48 px | 364 px | 426 px |
+| Zero totals, all four upgrades | 115.03×48 px | 396 px | 458 px |
+| Failed reads/save, all four upgrades | 115.03×48 px | 336 px | 398 px |
+
+All measured screens had no horizontal overflow; every button was at least 44×44 px. Play again was fully within 390×844 in every state. At 844×390 it remained visible (bottom 336 px), and touch restart dismissed game over. Screenshots were inspected: [loading](team-evidence/issue-28/loading-upgrades.png), [populated](team-evidence/issue-28/populated-upgrades.png), [zero totals](team-evidence/issue-28/zero-upgrades.png), [failed reads](team-evidence/issue-28/failed-upgrades.png), [landscape](team-evidence/issue-28/landscape-failed.png). [Raw measurements](team-evidence/issue-28/measurements.json) include rectangles and the F text/bounds; its [keyboard screenshot](team-evidence/issue-28/debug-desktop.png) shows the expanded readout fitting at 1280×720. Pressing F again restored the hint.
+
+The accepted real finish and separate hide command still passed (race updated after **2,370 ms**). First entry took **320 ms**, return **54 ms**, offline entry **55 ms** under local automation. The forced 80-second layout finishes deliberately produced score-plausibility rejections; failed-read and offline cases deliberately logged HTTP/transport errors. There were **zero uncaught browser errors**. No physical-device performance claim is made: [fresh factory frame-rate evidence](look-validation.md#phase-2-finish-issue-28-2026-11-19) follows the owner ruling, with the operator's browser check due before merge.
