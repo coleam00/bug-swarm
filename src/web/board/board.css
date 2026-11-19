@@ -1,0 +1,68 @@
+html:has(.stream-board) { background: #080f18; color-scheme: dark; }
+body:has(.stream-board) { margin: 0; }
+.stream-board, .stream-board * { box-sizing: border-box; }
+.stream-board {
+  min-height: 100dvh; padding: 10px 32px 6px; color: #f4f8ff;
+  font-family: system-ui, sans-serif;
+  background: radial-gradient(ellipse at center, transparent 35%, #080f18 100%),
+    linear-gradient(#69d8d809 1px, transparent 1px), linear-gradient(90deg, #69d8d809 1px, transparent 1px), #0b1420;
+  background-size: auto, 40px 40px, 40px 40px, auto;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stream-board h1, .stream-board h2, .stream-board p { margin: 0; }
+.board-header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.board-header h1 { font-size: 24px; line-height: 28px; letter-spacing: 0.05em; text-transform: uppercase; text-shadow: 0 0 20px #66e5df55; }
+.board-header p { font-size: 20px; color: #c5d2e2; }
+.board-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.board-team { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-radius: 8px; padding: 0 12px; color: var(--team-colour); }
+.board-team h2 { font-size: 24px; line-height: 28px; }
+.board-team strong { display: block; font-size: 64px; line-height: 64px; font-variant-numeric: tabular-nums; }
+.board-race-bar { display: flex; height: 8px; margin-top: 4px; border-radius: 5px; overflow: hidden; background: #435168; }
+.board-race-bar span { transition: width 400ms ease; }
+.board-neutral { opacity: 0.4; }
+.stream-board .board-race-note { font-size: 14px; line-height: 18px; text-align: center; color: #c5d2e2; }
+.board-leaders { flex: 1; }
+.board-leaders h2 { font-size: 20px; line-height: 20px; text-transform: uppercase; letter-spacing: 0.1em; }
+.board-leaders ol { display: grid; grid-auto-flow: column; grid-template-rows: repeat(5, 80px); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; list-style: none; padding: 0; margin: 2px 0 0; }
+.board-leaders li { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; min-width: 0; border-radius: 6px; padding: 0 8px; border-bottom: 1px solid #c5d2e222; }
+.board-name { position: relative; min-width: 0; white-space: nowrap; font: bold 40px/40px ui-monospace, "Cascadia Mono", "Courier New", monospace; }
+.board-name > span:last-child { display: block; }
+/* Keep the rank in the gutter so full-length names and scores retain 40 px type. */
+.board-rank { position: absolute; right: calc(100% + 4px); width: 2ch; flex-shrink: 0; color: #bdcadb; font-size: 28px; text-align: right; }
+.board-score { display: block; text-align: right; white-space: nowrap; font: bold 40px/40px ui-monospace, "Cascadia Mono", "Courier New", monospace; color: #fff; }
+.board-empty { padding: 40px 0; font-size: 28px; color: #c5d2e2; }
+.board-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 16px; font-size: 36px; line-height: 44px; font-weight: bold; }
+.board-footer p { min-width: 0; overflow-wrap: anywhere; }
+.board-footer a { color: #86ded1; text-underline-offset: 4px; }
+.board-status { min-width: 130px; min-height: 28px; font-size: 16px; color: #ffe4a6; }
+.board-highlight { outline: 2px solid #ecffab; outline-offset: -2px; background: #d5ff8122; animation: board-glow 800ms ease-in-out 3; }
+@keyframes board-glow { 50% { box-shadow: inset 0 0 24px #caff6c33; } }
+@media (max-width: 1279px) {
+  .board-leaders ol { grid-auto-flow: row; grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: minmax(80px, auto); }
+  .board-leaders li { column-gap: 8px; }
+  .board-name { display: flex; gap: 10px; white-space: normal; }
+  .board-name > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  .board-rank { position: static; }
+}
+@media (max-width: 1050px) {
+  .stream-board { padding: 16px; }
+  .board-teams { gap: 8px; }
+  .board-team { display: block; padding: 0 4px; }
+  .board-team strong { font-size: clamp(32px, 10vw, 40px); line-height: 48px; }
+  .board-leaders ol { grid-auto-rows: minmax(88px, auto); }
+}
+@media (max-width: 540px) {
+  .stream-board { padding: 12px; }
+  .board-header { display: block; }
+  .board-header h1 { font-size: 24px; }
+  .board-header p { font-size: 16px; }
+  .board-name { font-size: clamp(20px, 6vw, 30px); line-height: 38px; gap: 6px; }
+  .board-rank { font-size: 20px; }
+  .board-score { font-size: 30px; line-height: 38px; }
+  .board-leaders ol { grid-auto-rows: minmax(78px, auto); }
+  .board-footer { font-size: 18px; line-height: 28px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-highlight { animation: none; }
+  .board-race-bar span { transition: none; }
+}

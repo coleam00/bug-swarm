@@ -32,6 +32,16 @@ const html = await page.text();
 const assetPath = html.match(/src="([^"]+\\.js)"/)?.[1];
 if (!assetPath) throw new Error("Built HTML has no JavaScript bundle");
 const asset = await options.fetch(new Request(new URL(assetPath, "http://startup.test")));
+const boards = [];
+for (const path of ["/board", "/board/", "/board?stream=1"]) {
+  const response = await options.fetch(new Request("http://startup.test" + path));
+  boards.push({ path, status: response.status, html: await response.text() });
+}
+const assets = [];
+for (const file of new Bun.Glob("assets/*").scanSync("dist")) {
+  const response = await options.fetch(new Request("http://startup.test/" + file));
+  assets.push({ path: file, status: response.status, type: response.headers.get("content-type") });
+}
 const starts = [];
 for (let i = 0; i < 32; i++) {
   const response = await options.fetch(new Request("http://startup.test/api/runs", {
@@ -41,7 +51,7 @@ for (let i = 0; i < 32; i++) {
   starts.push(response.status);
 }
 await Bun.write("startup.json", JSON.stringify({
-  starts,
+  boards, assets, starts,
   port: options.port,
   hostname: options.hostname,
   pageStatus: page.status,
@@ -114,6 +124,14 @@ test.each([
   expect(result.html.toLowerCase()).toContain("<!doctype html>");
   expect(result.assetStatus).toBe(200);
   expect(result.assetType).toMatch(/javascript/);
+  for (const board of result.boards) {
+    expect(board.status).toBe(200);
+    expect(board.html).toBe(result.html);
+  }
+  for (const asset of result.assets) {
+    expect(asset.status).toBe(200);
+    expect(asset.type).toMatch(asset.path.endsWith(".css") ? /css/ : /javascript/);
+  }
   const builtAsset = await Bun.file(join(scratch, "dist", result.assetPath)).arrayBuffer();
   expect(result.assetHash).toBe(new Bun.CryptoHasher("sha256").update(builtAsset).digest("hex"));
 }, 15_000);
