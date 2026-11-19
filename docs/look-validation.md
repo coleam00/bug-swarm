@@ -36,10 +36,18 @@ Both samples cover 60.001 seconds of real RAF intervals. These are measured brow
 
 ## Correctness and visual review
 
-- `bun run check`: TypeScript and all 71 tests pass (11,368 assertions). `bun run build` passes; the benchmark is not a production entry point.
+- `bun run check`: TypeScript and all 79 tests pass (11,673 assertions). `bun run build` passes; the benchmark is not a production entry point.
 - Pool tests cover fixed storage identity, caps/drop-on-full, expiry, reuse and reset. Feedback tests distinguish shot squashes from contacts, invulnerable contacts, simultaneous kills/hits, shot-before-contact, same-step spawn kills, five catch-up steps, overflow and terminal-hit decay. Three seeded 3,600-step sequences compare the entire observed simulation against the unobserved simulation after every step.
 - Browser review at 390 x 844 portrait and 844 x 390 landscape (DPR 2) inspected grid/vignette, rounded glowing robot, beetle facing and legs, shot glow, bursts and bold labels. Touch drag, keyboard movement, rotation, hit flash/shake, third-hit termination and immediate keyboard restart ran without page errors. These are emulated viewport checks, not physical touch-device validation.
 - Screenshots of normal portrait/landscape, the full swarm, simultaneous hit/squash and a 320 x 180 stream-sized scene were captured to the task scratch directory for local review. Rendering remains clipped to the fixed arena while the HUD and pointer mapping stay fixed. The small scene retained readable score labels.
+
+### Returned-check repairs
+
+The follow-up changes tests and the recording canvas fixture only; production rendering, effects and simulation remain unchanged from `87451ac`. Catch-up coverage now arranges kills on different fixed steps. Motion assertions require nonzero bounded shake, rising text and displaced, spreading particles. The engine wiring test observes effects passed to the real renderer, including advancement and expiry after the terminal hit. Recorded paints cover the grid/vignette, chassis/core, facing and leg animation, velocity-aligned shots, trails, particles, labels, flash and world-only shake. Cache checks allow any initial cache count while requiring reuse, replacement and disposal.
+
+All 22 destructive mutations tested fail their relevant tests: first-step-only observation; stationary shake/text/particles; disconnected feedback; frozen updates (including only after death); independently missing floor, vignette, facing, gait, shots, trails, particles, labels, flash, rendered shake, chassis, core glow or bright core; a leaked beetle context stack; and per-object shadow blur. Sharing the warm shot glow with particles still passes. Existing pool limits/reuse/expiry, deterministic simulation, input and lifecycle checks remain green. Mutation sources were restored before the final check/build.
+
+No new device performance result was obtained during this repair. The available host reports desktop chassis type 3 and no battery, and no physical laptop environment is connected. A foreground Chrome report from a physical laptop is still required; the desktop figures above must not be used to mark that acceptance criterion complete.
 
 ## Allocation evidence and limits
 

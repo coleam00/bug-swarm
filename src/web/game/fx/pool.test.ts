@@ -28,7 +28,16 @@ test("particle spread is seeded, bounded and reproducible after reset", () => {
   a.burst(10, 20); b.burst(10, 20); expect(a.vx).toEqual(b.vx); expect(a.life).toEqual(b.life);
   expect(a.count).toBe(8); a.burst(10, 20); expect(a.count).toBe(10);
   a.reset(); a.burst(10, 20); expect(a.vx.subarray(0, 8)).toEqual(b.vx.subarray(0, 8));
+  a.update(0.05);
+  for (let i = 0; i < 8; i++) expect(Math.hypot(a.x[i]! - 10, a.y[i]! - 20)).toBeGreaterThan(0);
+  expect(Math.max(...a.x.subarray(0, 8)) - Math.min(...a.x.subarray(0, 8))).toBeGreaterThan(0);
+  expect(Math.max(...a.y.subarray(0, 8)) - Math.min(...a.y.subarray(0, 8))).toBeGreaterThan(0);
   a.update(0.45); expect(a.count).toBe(0);
+});
+
+test("floating squash text rises from its emission position", () => {
+  const text = new FloatingText(); text.pop(100, 200); text.update(0.1);
+  expect(text.count).toBe(1); expect(text.x[0]).toBe(100); expect(text.y[0]).toBeLessThan(200);
 });
 
 test("trail samples only movement, caps sampling at 40 Hz and resets cooldown", () => {
@@ -48,6 +57,7 @@ test("effects expire after a terminal hit, clamp suspended time and reset withou
   fx.hit(); fx.hit(); expect(fx.shake.remaining).toBe(0.16);
   for (let time = 10017; time < 11000; time += 17) {
     fx.advance(time); expect(Math.hypot(fx.shake.x, fx.shake.y)).toBeLessThanOrEqual(4.000001);
+    if (fx.shake.remaining > 0) expect(Math.hypot(fx.shake.x, fx.shake.y)).toBeGreaterThan(0);
   }
   expect(fx.flash).toBe(0); expect(fx.shake.remaining).toBe(0); expect(fx.shake.x).toBe(0); expect(fx.shake.y).toBe(0);
   expect(fx.labels.count).toBe(0); expect(fx.particles.count).toBe(0);

@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { Renderer } from "./draw";
 import { mountGame } from "./engine";
 import { Session } from "./session";
 import { canvasFixture } from "./canvas-fixture.test-support";
@@ -91,4 +92,30 @@ test("visibility drops hidden elapsed time and DPR resize rebuilds caches withou
     expect(h.canvas.width).toBe(780); expect(h.session.current!.simulation).toBe(s);
     expect(s.robot.x).toBe(x);
   } finally { h.cleanup(); }
+});
+
+test("engine delivers movement and simulated squash/hit feedback to rendering and advances effects on later frames", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+  const renderedEffects = () => draw.mock.calls.at(-1)![1];
+  try {
+    const state = h.session.current!.simulation; state.spawnIn = state.fireIn = 100;
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17);
+    expect(renderedEffects().trails.count).toBeGreaterThan(0);
+    h.event(h.win, "keyup", { key: "d" });
+    state.hits = 2;
+    state.bugs.push({ id: 1, x: 100, y: 300 }, { id: 2, x: state.robot.x, y: state.robot.y });
+    state.shots.push({ x: 100, y: 300, vx: 1, vy: 0, life: 1 }); h.tick(34);
+    const fx = renderedEffects(), labelY = fx.labels.y[0]!, particleX = fx.particles.x[0]!, particleY = fx.particles.y[0]!, life = fx.labels.life[0]!;
+    expect(state.squashes).toBe(1); expect(state.hits).toBe(3); expect(h.session.view.over).toBe(true);
+    expect(fx.labels.count).toBe(1); expect(fx.particles.count).toBeGreaterThan(0);
+    expect(fx.flash).toBeGreaterThan(0); expect(Math.hypot(fx.shake.x, fx.shake.y)).toBeGreaterThan(0);
+    h.tick(51);
+    expect(renderedEffects()).toBe(fx); expect(fx.labels.y[0]!).toBeLessThan(labelY);
+    expect(Math.hypot(fx.particles.x[0]! - particleX, fx.particles.y[0]! - particleY)).toBeGreaterThan(0);
+    expect(fx.labels.life[0]!).toBeLessThan(life);
+    expect(fx.flash).toBeLessThan(0.1);
+    for (let frame = 0; frame < 45; frame++) h.tick(68 + frame * 17);
+    expect(fx.trails.count).toBe(0); expect(fx.labels.count).toBe(0); expect(fx.particles.count).toBe(0);
+    expect(fx.flash).toBe(0); expect(fx.shake.remaining).toBe(0);
+  } finally { h.cleanup(); draw.mockRestore(); }
 });

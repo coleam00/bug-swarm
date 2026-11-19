@@ -58,13 +58,18 @@ test("a bug spawned and squashed in the same step is observed", () => {
 test("five catch-up steps retain every squash and movement trail before a draw", () => {
   const h = fixture(), loop = new FixedStepper(h.feedback), moving = { x: 1, y: 0, target: null };
   h.state.bugs.push({ id: 1, x: 100, y: 300 }, { id: 2, x: 500, y: 300 });
-  h.shot(100, 300); h.shot(500, 300);
+  h.shot(100, 300);
+  // This shot cannot reach the second bug on the first step, but does in catch-up.
+  h.state.shots.push({ x: 450, y: 300, vx: 600, vy: 0, life: 1 });
+  const firstStep = structuredClone(h.state); step(firstStep, moving, STEP);
+  expect(firstStep.squashes).toBe(1);
   h.fx.advance(0); loop.advance(0, h.state, moving); h.fx.advance(100); loop.advance(100, h.state, moving);
-  expect(h.state.time).toBeCloseTo(STEP * 5); expect(h.fx.labels.count).toBe(2);
+  expect(h.state.time).toBeCloseTo(STEP * 5); expect(h.state.squashes).toBe(2); expect(h.fx.labels.count).toBe(2);
+  expect(h.fx.labels.x[0]).toBeLessThan(150); expect(h.fx.labels.x[1]).toBeGreaterThan(450);
   expect(h.fx.labels.life[0]).toBe(0.65); expect(h.fx.trails.count).toBeGreaterThan(0);
 });
 
-test("bounded snapshot overflow omits only untracked cosmetics and reset clears snapshots", () => {
+test("bounded snapshot overflow omits only untracked cosmetics", () => {
   const fx = new Effects(), feedback = new Feedback(fx, 2);
   const bugs: Bug[] = [{ id: 1, x: 1, y: 2 }, { id: 2, x: 3, y: 4 }, { id: 3, x: 5, y: 6 }];
   feedback.beforeShots(bugs, 0); feedback.afterShots([bugs[1]!], 2);
