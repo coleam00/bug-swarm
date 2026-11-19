@@ -3,7 +3,7 @@ import { SQUARE_ARENA, type Arena } from "./arena";
 import { BUG_STYLES } from "./styles";
 import { Renderer } from "./draw";
 import { Effects } from "./fx";
-import { createSimulation } from "./simulation";
+import { createSimulation, dronePosition } from "./simulation";
 import { canvasFixture, type Paint } from "./canvas-fixture.test-support";
 
 function scene(arena: Arena = SQUARE_ARENA, width = arena.width, height = arena.height) {
@@ -338,4 +338,15 @@ test("bomb ring expands across the arena, fades and expires", () => {
   expect(later.globalAlpha).toBeLessThan(first.globalAlpha);
   for (let t = 320; t <= 640; t += 80) s.fx.advance(t);
   expect(ring()).toBeUndefined();
+});
+
+
+test("each drone has a small cached glow at its simulation orbit position", () => {
+  const s = scene(); s.state.drones = [{ fireIn: 0 }, { fireIn: 0 }]; s.state.time = 2;
+  const paints = s.render();
+  for (let i = 0; i < 2; i++) {
+    const p = { x: 0, y: 0 }; dronePosition(s.state, i, p);
+    expect(paints.some(paint => glow(s, paint) && Math.hypot(imageCentre(paint)[0] - p.x, imageCentre(paint)[1] - p.y) < 1e-6 && Number(paint.args[3]) < 60)).toBe(true);
+    expect(paints.some(paint => paint.op === "fill" && paint.path.some(c => c.op === "arc" && c.args[0] === p.x && c.args[1] === p.y))).toBe(true);
+  }
 });

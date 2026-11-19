@@ -3,7 +3,7 @@ import { Renderer } from "../src/web/game/draw";
 import { Effects } from "../src/web/game/fx";
 import { Feedback } from "../src/web/game/fx/feedback";
 import { FixedStepper } from "../src/web/game/loop";
-import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, UPGRADE_IDS } from "../src/shared/upgrades";
+import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, UPGRADE_IDS } from "../src/shared/upgrades";
 import { openChoice } from "../src/web/game/upgrades";
 import { chooseUpgrade } from "../src/web/game/simulation";
 import { createSimulation } from "../src/web/game/simulation";
@@ -23,6 +23,7 @@ function acquire(id: typeof UPGRADE_IDS[number], count: number) {
 if (profile === "laser") acquire(REVIEW_LASER, 2);
 if (profile === "shield") acquire(TEST_SHIELD, 2);
 if (profile === "bomb") acquire(REFACTOR_BOMB, 2);
+if (profile === "drone") acquire(CI_DRONE, 2);
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
 const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];

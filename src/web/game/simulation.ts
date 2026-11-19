@@ -1,8 +1,8 @@
 import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
-import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, type UpgradeId } from "../../shared/upgrades";
-import { BOMB_RECHARGE } from "./config";
+import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, type UpgradeId } from "../../shared/upgrades";
+import { BOMB_RECHARGE, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED } from "./config";
 import { createUpgrades, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
@@ -23,20 +23,28 @@ export interface Simulation {
   upgrades: UpgradeState;
   shieldCharges: number;
   bombReadyAt: number; bombLastAt: number; bombDetonations: number; bombOrigin: Point;
+  drones: { fireIn: number }[]; droneOrigin: Point;
 }
 export const IDLE: Input = { x: 0, y: 0, target: null };
 export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Simulation {
   return { arena: Object.freeze({ ...arena }), seed: seed >>> 0, nextId: 1, time: 0, seconds: 0, score: 0, squashes: 0, hits: 0,
     dead: false, invulnerableUntil: 0, spawnIn: spawnInterval(0), fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
     robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [], upgrades: createUpgrades(seed), shieldCharges: 0,
-    bombReadyAt: Infinity, bombLastAt: -Infinity, bombDetonations: 0, bombOrigin: { x: 0, y: 0 } };
+    bombReadyAt: Infinity, bombLastAt: -Infinity, bombDetonations: 0, bombOrigin: { x: 0, y: 0 }, drones: [], droneOrigin: { x: 0, y: 0 } };
 }
 export function chooseUpgrade(state: Simulation, choiceNumber: number, id: UpgradeId): boolean {
   if (state.dead || !selectUpgrade(state.upgrades, choiceNumber, id)) return false;
   if (id === TEST_SHIELD) state.shieldCharges = state.upgrades.counts[TEST_SHIELD];
   if (id === REFACTOR_BOMB) state.bombReadyAt = state.upgrades.counts[REFACTOR_BOMB] === 1
     ? state.time : state.bombLastAt + BOMB_RECHARGE / state.upgrades.counts[REFACTOR_BOMB];
+  if (id === CI_DRONE) state.drones.push({ fireIn: 0 });
   return true;
+}
+// Both drawing and firing use this calculation; the caller reuses its output.
+export function dronePosition(state: Readonly<Simulation>, index: number, out: Point): void {
+  const angle = state.time * DRONE_ANGULAR_SPEED + index * Math.PI * 2 / state.drones.length;
+  out.x = state.robot.x + Math.cos(angle) * DRONE_ORBIT_RADIUS;
+  out.y = state.robot.y + Math.sin(angle) * DRONE_ORBIT_RADIUS;
 }
 export function random(state: Simulation): number {
   state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
@@ -52,13 +60,20 @@ export function spawnBug(state: Simulation, kind: BugKind = BUG_KINDS[0].id): vo
   else { x = 0; y = height - (position - width); }
   state.bugs.push({ id: state.nextId++, kind, x, y });
 }
-export function nearestBug(state: Simulation): Bug | undefined {
+export function nearestBug(state: Simulation, origin: Point = state.robot): Bug | undefined {
   let nearest: Bug | undefined, distance = Infinity;
   for (const bug of state.bugs) {
-    const d = (bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2;
+    const d = (bug.x - origin.x) ** 2 + (bug.y - origin.y) ** 2;
     if (d < distance - 1e-8 || (Math.abs(d - distance) <= 1e-8 && bug.id < nearest!.id)) { distance = d; nearest = bug; }
   }
   return nearest;
+}
+function fire(state: Simulation, origin: Point): void {
+  const target = nearestBug(state, origin);
+  if (!target) return;
+  const sx = target.x - origin.x, sy = target.y - origin.y, length = Math.hypot(sx, sy) || 1;
+  state.shots.push({ x: origin.x, y: origin.y, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME,
+    remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0 });
 }
 function segmentDistanceSquared(x: number, y: number, nx: number, ny: number, point: Point): number {
   const dx = nx - x, dy = ny - y;
@@ -96,11 +111,15 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   state.fireIn -= dt;
   if (state.fireIn <= 1e-9) {
     state.fireIn += FIRE_INTERVAL;
-    const target = nearestBug(state);
-    if (target) {
-      const sx = target.x - state.robot.x, sy = target.y - state.robot.y, length = Math.hypot(sx, sy) || 1;
-      state.shots.push({ ...state.robot, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME,
-        remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0 });
+    fire(state, state.robot);
+  }
+  // Reuse the simulation-owned scratch point; no per-frame drone positions.
+  for (let i = 0; i < state.drones.length; i++) {
+    const drone = state.drones[i]!;
+    drone.fireIn -= dt;
+    if (drone.fireIn <= 1e-9) {
+      drone.fireIn += FIRE_INTERVAL;
+      dronePosition(state, i, state.droneOrigin); fire(state, state.droneOrigin);
     }
   }
   observer?.beforeKills(state.bugs, state.squashes);

@@ -3,11 +3,12 @@ import { SQUARE_ARENA, type Arena } from "./arena";
 import { viewport, type Viewport } from "./input";
 import { Assets, type CanvasFactory } from "./assets";
 import { BUG_STYLES } from "./styles";
-import type { Simulation } from "./simulation";
+import { dronePosition, type Simulation } from "./simulation";
 import type { Effects } from "./fx";
 
 export class Renderer {
   private assets: Assets | null = null;
+  private readonly drone = { x: 0, y: 0 };
   private view: Viewport = viewport(1, 1);
   private width = 0;
   private height = 0;
@@ -78,6 +79,11 @@ export class Renderer {
       ctx.lineWidth = 3; ctx.strokeStyle = "#fff2b8"; ctx.stroke(); ctx.restore();
     }
     ctx.globalCompositeOperation = "source-over";
+    for (let i = 0; i < state.drones.length; i++) {
+      dronePosition(state, i, this.drone);
+      ctx.drawImage(art.core, this.drone.x - 15, this.drone.y - 15, 30, 30);
+      ctx.fillStyle = "#d0fff5"; ctx.beginPath(); ctx.arc(this.drone.x, this.drone.y, 4, 0, Math.PI * 2); ctx.fill();
+    }
     const robot = state.robot;
     ctx.save(); ctx.translate(robot.x, robot.y);
     if (state.shieldCharges > 0) {
