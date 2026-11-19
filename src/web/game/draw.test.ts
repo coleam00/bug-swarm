@@ -23,23 +23,62 @@ const heading = (paint: Paint) => Math.atan2(paint.transform[1]!, paint.transfor
 // Compare visible properties without fixing the art to a particular palette.
 function colour(value: Paint["fillStyle"]): { light: number; alpha: number } {
   if (typeof value !== "string") throw new Error("Expected a solid colour");
-  const named: Record<string, string> = { white: "#fff", black: "#000", transparent: "#0000" };
-  value = named[value] ?? value;
-  let channels: number[], alpha: number;
-  if (value.startsWith("#")) {
-    let hex = value.slice(1);
-    if (hex.length <= 4) hex = [...hex].map((digit) => digit + digit).join("");
-    channels = [0, 2, 4].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
-    alpha = hex.length === 8 ? Number.parseInt(hex.slice(6), 16) / 255 : 1;
-  } else {
-    const rgb = value.match(/^rgba?\((.+)\)$/);
-    if (!rgb) throw new Error(`Unsupported test colour: ${value}`);
-    const parts = rgb[1]!.split(/[, /]+/);
-    channels = parts.slice(0, 3).map((part) => Number.parseFloat(part) / (part.endsWith("%") ? 100 : 255));
-    alpha = parts[3] === undefined ? 1 : Number.parseFloat(parts[3]) / (parts[3].endsWith("%") ? 100 : 1);
+  const rgba = Bun.color(value, "[rgba]");
+  if (!rgba) throw new Error(`Invalid test colour: ${value}`);
+  const linear = rgba.slice(0, 3).map((channel) => {
+    const v = channel / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return { light: linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722, alpha: rgba[3] / 255 };
+}
+function localPoint(transform: number[], x: number, y: number): [number, number] | null {
+  const [a, b, c, d, e, f] = transform as [number, number, number, number, number, number];
+  const determinant = a * d - b * c;
+  return determinant ? [((x - e) * d - (y - f) * c) / determinant,
+    ((y - f) * a - (x - e) * b) / determinant] : null;
+}
+// Sample inside the cache surface, intersecting the painted rectangle. Gradients
+// keep their creation transform; later paint transforms must not move the falloff.
+function gradientAlpha(paint: Paint, surface: HTMLCanvasElement, u: number, v: number): number {
+  const gradient = paint.fillStyle;
+  if (typeof gradient === "string") throw new Error("Expected a radial gradient");
+  const canvasX = surface.width * u, canvasY = surface.height * v;
+  const point = localPoint(paint.transform, canvasX, canvasY);
+  const [x, y, width, height] = paint.args as [number, number, number, number];
+  if (!point || !(point[0] >= x && point[0] <= x + width && point[1] >= y && point[1] <= y + height)) return 0;
+  const radialPoint = localPoint(gradient.transform, canvasX, canvasY);
+  if (!radialPoint) return 0;
+  const [x0, y0, r0, x1, y1, r1] = gradient.circles;
+  const px = radialPoint[0] - x0, py = radialPoint[1] - y0;
+  const dx = x1 - x0, dy = y1 - y0, dr = r1 - r0;
+  // Intersect the sample point with the interpolated circles C(t), R(t).
+  const qa = dx * dx + dy * dy - dr * dr;
+  const qb = -2 * (px * dx + py * dy + r0 * dr), qc = px * px + py * py - r0 * r0;
+  const discriminant = qb * qb - 4 * qa * qc;
+  if (discriminant < 0) return 0;
+  const roots = Math.abs(qa) < 1e-9 ? [-qc / qb] :
+    [(-qb - Math.sqrt(discriminant)) / (2 * qa), (-qb + Math.sqrt(discriminant)) / (2 * qa)];
+  const t = Math.max(...roots.filter((root) => r0 + root * dr >= 0));
+  if (!Number.isFinite(t)) return 0;
+  const stops = [...gradient.stops].sort((left, right) => left.offset - right.offset);
+  const first = stops[0]!, last = stops.at(-1)!;
+  if (t <= first.offset) return colour(first.colour).alpha * paint.globalAlpha;
+  for (let i = 1; i < stops.length; i++) {
+    const left = stops[i - 1]!, right = stops[i]!;
+    if (t <= right.offset) {
+      const fraction = (t - left.offset) / (right.offset - left.offset);
+      return (colour(left.colour).alpha * (1 - fraction) + colour(right.colour).alpha * fraction) * paint.globalAlpha;
+    }
   }
-  const linear = channels.map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
-  return { light: linear[0]! * 0.2126 + linear[1]! * 0.7152 + linear[2]! * 0.0722, alpha };
+  return colour(last.colour).alpha * paint.globalAlpha;
+}
+const corners = [[0.01, 0.01], [0.99, 0.01], [0.01, 0.99], [0.99, 0.99]] as const;
+function visibleVignette(paint: Paint, surface: HTMLCanvasElement): void {
+  expect(gradientAlpha(paint, surface, 0.5, 0.5)).toBeLessThan(0.1);
+  for (const [u, v] of corners) expect(gradientAlpha(paint, surface, u, v)).toBeGreaterThan(0.35);
+  for (const [u, v] of [[0.01, 0.5], [0.99, 0.5], [0.5, 0.01], [0.5, 0.99]] as const) {
+    expect(gradientAlpha(paint, surface, u, v)).toBeGreaterThan(0.05);
+  }
 }
 function floorColour(s: ReturnType<typeof scene>): Paint["fillStyle"] {
   return s.fixture.surfaces.flatMap(({ context }) => context.paints)
@@ -48,6 +87,11 @@ function floorColour(s: ReturnType<typeof scene>): Paint["fillStyle"] {
 function contrast(a: Paint["fillStyle"], b: Paint["fillStyle"]): number {
   const x = colour(a).light, y = colour(b).light;
   return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+function visibleLegs(s: ReturnType<typeof scene>, paint: Paint): void {
+  expect(colour(paint.strokeStyle).alpha * paint.globalAlpha).toBeGreaterThan(0.5);
+  expect(contrast(paint.strokeStyle, floorColour(s))).toBeGreaterThan(1.5);
+  expect(paint.lineWidth).toBeGreaterThan(0);
 }
 function readableLabel(s: ReturnType<typeof scene>, label: Paint): void {
   const glyph = s.fixture.source(label).paints.find((p) => p.op === "fillText" && p.args[0] === "+10")!;
@@ -69,11 +113,12 @@ function imageCentre(paint: Paint): [number, number] {
 function glow(s: ReturnType<typeof scene>, paint: Paint): boolean {
   return paint.op === "drawImage" && Number(paint.args[3]) < SQUARE_ARENA.width &&
     s.fixture.source(paint).paints.some((source) => {
-      if (typeof source.fillStyle === "string") return false;
-      const stops = source.fillStyle.stops;
-      const centre = colour(stops[0]!.colour), edge = colour(stops.at(-1)!.colour);
-      return centre.light > 0.2 && centre.alpha * source.globalAlpha * paint.globalAlpha > 0.1 &&
-        edge.alpha < 0.1 && centre.alpha > edge.alpha + 0.2;
+      if (source.op !== "fillRect" || typeof source.fillStyle === "string") return false;
+      const surface = paint.args[0] as HTMLCanvasElement;
+      return colour(source.fillStyle.stops[0]!.colour).light > 0.2 &&
+        gradientAlpha(source, surface, 0.5, 0.5) * paint.globalAlpha > 0.1 &&
+        [[0.4, 0.5], [0.6, 0.5], [0.5, 0.4], [0.5, 0.6]].every(([u, v]) => gradientAlpha(source, surface, u!, v!) > 0.2) &&
+        corners.every(([u, v]) => gradientAlpha(source, surface, u, v) < 0.1);
     });
 }
 
@@ -104,14 +149,13 @@ test("arena paints its cached grid and edge vignette within a fixed clip", () =>
   for (const backdrop of paints.slice(0, paints.indexOf(images[0]!)).filter((p) => p.op === "fillRect")) {
     expect(colour(backdrop.fillStyle).light).toBeLessThan(0.08);
   }
-  const vignette = arenaImages.flatMap((p) => s.fixture.source(p).paints)
-    .find((p) => p.op === "fillRect" && typeof p.fillStyle !== "string")!;
+  const vignetteImage = arenaImages.find((image) => s.fixture.source(image).paints
+    .some((p) => p.op === "fillRect" && typeof p.fillStyle !== "string"))!;
+  const vignette = s.fixture.source(vignetteImage).paints.find((p) => p.op === "fillRect" && typeof p.fillStyle !== "string")!;
   if (typeof vignette.fillStyle === "string") throw new Error("Missing vignette gradient");
-  const centre = colour(vignette.fillStyle.stops[0]!.colour), edge = colour(vignette.fillStyle.stops.at(-1)!.colour);
-  expect(centre.alpha).toBeLessThan(0.1);
-  expect(edge.alpha * vignette.globalAlpha).toBeGreaterThan(0.35);
-  expect(edge.alpha).toBeGreaterThan(centre.alpha + 0.25); expect(edge.light).toBeLessThan(0.08);
-  expect(arenaImages.some((p) => p.globalAlpha > 0.5 && s.fixture.source(p).paints.includes(vignette))).toBe(true);
+  visibleVignette(vignette, vignetteImage.args[0] as HTMLCanvasElement);
+  expect(colour(vignette.fillStyle.stops.at(-1)!.colour).light).toBeLessThan(0.08);
+  expect(vignetteImage.globalAlpha).toBeGreaterThan(0.5);
 });
 
 test.each([
@@ -132,6 +176,7 @@ test.each([
     const fill = source.paints.find((p) => p.op === "fillRect")!;
     expect(Number(fill.args[2]) * fill.transform[0]!).toBeCloseTo(bounds[2]!, 6);
     expect(Number(fill.args[3]) * fill.transform[3]!).toBeCloseTo(bounds[3]!, 6);
+    if (typeof fill.fillStyle !== "string") visibleVignette(fill, layer.args[0] as HTMLCanvasElement);
   }
   const grid = s.fixture.source(layers[0]!).paints.find((p) => p.op === "stroke")!;
   expect(grid.path.some((p) => p.op === "lineTo" && p.args[0] === arena.width)).toBe(true);
@@ -174,11 +219,14 @@ test("beetles face the robot and animate their articulated legs with visual time
   const beetle = (paints: Paint[]) => paints.find((p) => p.op === "fill" && at(p, 100, 100) && hasShape(p, "ellipse"))!;
   const legs = (paints: Paint[]) => paints.find((p) => p.op === "stroke" && at(p, 100, 100) && p.path.filter((part) => part.op === "lineTo").length >= 6)!;
   const first = s.render(); expect(beetle(first)).toBeDefined(); expect(legs(first)).toBeDefined();
+  visibleLegs(s, legs(first));
   expect(heading(beetle(first))).toBeCloseTo(Math.atan2(200, 200));
   s.fx.time += 0.1;
   const animated = s.render(); expect(legs(animated).path).not.toEqual(legs(first).path);
+  visibleLegs(s, legs(animated));
   s.state.robot.y = 100;
   const turned = s.render(); expect(heading(beetle(turned))).toBeCloseTo(0);
+  visibleLegs(s, legs(turned));
 });
 
 test("fast beetles have a smaller bright shell and quicker gait selected from the kind table", () => {
@@ -197,6 +245,7 @@ test("fast beetles have a smaller bright shell and quicker gait selected from th
   const legs = (paints: Paint[], x: number) => paints.find((p) => p.op === "stroke" && at(p, x, 100) && p.path.length === 18)!;
   s.fx.time = 2 * Math.PI / BUG_STYLES.fast.gait;
   const later = s.render();
+  visibleLegs(s, legs(first, 200)); visibleLegs(s, legs(later, 200));
   legs(later, 200).path.forEach((part, i) => part.args.forEach((value, j) => expect(value).toBeCloseTo(legs(first, 200).path[i]!.args[j]!, 6)));
   expect(legs(later, 100).path).not.toEqual(legs(first, 100).path);
   expect(BUG_STYLES.fast.gait).toBeGreaterThan(BUG_STYLES.base.gait);

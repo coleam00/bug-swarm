@@ -1,5 +1,7 @@
 // Records observable paint operations for renderer and lifecycle tests, without a native canvas.
 export interface Gradient {
+  circles: [number, number, number, number, number, number];
+  transform: number[];
   stops: { offset: number; colour: string }[];
   addColorStop(offset: number, colour: string): void;
 }
@@ -65,8 +67,9 @@ export class RecordingContext {
   drawImage(...args: unknown[]): void { this.paint("drawImage", ...args); }
   fillText(...args: unknown[]): void { this.paint("fillText", ...args); }
   strokeText(...args: unknown[]): void { this.paint("strokeText", ...args); }
-  createRadialGradient(..._args: number[]): Gradient {
-    return { stops: [], addColorStop(offset, colour) { this.stops.push({ offset, colour }); } };
+  createRadialGradient(...circles: Gradient["circles"]): Gradient {
+    return { circles, transform: [...this.transform], stops: [],
+      addColorStop(offset, colour) { this.stops.push({ offset, colour }); } };
   }
 }
 export function canvasFixture() {
