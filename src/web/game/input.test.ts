@@ -6,6 +6,10 @@ import { FixedStepper } from "./loop";
 test("portrait and landscape use the same centered logical arena and clamp outside points", () => {
   expect(mapPointer(195, 350, viewport(390, 700))).toEqual({ x: 300, y: 300 });
   expect(mapPointer(350, 195, viewport(700, 390))).toEqual({ x: 300, y: 300 });
+  expect(mapPointer(155, 0, viewport(700, 390))).toEqual({ x: 0, y: 0 });
+  expect(mapPointer(545, 390, viewport(700, 390))).toEqual({ x: 600, y: 600 });
+  expect(mapPointer(0, 155, viewport(390, 700))).toEqual({ x: 0, y: 0 });
+  expect(mapPointer(390, 545, viewport(390, 700))).toEqual({ x: 600, y: 600 });
   expect(mapPointer(-100, 900, viewport(390, 700))).toEqual({ x: 0, y: 600 });
 });
 test("WASD and arrows produce equivalent inputs and opposing keys cancel", () => {

@@ -22,7 +22,7 @@ test("the deadline also covers a response body that never completes", async () =
   await expect(request("/api/leaderboard", undefined, async () => new Response(new ReadableStream({ start() {} })), 5)).rejects.toThrow();
 });
 
-test("exported client starts and finishes a run against the in-process server", async () => {
+test("exported client starts, finishes and reads scores against the in-process server", async () => {
   const db = openDb(":memory:"), originalFetch = globalThis.fetch;
   let now = 1000;
   const app = createApp(db, { now: () => now });
@@ -34,5 +34,7 @@ test("exported client starts and finishes a run against the in-process server", 
     now += 1000;
     expect(await api.finish(runId, { playerId: identity.playerId, score: 1, squashes: 0, seconds: 1, touch: false })).toEqual({ saved: true });
     expect(getRun(db, runId)?.ended_at_ms).toBe(now);
+    expect(await api.leaders()).toEqual([{ playerId: identity.playerId, name: identity.name, score: 1 }]);
+    expect(await api.best(identity.playerId)).toEqual({ best: 1 });
   } finally { globalThis.fetch = originalFetch; db.close(); }
 });
