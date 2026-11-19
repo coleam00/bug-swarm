@@ -321,9 +321,12 @@ test("shield bubble exists only with charges; two charges add a second outline",
   const s = scene();
   const outlines = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && hasShape(p, "arc"));
   expect(outlines()).toHaveLength(0);
-  s.state.shieldCharges = 1; expect(outlines()).toHaveLength(1);
-  expect(colour(outlines()[0]!.strokeStyle).alpha).toBeGreaterThan(0.5);
-  s.state.shieldCharges = 2; expect(outlines()).toHaveLength(2);
+  for (const charges of [1, 2]) {
+    s.state.shieldCharges = charges;
+    const active = outlines();
+    expect(active).toHaveLength(charges);
+    for (const outline of active) visibleStroke(s, outline);
+  }
   s.state.shieldCharges = 0; expect(outlines()).toHaveLength(0);
 });
 
