@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { UPGRADE_IDS } from "../shared/upgrades";
 import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,8 +30,9 @@ test("event failure rolls back the entire start and finish transaction", () => {
     db.exec("DROP TRIGGER fail_event;");
     const id = startRun(db, player, "Robot", 0)!;
     db.exec("CREATE TRIGGER fail_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'test'); END;");
-    expect(() => finishRun(db, id, { playerId: player, score: 1, squashes: 0, seconds: 1, touch: false }, 1000)).toThrow();
+    expect(() => finishRun(db, id, { playerId: player, score: 20, squashes: 0, seconds: 20, touch: false, upgrades: [{ id: UPGRADE_IDS[0], count: 1 }] }, 20000)).toThrow();
     expect(getRun(db, id)?.ended_at_ms).toBeNull();
+    expect(getRun(db, id)?.upgrades).toBe("[]");
     expect(countEvents(db).run_ended).toBe(0);
   } finally { db.close(); }
 });

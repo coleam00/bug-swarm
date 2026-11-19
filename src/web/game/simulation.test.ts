@@ -1,8 +1,12 @@
 import { expect, test } from "bun:test";
 import { BUG_KINDS, ROBOT_RADIUS, STEP, FAST_BUG_EVERY, spawnInterval } from "./config";
-import { createSimulation, IDLE, nearestBug, spawnBug, step } from "./simulation";
+import { createSimulation as createLiveSimulation, IDLE, nearestBug, spawnBug, step } from "./simulation";
 import { arenaForViewport } from "./arena";
 import { plausible } from "../../server/rules";
+// Retain Phase 1/swarm pacing baselines without acquiring upgrades.
+const createSimulation: typeof createLiveSimulation = (...args) => {
+  const state = createLiveSimulation(...args); state.upgrades.nextChoiceAt = Infinity; return state;
+};
 const [BASE, FAST] = BUG_KINDS;
 const BUG_RADIUS = BASE.radius;
 

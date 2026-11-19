@@ -11,6 +11,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   const ctx = canvas.getContext("2d")!;
   const keys = new Set<string>();
   const heldAtDeath = new Set<string>();
+  const heldChoices = new Set<string>();
   let target: Point | null = null, pointer: number | null = null, frame = 0;
   let width = 1, height = 1, ratio = 1, lastHud = "", showDebug = false;
   let sampleStart: number | null = null;
@@ -18,12 +19,18 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   const fx = new Effects(), feedback = new Feedback(fx);
   const renderer = new Renderer(ctx);
   const loop = new FixedStepper(feedback);
-  const clear = () => {
+  const clearSteering = () => {
     const captured = pointer; pointer = null;
     if (captured !== null && canvas.hasPointerCapture(captured)) canvas.releasePointerCapture(captured);
-    keys.clear(); heldAtDeath.clear(); target = null; loop.reset(); fx.reset(); feedback.reset();
+    keys.clear(); heldAtDeath.clear(); target = null; loop.reset(); fx.resetClock();
     sampleStart = null; frames = 0; updateCost = 0; drawCost = 0;
   };
+  const clear = () => { clearSteering(); heldChoices.clear(); fx.reset(); feedback.reset(); };
+  let choosing = Boolean(session.view.choice);
+  const unsubscribe = session.subscribe(() => {
+    const next = Boolean(session.view.choice);
+    if (next !== choosing) { choosing = next; clearSteering(); }
+  });
   const resize = () => {
     const box = canvas.getBoundingClientRect(); width = box.width; height = box.height;
     ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -38,6 +45,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height, session.current?.simulation.arena));
   };
   const down = (event: PointerEvent) => {
+    if (session.view.choice) return;
     if (event.button !== 0) return;
     if (session.view.over) restart(event.pointerType === "touch");
     if (pointer !== null) return;
@@ -46,7 +54,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     locate(event); event.preventDefault();
   };
   const move = (event: PointerEvent) => {
-    if (session.view.over) return;
+    if (session.view.over || session.view.choice) return;
     if (event.pointerType === "touch") session.touch();
     if (event.pointerType === "mouse" || event.pointerId === pointer) locate(event);
   };
@@ -58,6 +66,19 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   };
   const keydown = (event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
+    if (["1", "2", "3"].includes(key)) {
+      const held = heldChoices.has(key); heldChoices.add(key);
+      const choice = session.view.choice;
+      if (choice) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (!event.repeat && !held) session.choose(session.view.token, choice.number, choice.offer[Number(key) - 1]!);
+        return;
+      }
+    }
+    if (session.view.choice) {
+      if (MOVEMENT_KEYS.has(key)) event.preventDefault();
+      return;
+    }
     if (key === "f" && !event.repeat) { showDebug = !showDebug; if (!showDebug) debug(""); return; }
     if (MOVEMENT_KEYS.has(key) || key === " ") event.preventDefault();
     if (session.view.over) {
@@ -66,9 +87,10 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
       }
       return;
     }
-    keys.add(key);
+    // After a choice clears steering, OS repeats must not resurrect a held key.
+    if (!event.repeat) keys.add(key);
   };
-  const keyup = (event: KeyboardEvent) => { keys.delete(event.key.toLowerCase()); heldAtDeath.delete(event.key.toLowerCase()); };
+  const keyup = (event: KeyboardEvent) => { keys.delete(event.key.toLowerCase()); heldAtDeath.delete(event.key.toLowerCase()); heldChoices.delete(event.key.toLowerCase()); };
   const visibility = () => { clear(); };
   const tick = (timestamp: number) => {
     const run = session.current;
@@ -77,9 +99,10 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
       const hasInterval = sampleStart !== null;
       if (sampleStart === null) sampleStart = timestamp;
       const begin = performance.now();
-      fx.advance(timestamp);
+      if (!session.view.choice) fx.advance(timestamp);
       if (!session.view.over) {
         loop.advance(timestamp, run.simulation, keyboardInput(keys, target));
+        session.publishChoice();
         if (run.simulation.dead) {
           for (const key of keys) heldAtDeath.add(key);
           keys.clear(); target = null; session.end();
@@ -106,7 +129,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   window.addEventListener("blur", clear); document.addEventListener("visibilitychange", visibility);
   frame = requestAnimationFrame(tick);
   return () => {
-    cancelAnimationFrame(frame); observer.disconnect(); clear(); renderer.dispose();
+    cancelAnimationFrame(frame); observer.disconnect(); unsubscribe(); clear(); renderer.dispose();
     canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", move);
     canvas.removeEventListener("pointerup", release); canvas.removeEventListener("pointercancel", release);
     canvas.removeEventListener("lostpointercapture", release);

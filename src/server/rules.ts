@@ -1,5 +1,6 @@
 import { BLOCKED_WORDS } from "./blocked-words";
 import type { Finish } from "../shared/api";
+import { CHOICE_INTERVAL, UPGRADE_IDS, type AcquiredUpgrade } from "../shared/upgrades";
 
 export const POINTS_PER_SQUASH = 10;
 export const POINTS_PER_SECOND = 1;
@@ -19,10 +20,27 @@ export function validateName(value: unknown): { name: string; error?: never } | 
 }
 
 export function validFinish(value: unknown): value is Finish {
-  if (!value || typeof value !== "object") return false;
+  return parseFinish(value) !== null;
+}
+
+export function parseFinish(value: unknown): Finish | null {
+  if (!value || typeof value !== "object") return null;
   const v = value as Finish;
-  return isId(v.playerId) && typeof v.touch === "boolean" &&
-    [v.score, v.squashes, v.seconds].every((n) => Number.isSafeInteger(n) && n >= 0);
+  if (!isId(v.playerId) || typeof v.touch !== "boolean" ||
+    ![v.score, v.squashes, v.seconds].every((n) => Number.isSafeInteger(n) && n >= 0)) return null;
+  const entries = v.upgrades === undefined ? [] : v.upgrades;
+  if (!Array.isArray(entries) || entries.length > UPGRADE_IDS.length) return null;
+  const counts = new Map<string, number>();
+  let total = 0;
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object" || !UPGRADE_IDS.includes(entry.id) || counts.has(entry.id) ||
+      !Number.isSafeInteger(entry.count) || entry.count <= 0) return null;
+    total += entry.count;
+    if (!Number.isSafeInteger(total) || total > Math.floor(v.seconds / CHOICE_INTERVAL)) return null;
+    counts.set(entry.id, entry.count);
+  }
+  const upgrades: AcquiredUpgrade[] = UPGRADE_IDS.filter(id => counts.has(id)).map(id => ({ id, count: counts.get(id)! }));
+  return { playerId: v.playerId, score: v.score, squashes: v.squashes, seconds: v.seconds, touch: v.touch, upgrades };
 }
 
 export function plausible(finish: Finish, startedAt: number, now: number): boolean {

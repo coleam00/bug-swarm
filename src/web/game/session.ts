@@ -1,6 +1,8 @@
 import type { Finish, Identity, Leader } from "../../shared/api";
 import type { GameApi } from "./api";
-import { createSimulation, type Simulation } from "./simulation";
+import { createSimulation, chooseUpgrade, type Simulation } from "./simulation";
+import { acquiredUpgrades } from "./upgrades";
+import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
 import { SQUARE_ARENA, type Arena } from "./arena";
 
 export interface LocalRun {
@@ -11,6 +13,8 @@ export interface SessionView {
   token: number; over: boolean; score: number; save: "pending" | "saved" | "failed";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
+  choice: Readonly<{ number: number; offer: readonly UpgradeId[] }> | null;
+  upgrades: readonly AcquiredUpgrade[];
 }
 
 export class Session {
@@ -27,7 +31,7 @@ export class Session {
     private arena: () => Arena = () => SQUARE_ARENA) {}
 
   private emptyView(token: number): SessionView {
-    return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading" };
+    return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", choice: null, upgrades: Object.freeze([]) };
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -51,12 +55,27 @@ export class Session {
     this.emit(); return run;
   }
   touch() { if (this.current && !this.current.result) this.current.touch = true; }
+  publishChoice(): void {
+    const s = this.current?.simulation;
+    if (!s?.upgrades.offer || this.view.over || this.view.choice?.number === s.upgrades.choiceNumber) return;
+    this.view = { ...this.view, choice: Object.freeze({ number: s.upgrades.choiceNumber, offer: s.upgrades.offer }) };
+    this.emit();
+  }
+  choose(token: number, number: number, id: UpgradeId, touch = false): boolean {
+    const run = this.current;
+    if (!run || run.result || token !== run.token || this.view.choice?.number !== number ||
+      !chooseUpgrade(run.simulation, number, id)) return false;
+    if (touch) this.touch();
+    this.view = { ...this.view, choice: null, upgrades: acquiredUpgrades(run.simulation.upgrades) }; this.emit();
+    return true;
+  }
   end(): void {
     const run = this.current;
     if (!run || run.result) return;
     const s = run.simulation;
-    run.result = Object.freeze({ playerId: this.identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: run.touch });
-    this.view = { ...this.view, over: true, score: s.score }; this.emit(); this.syncPoll();
+    const upgrades = acquiredUpgrades(s.upgrades);
+    run.result = Object.freeze({ playerId: this.identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: run.touch, upgrades });
+    this.view = { ...this.view, over: true, score: s.score, choice: null, upgrades }; this.emit(); this.syncPoll();
     void this.refreshBest(run); void this.refreshLeaders(run);
     void this.save(run);
   }

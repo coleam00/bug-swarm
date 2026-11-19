@@ -1,7 +1,7 @@
 import { STEP } from "./config";
-import { step, type Input, type Simulation, type ShotObserver } from "./simulation";
+import { step, type Input, type Simulation, type KillObserver } from "./simulation";
 
-export interface StepObserver extends ShotObserver {
+export interface StepObserver extends KillObserver {
   beforeStep(state: Readonly<Simulation>): void;
   afterStep(state: Readonly<Simulation>, dt: number): void;
 }
@@ -12,6 +12,7 @@ export class FixedStepper {
   private accumulated = 0;
   reset() { this.previous = null; this.accumulated = 0; }
   advance(timestamp: number, state: Simulation, input: Input): void {
+    if (state.upgrades.offer) { this.reset(); return; }
     if (this.previous === null) { this.previous = timestamp; return; }
     this.accumulated += Math.max(0, Math.min((timestamp - this.previous) / 1000, STEP * 5));
     this.previous = timestamp;
@@ -19,8 +20,9 @@ export class FixedStepper {
     while (this.accumulated + 1e-9 >= STEP && steps < 5) {
       if (!state.dead) {
         this.observer?.beforeStep(state);
-        step(state, input, STEP, this.observer);
-        this.observer?.afterStep(state, STEP);
+        const active = step(state, input, STEP, this.observer);
+        this.observer?.afterStep(state, active);
+        if (state.upgrades.offer) { this.reset(); return; }
       }
       this.accumulated -= STEP; steps++;
     }

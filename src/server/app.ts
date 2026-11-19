@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Database } from "bun:sqlite";
 import { countEvents, finishRun, getRun, leaderboard, personalBest, startRun } from "./db";
-import { isId, plausible, validFinish, validateName } from "./rules";
+import { isId, plausible, parseFinish, validateName } from "./rules";
 import type { Leader } from "../shared/api";
 
 export const START_LIMIT = 30;
@@ -81,16 +81,17 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (!isId(id)) return c.json({ error: "Invalid run id." }, 400);
     let body: unknown;
     try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON." }, 400); }
-    if (!validFinish(body)) return c.json({ error: "Invalid run result." }, 400);
+    const finish = parseFinish(body);
+    if (!finish) return c.json({ error: "Invalid run result." }, 400);
     const run = getRun(db, id);
-    if (!run || run.player_id !== body.playerId) return c.json({ error: "Run not found." }, 404);
+    if (!run || run.player_id !== finish.playerId) return c.json({ error: "Run not found." }, 404);
     if (run.ended_at_ms !== null) {
-      const identical = run.score === body.score && run.squashes === body.squashes && run.seconds === body.seconds && run.touch === Number(body.touch);
+      const identical = run.score === finish.score && run.squashes === finish.squashes && run.seconds === finish.seconds && run.touch === Number(finish.touch) && run.upgrades === JSON.stringify(finish.upgrades);
       return identical ? c.json({ saved: true }) : c.json({ error: "Run already finished." }, 409);
     }
     const time = now();
-    if (!plausible(body, run.started_at_ms, time)) return c.json({ error: "Score is impossible for this run's elapsed time." }, 400);
-    finishRun(db, id, body, time);
+    if (!plausible(finish, run.started_at_ms, time)) return c.json({ error: "Score is impossible for this run's elapsed time." }, 400);
+    finishRun(db, id, finish, time);
     cached = undefined;
     return c.json({ saved: true });
   });

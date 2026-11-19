@@ -5,6 +5,10 @@ import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
 import { countEvents, getRun, hideName, openDb, recordEvent } from "./db";
+import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
+import { acquiredUpgrades } from "../web/game/upgrades";
+import { arenaForViewport } from "../web/game/arena";
+import { UPGRADE_IDS } from "../shared/upgrades";
 
 let dir: string;
 let db: Database;
@@ -33,6 +37,21 @@ test("events are counted by type, with zeros for types not seen", async () => {
 });
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+test("finish persists canonical builds with one linked event, accepts equivalent retries and rejects changed builds", async () => {
+  let time = 0;
+  const app = createApp(db, { now: () => time });
+  const playerId = crypto.randomUUID();
+  const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot" }))).json() as { runId: string };
+  time = 60000;
+  const upgrades = UPGRADE_IDS.slice(0, 2).map(id => ({ id, count: 1 }));
+  const result = { playerId, score: 40, squashes: 0, seconds: 40, touch: false, upgrades };
+  const send = (data: unknown) => app.request(`/api/runs/${runId}/finish`, post(data));
+  expect((await send({ ...result, upgrades: [...upgrades].reverse() })).status).toBe(200);
+  expect((await send(result)).status).toBe(200);
+  expect((await send({ ...result, upgrades: [upgrades[0]] })).status).toBe(409);
+  expect(db.query("SELECT r.upgrades FROM runs r JOIN events e ON e.run_id = r.id WHERE e.type = ?").all("run_ended"))
+    .toEqual([{ upgrades: JSON.stringify(upgrades) }]);
+});
 test("server start, ownership, elapsed-time scoring, idempotency and conflicting replay", async () => {
   let time = 1000;
   const app = createApp(db, { now: () => time });
@@ -49,6 +68,7 @@ test("server start, ownership, elapsed-time scoring, idempotency and conflicting
   expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, score: 62, seconds: 2 }))).status).toBe(409);
   expect(countEvents(db)).toEqual({ opened: 0, run_started: 1, run_ended: 1 });
   expect(getRun(db, runId)?.touch).toBe(1);
+  expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, upgrades: [] }))).status).toBe(200);
   expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 61 });
   expect((await app.request("/api/runs", post({ ...identity, name: "Other" }))).status).toBe(409);
 });
@@ -107,4 +127,24 @@ test("committed finish stays successful if subsequent ranking reads fail", async
   expect((await app.request("/api/leaderboard")).status).toBe(503);
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
   expect(countEvents(db).run_ended).toBe(1); expect(failures).toHaveLength(1);
+});
+
+test("seeded choice-driven finishes remain plausible in all arena shapes, with and without wall-clock pauses", async () => {
+  for (const shape of [[1, 1], [390, 844], [844, 390]]) {
+    const s = createSimulation(73, arenaForViewport(shape[0]!, shape[1]!));
+    while (!s.dead && s.time < 180) {
+      step(s, { x: Math.cos(s.time * 0.4), y: Math.sin(s.time * 0.4), target: null }, 1 / 60);
+      if (s.upgrades.offer) chooseUpgrade(s, s.upgrades.choiceNumber, s.upgrades.offer[(s.upgrades.choiceNumber - 1) % 3]!);
+    }
+    expect(acquiredUpgrades(s.upgrades).length).toBeGreaterThan(0);
+    for (const pause of [0, 600000]) {
+      let time = 0;
+      const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+      const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot" }))).json() as { runId: string };
+      time = s.time * 1000 + pause;
+      const result = { playerId, seconds: s.seconds, squashes: s.squashes, score: s.score, touch: false, upgrades: acquiredUpgrades(s.upgrades) };
+      expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
+      expect(getRun(db, runId)?.upgrades).toBe(JSON.stringify(result.upgrades));
+    }
+  }
 });

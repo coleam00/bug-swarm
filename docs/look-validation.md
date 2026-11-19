@@ -1,6 +1,6 @@
 # Procedural look validation
 
-The renderer uses Canvas 2D commands only. The full rectangular world's grid and vignette, glows and score glyph are cached on detached canvases; actors and legs are drawn procedurally. Base beetles are coral; fast beetles are smaller, bright gold and have a quicker gait, selected through `BUG_STYLES[bug.kind]`. Collision dimensions and all simulation rules remain those merged from main in #10. No image assets, rendering dependencies or upgrade visuals are added.
+The renderer uses Canvas 2D commands only. The full rectangular world's grid and vignette, glows and score glyph are cached on detached canvases; actors and legs are drawn procedurally. Base beetles are coral; fast beetles are smaller, bright gold and have a quicker gait, selected through `BUG_STYLES[bug.kind]`. Collision dimensions and all simulation rules remain those merged from main in #10. The original look change added no image assets, rendering dependencies or upgrade visuals. The later upgrade integration and its fresh evidence are recorded separately below.
 
 ## Evidence required by the owner
 
@@ -56,3 +56,63 @@ Screenshots and raw benchmark JSON are retained in the task scratch directory fo
 All pool storage and feedback scratch slots are allocated at construction; update and emission code creates no arrays, objects, strings or callbacks and never grows its storage. Tests verify storage identity through repeated emissions/updates/resets. Saturation occupancy is recorded above; pool capacities remain 1024 particles, 128 trails and 256 labels.
 
 Historical Chrome allocation sampling at a 512-byte interval, with collected objects included, exercised the same warmed function for 100,000 iterations of squash/trail/hit/update using fractional timestamps. One warmed sample attributed no allocations to FX functions; another attributed approximately 109 KB to `advance`/`Pool.update`. Sampling includes runtime optimization/boxing effects and is not proof of literally zero V8 heap allocations. The fixed-capacity and no-explicit-allocation guarantees are structural and tested. Pool/coordinator runtime code is unchanged by this rectangular-world integration.
+
+
+## Upgrade integration (issue #12, fresh validation)
+
+The upgrade change adds a longer laser streak, shield bubble (two outlines for multiple charges), half-second expanding bomb ring and small orbiting drone glows. These reuse the procedural renderer and cached glow surfaces. Particle/trail/label capacities remain 1024/128/256; the ring uses one reusable slot. No application dependency or game image asset was added.
+
+The benchmark accepts `?profile=laser`, `shield`, `bomb`, and `drone` (two picks of that upgrade), `first` (one of each), `double` (two of each), and `stress` (four laser/shield/bomb picks, nine drones). `?profile=stress&burst` also saturates the cosmetic pools. Scheduling is suppressed only in the benchmark fixture by setting its next choice to Infinity; live play has no rollout flag or setting. Fixture replenishment keeps 150 bugs at every draw. Forced contacts refill fixture shield charges before real blocks; bomb cooldowns and clears, laser kills and drone shots use the production simulation. Fixture setup/replenishment are timed separately. Diagnostic counters are included in the reported update interval, making those times slightly conservative. Counters span warmup plus sample; pool peaks and population bounds cover the sample.
+
+Fresh browser checks used Chrome 157.0.8103.51 on the factory desktop with a scratch home, scratch browser profiles and fixture API responses. No API/database server was used and no operator data was opened. The cards were inspected at 390 x 844 and 844 x 390 CSS pixels, DPR 2:
+
+- Portrait cards were 306 px wide and at least 100 px tall; landscape cards were approximately 245 x 150 px. Text wrapped without horizontal overflow and every card stayed in the viewport.
+- Forward Tab and Shift+Tab cycling stayed within the cards; Escape left the choice open. Selection restored canvas focus. A real 30-second pause and rotation kept the complete gameplay state unchanged. Holding a numeric key before the offer did not select it; a fresh key did. Touch selected a card without steering or click-through and marked the run as touch input.
+- All three numeric keys, Space activation, the game-over build (laser x1, bomb x2), its exact finish payload and immediate touch restart passed. Held steering repeats stayed cleared after selection. Page and console errors: zero. Unit tests also exercise each numeric key, stale choice/run identities, blur, long synthetic clock gaps, frozen effects and no resume catch-up.
+- `bun run check`: 135 tests pass, 13,304 assertions, TypeScript clean. `bun run build` passes. Existing swarm pacing tests explicitly retain their no-upgrade baseline; separate tests exercise real scheduled choices beyond two minutes. Choice-driven runs in square, portrait and landscape arenas submit successfully against the in-process API with and without ten minutes of added wall-clock pause.
+
+Screenshots: [portrait cards](upgrade-validation/portrait.png), [landscape cards](upgrade-validation/landscape.png), [portrait game over](upgrade-validation/game-over-portrait.png), [landscape game over](upgrade-validation/game-over-landscape.png). [Browser assertions and finish payload](upgrade-validation/browser.json) retain the measured card dimensions. The operator's normal browser check before merge and the PRD's five human pacing runs remain human review/follow-through; automation does not claim either of them.
+
+### Fresh desktop performance results
+
+2026-11-19, Windows 11 Home 10.0.26200, AMD Ryzen 9 7950X3D desktop, RTX 3090 host, headless Chrome 157.0.8103.51. Viewport 1280 x 720, device/render DPR 1, logical world 800 x 450. Each of the nine profiles ran sequentially with 10 seconds of warmup and 60 seconds of sampling (approximately 3,600 real RAF intervals per profile). Project checks finished before sampling and resumed after every profile completed. No concurrent benchmark or browser-interaction workload ran during sampling.
+
+| Profile | Mean FPS | Lowest rolling FPS | Update mean / p95 ms | Draw mean / p95 ms | Fixture mean / p95 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| normal | 59.999 | 59.994 | 0.042 / 0.100 | 0.636 / 1.000 | 0.002 / 0.000 |
+| laser | 59.999 | 59.988 | 0.054 / 0.100 | 0.640 / 1.000 | 0.002 / 0.000 |
+| shield | 59.999 | 59.988 | 0.042 / 0.100 | 0.623 / 1.000 | 0.002 / 0.000 |
+| bomb | 59.999 | 59.982 | 0.048 / 0.100 | 0.634 / 1.100 | 0.002 / 0.000 |
+| drone | 59.999 | 59.988 | 0.048 / 0.100 | 0.630 / 1.000 | 0.002 / 0.000 |
+| first | 59.999 | 59.994 | 0.057 / 0.200 | 0.710 / 1.200 | 0.003 / 0.000 |
+| double | 59.999 | 59.988 | 0.057 / 0.200 | 0.685 / 1.200 | 0.003 / 0.000 |
+| stress | 59.999 | 59.988 | 0.093 / 0.200 | 0.799 / 1.300 | 0.002 / 0.000 |
+| burst | 59.999 | 59.994 | 0.093 / 0.200 | 1.037 / 1.700 | 0.005 / 0.000 |
+
+| Profile | Bugs min-max | Fast bugs min-max | Peak particles / trails / labels / rings | Shield blocks | Bomb clears | Laser kills | Drone fires |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| normal | 150-150 | 37-46 | 30 / 6 / 6 / 0 | 0 | 0 | 0 | 0 |
+| laser | 150-150 | 27-41 | 94 / 6 / 17 / 0 | 0 | 0 | 1035 | 0 |
+| shield | 150-150 | 30-39 | 29 / 6 / 5 / 0 | 67 | 0 | 0 | 0 |
+| bomb | 150-150 | 29-47 | 1024 / 6 / 155 / 1 | 0 | 5 | 0 | 0 |
+| drone | 150-150 | 31-45 | 44 / 6 / 8 / 0 | 0 | 0 | 0 | 142 |
+| first | 150-150 | 30-43 | 1024 / 6 / 163 / 1 | 35 | 3 | 914 | 71 |
+| double | 150-150 | 26-40 | 1024 / 6 / 169 / 1 | 69 | 5 | 1442 | 142 |
+| stress | 150-150 | 23-42 | 1024 / 6 / 199 / 1 | 69 | 10 | 3405 | 639 |
+| burst | 150-150 | 24-43 | 1024 / 6 / 256 / 1 | 68 | 10 | 3463 | 639 |
+
+All profiles exceeded the 58 FPS criterion, with exactly 150 bugs at every sampled draw. Saturation reached the fixed particle and label caps while the ring stayed within its single slot. The activity counters confirm shield blocks, automatic clears, upgraded projectile kills and independent drone firing occurred; laser kills include all upgraded projectile sources. No page or console errors occurred. These are desktop measurements accepted by the owner, not estimates for other hardware. [Raw reports](upgrade-validation/benchmark.json) include browser version, durations, frame counts, viewport, population bounds, fixture costs and pool peaks.
+
+
+### Focused test repairs after review
+
+The follow-up changes tests only. `react-test-renderer` 18.3.1 is a development dependency matching React 18.3.1; it replaces the App test's server-rendered HTML probe with actual React effects, handlers and real Session subscriptions without a DOM/browser dependency or a custom React renderer. Native dialog methods and canvas mounting are test boundaries. The probe checks modal open/close, all three touch-card handlers, touch attribution, focus restoration and a full minute of UI timers without selection. Build and description assertions check meaningful content without fixing copy, separators or count placement.
+
+The existing offer test now compares fixed different run seeds as well as equal seeds, including the simulation-to-choice seed handoff. Laser and bomb tests require effective opacity and contrast through the existing paint fixture; laser geometry only has to exceed the ordinary beam. The existing real-client/in-process-API test submits a mixed repeated-pick build and checks its SQLite JSON.
+
+In a disposable copy, 15 broken variants were rejected: missing modal opening, disabled cards, timeout/interval auto-selection, missing dialog close/focus restoration, a constant seed at either layer, transparent laser, transparent/zero-alpha/camouflaged ring, dropped client upgrades, missing descriptions and missing build counts. Six harmless controls passed: a 30-unit laser instead of 48 (ordinary shots remain 18), equivalent descriptions, alternate empty copy, different build separators/count placement and modest ring-colour tuning.
+
+`bun run check` passes all 135 tests with 13,320 assertions; `bun run build` produces the same application bundle. Neighboring engine keyboard/pointer and session lifecycle tests, drone glow checks, and the other client routes were inspected for the same gaps. The recorded browser/FPS measurements above were not rerun for this test-only repair; the operator's before-merge browser check remains due.
+
+
+The subsequent shield review exposed a missed case in that audit: stroke-colour alpha alone did not guard a zero canvas globalAlpha. The existing shield test now applies visibleStroke to every outline with one and two charges, checking effective opacity, floor contrast and positive line width. In a disposable copy, nine broken variants failed (all-shield, single-charge, double-charge and second-outline transparency; transparent/camouflaged shield colours; invisible laser, bomb and drones). Three harmless shield controls passed: a different bright palette, HSL colour and 0.8 global opacity. The latest bun run check passes 135 tests with 13,326 assertions, and bun run build retains the same production bundle. Browser/FPS measurements were not repeated for this test-only correction.

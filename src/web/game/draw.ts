@@ -3,11 +3,12 @@ import { SQUARE_ARENA, type Arena } from "./arena";
 import { viewport, type Viewport } from "./input";
 import { Assets, type CanvasFactory } from "./assets";
 import { BUG_STYLES } from "./styles";
-import type { Simulation } from "./simulation";
+import { dronePosition, type Simulation } from "./simulation";
 import type { Effects } from "./fx";
 
 export class Renderer {
   private assets: Assets | null = null;
+  private readonly drone = { x: 0, y: 0 };
   private view: Viewport = viewport(1, 1);
   private width = 0;
   private height = 0;
@@ -73,13 +74,25 @@ export class Renderer {
     for (const shot of state.shots) {
       const length = Math.hypot(shot.vx, shot.vy) || 1, dx = shot.vx / length, dy = shot.vy / length;
       ctx.save(); ctx.translate(shot.x, shot.y); ctx.rotate(Math.atan2(dy, dx));
-      ctx.drawImage(art.shot, -27, -9, 44, 18);
-      ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(3, 0);
+      ctx.drawImage(art.shot, shot.laser ? -57 : -27, -9, shot.laser ? 80 : 44, 18);
+      ctx.beginPath(); ctx.moveTo(shot.laser ? -45 : -15, 0); ctx.lineTo(3, 0);
       ctx.lineWidth = 3; ctx.strokeStyle = "#fff2b8"; ctx.stroke(); ctx.restore();
     }
     ctx.globalCompositeOperation = "source-over";
+    for (let i = 0; i < state.drones.length; i++) {
+      dronePosition(state, i, this.drone);
+      ctx.drawImage(art.core, this.drone.x - 15, this.drone.y - 15, 30, 30);
+      ctx.fillStyle = "#d0fff5"; ctx.beginPath(); ctx.arc(this.drone.x, this.drone.y, 4, 0, Math.PI * 2); ctx.fill();
+    }
     const robot = state.robot;
     ctx.save(); ctx.translate(robot.x, robot.y);
+    if (state.shieldCharges > 0) {
+      ctx.fillStyle = "#7acfff20"; ctx.strokeStyle = "#8cdaff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (state.shieldCharges > 1) {
+        ctx.beginPath(); ctx.arc(0, 0, 29, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
     ctx.fillStyle = "#314757"; ctx.strokeStyle = "#84b6bd"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.roundRect(-ROBOT_RADIUS, -ROBOT_RADIUS, ROBOT_RADIUS * 2, ROBOT_RADIUS * 2, 7); ctx.fill(); ctx.stroke();
     ctx.fillStyle = "#152532"; ctx.fillRect(-18, -8, 5, 16); ctx.fillRect(13, -8, 5, 16);
@@ -95,6 +108,11 @@ export class Renderer {
     }
     ctx.restore();
     const particles = fx.particles;
+    if (fx.ring.life > 0) {
+      ctx.globalAlpha = fx.ring.life / 0.5; ctx.strokeStyle = "#b6a5ff"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(fx.ring.x, fx.ring.y, (1 - fx.ring.life / 0.5) * fx.ring.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     ctx.globalCompositeOperation = "lighter";
     for (let i = 0; i < particles.capacity; i++) {
       if (particles.life[i]! <= 0) continue;

@@ -3,6 +3,7 @@ import type { Best, Finish, Leader, RunStarted } from "../../shared/api";
 import type { GameApi } from "./api";
 import { Session } from "./session";
 import { arenaForViewport } from "./arena";
+import { step, IDLE } from "./simulation";
 
 test("every start samples arena once and isolates dimensions from its provider", () => {
   let calls = 0, dimensions = { ...arenaForViewport(390, 844) };
@@ -25,6 +26,32 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+test("choice publication is immutable and transition-only; stale selections and restarts cannot alter finish builds", async () => {
+  const start = deferred<RunStarted>(), { session, finishes } = fixture({ start: () => start.promise });
+  const run = session.start(), s = run.simulation;
+  s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
+  let transitions = 0;
+  const unsubscribe = session.subscribe(() => { transitions++; });
+  step(s, IDLE, 0.02); session.publishChoice(); session.publishChoice();
+  expect(transitions).toBe(1);
+  const choice = session.view.choice!, id = choice.offer[0]!;
+  expect(Object.isFrozen(choice)).toBe(true); expect(Object.isFrozen(choice.offer)).toBe(true);
+  expect(session.choose(run.token + 1, choice.number, id)).toBe(false);
+  expect(session.choose(run.token, choice.number - 1, id)).toBe(false);
+  expect(session.choose(run.token, choice.number, id, true)).toBe(true);
+  expect(session.choose(run.token, choice.number, id)).toBe(false);
+  expect(transitions).toBe(2); expect(run.touch).toBe(true);
+  session.end(); const summary = session.view.upgrades, result = run.result!;
+  expect(result.upgrades).toBe(summary); expect(summary).toEqual([{ id, count: 1 }]);
+  expect(Object.isFrozen(summary)).toBe(true); expect(summary.every(Object.isFrozen)).toBe(true);
+  expect(() => { (summary[0] as { count: number }).count = 99; }).toThrow();
+  session.start(); s.upgrades.counts[id] = 99;
+  expect(session.choose(run.token, choice.number, id)).toBe(false);
+  start.resolve({ runId: "original" }); await flush();
+  expect(finishes[0]?.result).toBe(result); expect(finishes[0]?.result.upgrades).toEqual([{ id, count: 1 }]);
+  expect(session.view.upgrades).toEqual([]); expect(session.view.over).toBe(false);
+  unsubscribe();
+});
 function fixture(overrides: Partial<GameApi> = {}) {
   const finishes: { id: string; result: Finish }[] = [], logs: { message: string; error: unknown }[] = [];
   let starts = 0;
@@ -42,7 +69,7 @@ test("simulation starts immediately; a death before start response submits exact
   const run = session.start(true); run.simulation.score = 23; run.simulation.squashes = 2; run.simulation.seconds = 3;
   session.end(); session.end(); expect(session.view.over).toBe(true); expect(finishes).toHaveLength(0);
   start.resolve({ runId: "late" }); await flush();
-  expect(finishes).toEqual([{ id: "late", result: { playerId: identity.playerId, score: 23, seconds: 3, squashes: 2, touch: true } }]);
+  expect(finishes).toEqual([{ id: "late", result: { playerId: identity.playerId, score: 23, seconds: 3, squashes: 2, touch: true, upgrades: [] } }]);
   expect(Object.isFrozen(run.result)).toBe(true); expect(session.view.save).toBe("saved");
   expect(session.view.best).toBe(7); expect(session.view.leaders[0]?.score).toBe(99);
 });
