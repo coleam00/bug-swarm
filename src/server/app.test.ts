@@ -132,6 +132,8 @@ test("committed finish stays successful if subsequent ranking reads fail", async
 test("seeded choice-driven finishes remain plausible in all arena shapes, with and without wall-clock pauses", async () => {
   for (const shape of [[1, 1], [390, 844], [844, 390]]) {
     const s = createSimulation(73, arenaForViewport(shape[0]!, shape[1]!));
+    // This fixture tests upgraded finish validation, independently of early combat balance.
+    s.invulnerableUntil = 60;
     while (!s.dead && s.time < 180) {
       step(s, { x: Math.cos(s.time * 0.4), y: Math.sin(s.time * 0.4), target: null }, 1 / 60);
       if (s.upgrades.offer) chooseUpgrade(s, s.upgrades.choiceNumber, s.upgrades.offer[(s.upgrades.choiceNumber - 1) % 3]!);

@@ -27,11 +27,23 @@ test("spawn rate increases across equal windows and keeps countdown overshoot", 
   for (let i = 0; i < 60 / 0.25; i++) step(b, IDLE, 0.25);
   expect(b.nextId).toBe(a.nextId); expect(b.eligibleSpawns).toBe(a.eligibleSpawns);
   expect(b.seed).toBe(a.seed); expect(b.spawnIn).toBeCloseTo(a.spawnIn, 8);
-  expect(spawnInterval(15)).toBeCloseTo(0.85); expect(spawnInterval(45)).toBeCloseTo(0.475);
+  expect(spawnInterval(15)).toBeCloseTo(0.825); expect(spawnInterval(45)).toBeCloseTo(0.45);
   expect(spawnInterval(180)).toBeLessThan(spawnInterval(120));
   expect(spawnInterval(240)).toBeLessThan(spawnInterval(180));
   expect(spawnInterval(600)).toBeLessThan(spawnInterval(240));
   expect(spawnInterval(600)).toBeGreaterThanOrEqual(1 / 6);
+  // Observe the live scheduler too: a ramping helper alone does not ensure it is used.
+  const late = createSimulation(42); late.invulnerableUntil = Infinity;
+  const windows: number[] = [];
+  while (late.time < 300 - 1e-7) {
+    const before = late.nextId;
+    step(late, IDLE, STEP);
+    const window = Math.min(4, Math.floor((late.time - 1e-7) / 60));
+    windows[window] = (windows[window] ?? 0) + late.nextId - before;
+    late.bugs.length = 0;
+  }
+  expect(windows[3]!).toBeGreaterThan(windows[2]!); // 180–240 vs 120–180
+  expect(windows[4]!).toBeGreaterThan(windows[3]!); // 240–300 vs 180–240
 });
 
 test("scheduled spawns stay inside the cumulative six-per-second score allowance", () => {
@@ -46,7 +58,8 @@ test("scheduled spawns stay inside the cumulative six-per-second score allowance
 });
 
 test("late pursuit accelerates both existing and newly spawned bugs, preserving their speed ratio", () => {
-  expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(60)).toBe(1);
+  expect(bugSpeedMultiplier(30)).toBe(1); expect(bugSpeedMultiplier(50)).toBe(1);
+  expect(bugSpeedMultiplier(60)).toBeGreaterThan(bugSpeedMultiplier(50));
   expect(bugSpeedMultiplier(180)).toBeGreaterThan(bugSpeedMultiplier(120));
   expect(bugSpeedMultiplier(240)).toBeGreaterThan(bugSpeedMultiplier(180));
   for (const time of [120, 180, 240]) {
