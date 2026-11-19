@@ -29,6 +29,14 @@ The browser created and finished a real server run in a fresh SQLite database us
 
 Loading/populated/failure screenshots use controlled read responses and a forced Session death with all four upgrade counts. Those synthetic 80-second finishes are deliberately rejected by the real elapsed-time check, which also supplies the save-failure screenshot. They are layout evidence; the preceding accepted finish and hide measurement use real responses. No uncaught browser errors occurred in the completed probe.
 
+## Conflict recovery after review
+
+The real-API React integration now opens two entry screens backed by shared storage and one existing teamless SQLite player. Choosing Tabs followed by Spaces originally reproduced a failed start; it now preserves the UUID/name, restores Tabs in memory and storage, and saves the run. It also covers an already-conflicted identity on an online reload and an offline reload followed by the next online start. Those saves add to Tabs; permanent server membership stays unchanged.
+
+Repeated the production-build Chrome probe in scratch storage, extending it with two actual tabs sharing a legacy identity. The second tab's starts returned **409, 201** after its conflicting choice, and **409, 201** after reloading an intentionally conflicted saved identity. Both finishes were accepted and credited to Tabs, the saved UUID was preserved, and reload required no selection. The original portrait/landscape, offline, restart and moderation checks still passed; hide appeared after 2,359 ms. Browser and database handles were closed, with no HTTP listener or existing service involved.
+
+Mutation checks confirmed that accepting a blocked name, moving the race below the leaderboard, or swapping the required team colours each fails the adjacent tests. Equivalent entry/status feedback and failure-log wording still passes; assertions check feedback presence, the logged error/run id, race placement and each named team's actual colour.
+
 ## Reproduce
 
 Build with `bun run build`. In a fresh scratch directory, install `playwright-core` (validation tooling only; it is not a project dependency). Set `SCRATCH` to that directory and optionally `CHROME` to a Chrome for Testing executable, then run `bun docs/team-validation.probe.ts` from the repository. The script writes evidence under `docs/team-evidence/`.

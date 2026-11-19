@@ -217,11 +217,12 @@ test("team reads apply despite newer pending requests, reject stale results, and
   reads[3]!.resolve({ tabs: 999, spaces: 999 }); await flush();
   expect(session.view.teamTotals).toEqual({ tabs: 0, spaces: 0 });
   void session.refreshTeams(run);
-  reads[5]!.reject(new Error("offline")); await flush();
+  const failure = new Error("offline");
+  reads[5]!.reject(failure); await flush();
   expect(session.view.teamsStatus).toBe("failed"); expect(session.view.teamTotals).toBeNull();
   expect(session.view.save).toBe("saved"); expect(session.view.best).toBe(7);
   expect(session.view.leaders[0]?.score).toBe(99);
-  expect(logs.some(log => log.message.includes("Team totals") && log.message.includes("run-1"))).toBe(true);
+  expect(logs.some(log => log.error === failure && log.message.includes("run-1"))).toBe(true);
   void session.refreshTeams(run);
   reads[6]!.resolve({ tabs: 3, spaces: 4 }); await flush();
   expect(session.view.teamsStatus).toBe("ready");

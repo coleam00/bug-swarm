@@ -76,7 +76,8 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (name.error) return c.json({ error: name.error }, 400);
     if ("team" in body && !isTeam(body.team)) return c.json({ error: "Choose Tabs or Spaces." }, 400);
     const result = startRun(db, body.playerId, name.name!, time, body.team);
-    if ("error" in result) return c.json({ error: result.error === "team-required" ? "Choose Tabs or Spaces." : "This player id already has a different name or team." }, result.error === "team-required" ? 400 : 409);
+    if ("error" in result && result.error === "team-conflict") return c.json({ error: "This player already belongs to another team.", code: result.error, team: result.team }, 409);
+    if ("error" in result) return c.json({ error: result.error === "team-required" ? "Choose Tabs or Spaces." : "This player id already has a different name." }, result.error === "team-required" ? 400 : 409);
     return c.json(result, 201);
   });
   app.post("/api/runs/:runId/finish", async (c) => {

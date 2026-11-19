@@ -1,5 +1,5 @@
 import type { Finish, Identity, Leader, TeamTotals } from "../../shared/api";
-import type { GameApi } from "./api";
+import { TeamConflictError, type GameApi } from "./api";
 import { createSimulation, chooseUpgrade, type Simulation } from "./simulation";
 import { acquiredUpgrades } from "./upgrades";
 import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
@@ -29,9 +29,10 @@ export class Session {
   private leadersApplied = 0;
   private teamsSequence = 0;
   private teamsApplied = 0;
-  constructor(readonly identity: Identity, private api: GameApi, private seed: () => number,
+  constructor(public identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error,
-    private arena: () => Arena = () => SQUARE_ARENA) {}
+    private arena: () => Arena = () => SQUARE_ARENA,
+    private identityChanged: (identity: Identity) => void = () => {}) {}
 
   private emptyView(token: number): SessionView {
     return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
@@ -52,7 +53,17 @@ export class Session {
     const token = this.view.token + 1;
     const run: LocalRun = { token, simulation: createSimulation(this.seed(), this.arena()), start: Promise.resolve(null), touch };
     this.current = run; this.view = this.emptyView(token); this.syncPoll();
-    run.start = Promise.resolve().then(() => this.api.start(this.identity)).then(({ runId }) => {
+    run.start = Promise.resolve().then(async () => {
+      try { return await this.api.start(this.identity); }
+      catch (error) {
+        if (!(error instanceof TeamConflictError)) throw error;
+        // A stale entry tab or saved identity must yield to permanent membership.
+        // Repair even if this local run has since ended or restarted; retry once.
+        this.identity = { ...this.identity, team: error.team };
+        this.identityChanged(this.identity);
+        return this.api.start(this.identity);
+      }
+    }).then(({ runId }) => {
       run.runId = runId; return runId;
     }).catch((error) => {
       this.log(`Run start failed [${run.token}]`, error); return null;

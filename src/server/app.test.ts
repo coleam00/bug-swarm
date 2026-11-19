@@ -74,7 +74,7 @@ test("server start, ownership, elapsed-time scoring, idempotency and conflicting
 });
 test("malformed requests, names, ids and capped bodies with and without Content-Length", async () => {
   const app = createApp(db);
-  for (const body of [null, [], {}, { playerId: "bad", name: "Robot", team: "tabs" as const }, { playerId: crypto.randomUUID(), name: "5h1t" }]) {
+  for (const body of [null, [], {}, { playerId: "bad", name: "Robot", team: "tabs" as const }, { playerId: crypto.randomUUID(), name: "5h1t", team: "tabs" }]) {
     expect((await app.request("/api/runs", post(body))).status).toBe(400);
   }
   expect((await app.request("/api/runs", { method: "POST", body: "{" })).status).toBe(400);

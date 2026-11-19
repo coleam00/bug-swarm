@@ -19,14 +19,17 @@ export function App() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const entryTouch = useRef(false);
+  function rememberIdentity(next: Identity) {
+    try { storeIdentity(localStorage, next); } catch (cause) { console.error("Storage unavailable", cause); }
+    setIdentity(next);
+  }
   function selectTeam(team: Team) {
     const result = validateName(identity?.name ?? name);
     if (result.error) { setError(result.error); return; }
     const next: Identity = { playerId: identity?.playerId ?? crypto.randomUUID(), name: result.name!, team };
-    try { storeIdentity(localStorage, next); } catch (cause) { console.error("Storage unavailable", cause); }
-    setIdentity(next);
+    rememberIdentity(next);
   }
-  if (identity?.team) return <Game identity={identity} initialTouch={entryTouch.current} />;
+  if (identity?.team) return <Game identity={identity} initialTouch={entryTouch.current} onIdentity={rememberIdentity} />;
   return <main className="entry"><h1>Bug Swarm</h1><p>Steer. Auto-fire. Survive.</p>
     <form onPointerDown={(event) => { if (event.pointerType === "touch") entryTouch.current = true; }} onSubmit={(event) => {
       event.preventDefault();
@@ -43,9 +46,9 @@ export function App() {
   </main>;
 }
 
-function Game({ identity, initialTouch }: { identity: Identity; initialTouch: boolean }) {
+function Game({ identity, initialTouch, onIdentity }: { identity: Identity; initialTouch: boolean; onIdentity: (identity: Identity) => void }) {
   const [session] = useState(() => new Session(identity, api, () => crypto.getRandomValues(new Uint32Array(1))[0]!,
-    console.error, () => arenaForViewport(window.innerWidth, window.innerHeight)));
+    console.error, () => arenaForViewport(window.innerWidth, window.innerHeight), onIdentity));
   const [view, setView] = useState(session.view);
   const [hud, setHud] = useState<Hud>({ score: 0, hits: 0, seconds: 0 });
   const [debug, setDebug] = useState("");

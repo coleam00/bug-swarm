@@ -1,4 +1,9 @@
 import type { Best, Finish, Identity, Leader, RunStarted, Saved, TeamTotals } from "../../shared/api";
+import { isTeam, type Team } from "../../shared/teams";
+
+export class TeamConflictError extends Error {
+  constructor(readonly team: Team) { super("The server has already assigned this player's team."); }
+}
 
 export interface GameApi {
   start(identity: Identity): Promise<RunStarted>;
@@ -19,7 +24,13 @@ export async function request<T>(path: string, body?: unknown, fetcher: (input: 
         method: body === undefined ? "GET" : "POST", cache: "no-store", signal: abort.signal,
         ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
       });
-      if (!response.ok) throw new Error(`API ${response.status}: ${await response.text()}`);
+      if (!response.ok) {
+        const message = await response.text();
+        let detail;
+        try { detail = JSON.parse(message); } catch { /* Non-JSON failures still surface below. */ }
+        if (response.status === 409 && detail?.code === "team-conflict" && isTeam(detail.team)) throw new TeamConflictError(detail.team);
+        throw new Error(`API ${response.status}: ${message}`);
+      }
       return await response.json() as T;
     };
     return await Promise.race([operation(), deadline]);

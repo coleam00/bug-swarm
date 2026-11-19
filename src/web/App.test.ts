@@ -19,6 +19,7 @@ const { createElement } = await import(${JSON.stringify(import.meta.resolve("rea
 const { create, act } = await import(${JSON.stringify(import.meta.resolve("react-test-renderer"))});
 const { Session } = await import(${moduleUrl("game/session.ts")});
 const { api } = await import(${moduleUrl("game/api.ts")});
+const realApi = { ...api };
 const { step, IDLE } = await import(${moduleUrl("game/simulation.ts")});
 const { pick } = await import(${moduleUrl("game/upgrade-fixture.test-support.ts")});
 const { UPGRADE_IDS, UPGRADE_NAMES } = await import(${moduleUrl("../shared/upgrades.ts")});
@@ -84,6 +85,10 @@ try {
       await act(async () => { tree = create(createElement(App), { createNodeMock }); });
       assert.equal(session, undefined, "Entry must await a team");
       const input = tree.root.findByType("input");
+      for (const [name, colour] of [["Tabs", "#ff9f43"], ["Spaces", "#2ed3c6"]]) {
+        const button = tree.root.findAllByType("button").find(button => text(button).includes(name));
+        assert.equal(button.props.style.background, colour, name + " entry colour");
+      }
       if (legacy) { assert.equal(input.props.value, identity.name); assert.ok(input.props.readOnly); }
       else {
         act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
@@ -91,7 +96,8 @@ try {
         act(() => { input.props.onChange({ target: { value: "New Robot" } }); });
       }
       act(() => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
-      assert.match(text(tree.root.findByProps({ role: "alert" })), /Choose/);
+      assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
+      assert.equal(session, undefined, "Submitting without a team must stay on entry");
       const start = api.start;
       api.start = async () => { throw new Error("offline"); };
       await act(async () => { tree.root.findAllByType("button")[team === "tabs" ? 0 : 1].props.onClick(); });
@@ -166,22 +172,35 @@ try {
   const build = text(tree.root.findByProps({ className: "build" }));
   for (const id of UPGRADE_IDS) assert.ok(build.includes(UPGRADE_NAMES[id]), "Build must name every acquired upgrade");
   assert.deepEqual(build.match(/[0-9]+/g).map(Number).sort(), [1, 2, 3, 4]);
-  assert.match(text(tree.root), /No team scores yet/);
+  const race = () => tree.root.findByProps({ view: session.view });
+  assert.ok(race().findAllByType("p").some(node => text(node).trim()), "An empty race needs feedback");
   let resolveTeams;
   api.teams = () => new Promise(resolve => { resolveTeams = resolve; });
   await act(async () => { session.start(); session.end(); });
-  assert.match(text(tree.root), /Loading team totals/);
+  assert.ok(text(race().findByProps({ role: "status" })).trim(), "Loading needs feedback");
+  assert.equal(race().findAllByProps({ className: "team-labels" }).length, 0, "Loading cannot invent totals");
   await act(async () => { resolveTeams({ tabs: 30, spaces: 10 }); });
-  assert.match(text(tree.root.findByProps({ className: "team-labels" })), /Tabs[ ]+30.*Spaces[ ]+10/);
+  const overChildren = tree.root.findByProps({ "aria-label": "Game over" }).children;
+  const scoreIndex = overChildren.findIndex(node => node.props?.className === "final-score");
+  assert.ok(scoreIndex >= 0);
+  assert.equal(overChildren[scoreIndex + 1], race(), "The race belongs directly beneath the final score");
+  const labels = tree.root.findByProps({ className: "team-labels" }).findAllByType("span");
   const bar = tree.root.findByProps({ className: "race-bar" });
   assert.equal(bar.props["aria-hidden"], "true");
   assert.deepEqual(bar.findAllByType("span").map(span => span.props.style.width), ["75%", "25%"]);
+  for (const [name, colour, total] of [["Tabs", "#ff9f43", 30], ["Spaces", "#2ed3c6", 10]]) {
+    const index = labels.findIndex(label => text(label).includes(name));
+    assert.ok(index >= 0);
+    assert.equal(text(labels[index].findByType("strong")), String(total));
+    assert.equal(labels[index].props.style.color, colour, name + " label colour");
+    assert.equal(bar.findAllByType("span")[index].props.style.background, colour, name + " bar colour");
+  }
   api.teams = async () => ({ tabs: 0, spaces: 10 });
   await act(async () => { await session.refreshTeams(session.current); });
   assert.deepEqual(tree.root.findByProps({ className: "race-bar" }).findAllByType("span").map(span => span.props.style.width), ["0%", "100%"]);
   api.teams = async () => { throw new Error("offline"); };
   await act(async () => { await session.refreshTeams(session.current); });
-  assert.match(text(tree.root), /Couldn't load team totals/);
+  assert.ok(text(race().findByProps({ role: "status" })).trim(), "Unavailable totals need feedback");
   assert.equal(tree.root.findAllByProps({ className: "race-bar" }).length, 0);
   api.teams = async () => ({ tabs: 0, spaces: 0 });
   await act(async () => { session.start(); session.end(); });
@@ -199,6 +218,64 @@ try {
     restart.props.onClick({ detail: 1 });
   });
   assert.equal(session.view.token, token + 1, "A button tap must start exactly once");
+  act(() => { tree.unmount(); }); tree = undefined;
+
+  // Two independent entry screens share storage and an actual teamless server player.
+  // Also recover identities already poisoned by an older version, including offline reload.
+  Object.assign(api, realApi);
+  const { openDb } = await import(${moduleUrl("../server/db.ts")});
+  const { createApp } = await import(${moduleUrl("../server/app.ts")});
+  const db = openDb(":memory:"), server = createApp(db, { now: () => 1000 });
+  const playerId = crypto.randomUUID(), name = "Legacy Robot";
+  db.query("INSERT INTO players(id, name, name_key) VALUES (?, ?, ?)").run(playerId, name, name.toLowerCase());
+  let offline = false;
+  const statuses = [];
+  globalThis.fetch = async (path, init) => {
+    if (offline) throw new Error("offline");
+    const response = await server.request(path, init);
+    if (path === "/api/runs") statuses.push(response.status);
+    return response;
+  };
+  let firstTab;
+  try {
+    stored = JSON.stringify({ playerId, name });
+    await act(async () => { firstTab = create(createElement(App), { createNodeMock }); tree = create(createElement(App), { createNodeMock }); });
+    await act(async () => { firstTab.root.findAllByType("button")[0].props.onClick(); });
+    await act(async () => { tree.root.findAllByType("button")[1].props.onClick(); });
+    assert.deepEqual(statuses, [201, 409, 201], "A conflicting choice must retry with the stored team");
+    const authoritative = { playerId, name, team: "tabs" };
+    assert.deepEqual(session.identity, authoritative);
+    assert.deepEqual(JSON.parse(stored), authoritative);
+    session.current.simulation.seconds = session.current.simulation.score = 1;
+    await act(async () => { session.end(); });
+    assert.equal(session.view.save, "saved");
+    assert.deepEqual(await realApi.teams(), { tabs: 1, spaces: 0 });
+    act(() => { firstTab.unmount(); tree.unmount(); }); firstTab = tree = undefined;
+
+    stored = JSON.stringify({ ...authoritative, team: "spaces" }); offline = true;
+    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    assert.ok(session.current, "A conflicted identity still plays offline");
+    assert.equal(tree.root.findAllByType("input").length, 0, "Recovery must not ask for another selection");
+    offline = false;
+    await act(async () => { session.start(); });
+    assert.deepEqual(session.identity, authoritative);
+    assert.deepEqual(JSON.parse(stored), authoritative);
+    act(() => { tree.unmount(); }); tree = undefined;
+
+    stored = JSON.stringify({ ...authoritative, team: "spaces" });
+    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    assert.deepEqual(session.identity, authoritative, "Online reload must recover an already-conflicted identity");
+    assert.deepEqual(JSON.parse(stored), authoritative);
+    session.current.simulation.seconds = session.current.simulation.score = 1;
+    await act(async () => { session.end(); });
+    assert.equal(session.view.save, "saved");
+    assert.deepEqual(await realApi.teams(), { tabs: 2, spaces: 0 });
+    assert.deepEqual(db.query("SELECT id, team FROM players").all(), [{ id: playerId, team: "tabs" }]);
+  } finally {
+    if (firstTab) act(() => { firstTab.unmount(); });
+    if (tree) act(() => { tree.unmount(); }); tree = undefined;
+    db.close();
+  }
 } finally { if (tree) act(() => { tree.unmount(); }); }
 assert.equal(timers.size, 0, "Unmount must clear outstanding UI timers");
 assert.ok(logged.length > 0, "Expected failures must be logged");

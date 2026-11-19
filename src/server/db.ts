@@ -71,13 +71,13 @@ export interface Run {
 export function getRun(db: Database, id: string): Run | null {
   return db.query("SELECT * FROM runs WHERE id = ?").get(id) as Run | null;
 }
-export type StartResult = { runId: string } | { error: "team-required" | "name-conflict" | "team-conflict" };
+export type StartResult = { runId: string } | { error: "team-required" | "name-conflict" } | { error: "team-conflict"; team: Team };
 export function startRun(db: Database, playerId: string, name: string, now: number, team?: Team): StartResult {
   return db.transaction(() => {
     const player = db.query("SELECT name, team FROM players WHERE id = ?").get(playerId) as { name: string; team: Team | null } | null;
     if (player && player.name !== name) return { error: "name-conflict" } as const;
     if (!player && !team) return { error: "team-required" } as const;
-    if (player?.team && team && player.team !== team) return { error: "team-conflict" } as const;
+    if (player?.team && team && player.team !== team) return { error: "team-conflict", team: player.team } as const;
     const assigned = player?.team ?? team ?? null;
     if (!player) db.query("INSERT INTO players(id, name, name_key, team) VALUES (?, ?, ?, ?)").run(playerId, name, nameKey(name), assigned);
     else if (!player.team && team) db.query("UPDATE players SET team = ? WHERE id = ?").run(team, playerId);
