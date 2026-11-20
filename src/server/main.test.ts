@@ -19,6 +19,8 @@ const env = {
   DATA_DIR: undefined,
   NODE_ENV: undefined,
   LOAD_TEST_START_LIMIT: undefined,
+  TRUST_PROXY_HOPS: undefined,
+  TRUSTED_PROXIES: undefined,
   PUBLIC_ORIGIN: undefined,
   RAILWAY_PUBLIC_DOMAIN: undefined,
 };
@@ -50,7 +52,7 @@ for (const file of new Bun.Glob("assets/*").scanSync("dist")) {
   assets.push({ path: file, status: response.status, type: response.headers.get("content-type") });
 }
 const starts = [];
-for (let i = 0; i < 32; i++) {
+for (let i = 0; i < 302; i++) {
   const response = await options.fetch(new Request("http://startup.test/api/runs", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ playerId: crypto.randomUUID(), name: "Robot", team: "tabs" }),
@@ -99,6 +101,41 @@ test("invalid load override fails before creating a database or starting a liste
   expect(existsSync(dataDir)).toBe(false);
 });
 
+test("invalid proxy hops fail before creating a database or starting a listener", () => {
+  const dataDir = join(scratch, "invalid-proxy-data");
+  const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
+    cwd: scratch, env: { ...env, DATA_DIR: dataDir, TRUST_PROXY_HOPS: "1e0" },
+    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+  });
+  expect(child.exitCode).not.toBe(0);
+  expect(child.stderr.toString()).toContain("TRUST_PROXY_HOPS must be a canonical nonnegative safe integer");
+  expect(child.stdout.toString()).not.toContain("App on");
+  expect(existsSync(dataDir)).toBe(false);
+});
+
+test.each(["0", "1", "2"])("startup wires proxy hops %s into client accounting", (hops) => {
+  const child = Bun.spawnSync([process.execPath, "--eval", `
+    let options;
+    Bun.serve = value => { options = value; return {}; };
+    await import("./src/server/main.ts");
+    const server = { requestIP: () => ({ address: "10.0.0.8" }) };
+    for (let i = 0; i < 301; i++) {
+      const client = "198.51." + Math.floor(i / 250) + "." + (i % 250 + 1);
+      const forwarded = process.env.TRUST_PROXY_HOPS === "2" ? client + ", 10.0.0.9" : "192.0.2.99, " + client;
+      const response = await options.fetch(new Request("http://startup.test/api/runs", {
+        method: "POST", headers: { "x-forwarded-for": forwarded },
+        body: JSON.stringify({ playerId: crypto.randomUUID(), name: "Robot", team: "tabs" }),
+      }), server);
+      const expected = process.env.TRUST_PROXY_HOPS === "0" && i === 300 ? 429 : 201;
+      if (response.status !== expected) throw new Error("Unexpected status " + response.status + " at " + i);
+    }
+  `], {
+    cwd: scratch, env: { ...env, TRUST_PROXY_HOPS: hops, DATA_DIR: join(scratch, `hops-${hops}`) },
+    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+  });
+  expect(child.exitCode, child.stderr.toString()).toBe(0);
+});
+
 test("invalid public origin fails before opening the database", () => {
   const dataDir = join(scratch, "invalid-origin-data");
   const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
@@ -114,7 +151,7 @@ test.each([
   { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
   {
     name: "production overrides",
-    overrides: { NODE_ENV: "production", PORT: "8080", DATA_DIR: join(scratch, "custom-data"), LOAD_TEST_START_LIMIT: "31" },
+    overrides: { NODE_ENV: "production", PORT: "8080", DATA_DIR: join(scratch, "custom-data"), LOAD_TEST_START_LIMIT: "301" },
     port: 8080,
     dataDir: join(scratch, "custom-data"),
     hostname: "0.0.0.0",
@@ -136,9 +173,10 @@ test.each([
   const result = JSON.parse(readFileSync(join(scratch, "startup.json"), "utf8"));
   expect({ port: result.port, hostname: result.hostname }).toEqual({ port, hostname });
   expect(existsSync(resolve(scratch, dataDir, "app.db"))).toBe(true);
-  expect(result.starts.slice(0, 30)).toEqual(Array(30).fill(201));
-  expect(result.starts.slice(30)).toEqual(overrides.NODE_ENV === "production" ? [201, 429] : [429, 429]);
+  expect(result.starts.slice(0, 300)).toEqual(Array(300).fill(201));
+  expect(result.starts.slice(300)).toEqual(overrides.NODE_ENV === "production" ? [201, 429] : [429, 429]);
   if (overrides.NODE_ENV === "production") expect(child.stderr.toString()).toContain("LOAD TEST");
+  else expect(child.stderr.toString()).not.toContain("LOAD TEST");
   const origin = overrides.PUBLIC_ORIGIN ? "https://custom.test" : overrides.RAILWAY_PUBLIC_DOMAIN ? "https://swarm.up.railway.app" : "http://startup.test";
   expect(result.html).toContain(`property="og:url" content="${origin}/"`);
   expect(result.html).toContain(`property="og:image" content="${origin}/og-image.png"`);

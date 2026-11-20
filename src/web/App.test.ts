@@ -18,7 +18,7 @@ console.error = (...args) => logged.push(args);
 const { createElement } = await import(${JSON.stringify(import.meta.resolve("react"))});
 const { create, act } = await import(${JSON.stringify(import.meta.resolve("react-test-renderer"))});
 const { Session } = await import(${moduleUrl("game/session.ts")});
-const { api } = await import(${moduleUrl("game/api.ts")});
+const { api, RateLimitError } = await import(${moduleUrl("game/api.ts")});
 const realApi = { ...api };
 const { step, IDLE } = await import(${moduleUrl("game/simulation.ts")});
 const { pick } = await import(${moduleUrl("game/upgrade-fixture.test-support.ts")});
@@ -207,6 +207,11 @@ try {
   const empty = text(tree.root.findByProps({ className: "build" }));
   assert.ok(empty.trim(), "Empty build must have explanatory text");
   assert.ok(UPGRADE_IDS.every(id => !empty.includes(UPGRADE_NAMES[id])));
+  const normalStart = api.start;
+  api.start = async () => { throw new RateLimitError(); };
+  await act(async () => { session.start(); session.end(); });
+  assert.ok(tree.root.findAllByProps({ role: "status" }).some(node => text(node) === "Too many runs right now. Your next run will save."));
+  assert.equal(session.view.save, "rate-limited");
   const over = tree.root.findByProps({ "aria-label": "Game over" });
   const token = session.view.token;
   act(() => { over.props.onPointerDown({ clientX: 1, clientY: 1 }); over.props.onPointerUp({ clientX: 1, clientY: 100, pointerType: "touch" }); });
@@ -218,6 +223,9 @@ try {
     restart.props.onClick({ detail: 1 });
   });
   assert.equal(session.view.token, token + 1, "A button tap must start exactly once");
+  assert.equal(session.view.save, "pending");
+  assert.equal(tree.root.findAllByProps({ "aria-label": "Game over" }).length, 0, "Refused starts must allow immediate restart");
+  api.start = normalStart;
   act(() => { tree.unmount(); }); tree = undefined;
 
   // Two independent entry screens share storage and an actual teamless server player.

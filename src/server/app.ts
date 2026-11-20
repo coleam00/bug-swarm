@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import { isIP } from "node:net";
 import type { Database } from "bun:sqlite";
 import { countEvents, finishRun, getRun, leaderboard, personalBest, startRun, teamTotals } from "./db";
 import { isTeam } from "../shared/teams";
 import { isId, plausible, parseFinish, validateName } from "./rules";
 import type { Leader, TeamTotals } from "../shared/api";
 
-export const START_LIMIT = 30;
+export const START_LIMIT = 300;
+export const PLAYER_START_LIMIT = 40;
 export const START_WINDOW_MS = 10 * 60 * 1000;
 export interface AppOptions {
   startLimit?: number;
@@ -14,9 +16,13 @@ export interface AppOptions {
   log?: (message: string, error: unknown) => void;
 }
 
-export function resolveClientIp(peer: string, forwarded: string | null, trusted: readonly string[]): string {
+export function resolveClientIp(peer: string, forwarded: string | null, trusted: readonly string[], hops = 0): string {
+  if (!forwarded || (hops === 0 && !trusted.includes(peer))) return peer;
+  const chain = forwarded.split(",").map((v) => v.trim());
+  // Never discard entries: doing so would change the trusted hop positions.
+  if (chain.some((ip) => ip.includes("%") || !isIP(ip))) return peer;
+  if (hops > 0) return chain[chain.length - hops] ?? peer;
   let ip = peer;
-  const chain = (forwarded ?? "").split(",").map((v) => v.trim()).filter(Boolean);
   while (trusted.includes(ip) && chain.length) ip = chain.pop()!;
   return ip;
 }
@@ -25,6 +31,14 @@ export function createApp(db: Database, options: AppOptions = {}) {
   const now = options.now ?? Date.now;
   const log = options.log ?? console.error;
   const buckets = new Map<string, number[]>();
+  const playerBuckets = new Map<string, number[]>();
+  function charge(budget: Map<string, number[]>, key: string, limit: number, time: number): number | null {
+    const starts = budget.get(key) ?? [];
+    if (starts.length >= limit) return Math.max(1, Math.ceil((starts[0]! + START_WINDOW_MS - time) / 1000));
+    starts.push(time);
+    budget.set(key, starts);
+    return null;
+  }
   let cached: { at: number; rows: Leader[] } | undefined;
   let cachedTeams: { at: number; totals: TeamTotals } | undefined;
   const app = new Hono<{ Variables: { clientIp: string } }>();
@@ -58,21 +72,25 @@ export function createApp(db: Database, options: AppOptions = {}) {
   app.get("/api/events/count", (c) => c.json(countEvents(db)));
   app.post("/api/runs", async (c) => {
     const time = now();
-    for (const [key, starts] of buckets) {
-      const live = starts.filter((at) => at > time - START_WINDOW_MS);
-      if (live.length) buckets.set(key, live); else buckets.delete(key);
+    for (const budget of [buckets, playerBuckets]) {
+      for (const [key, starts] of budget) {
+        const live = starts.filter((at) => at > time - START_WINDOW_MS);
+        if (live.length) budget.set(key, live); else budget.delete(key);
+      }
     }
-    const ip = c.get("clientIp");
-    const starts = buckets.get(ip) ?? [];
-    if (starts.length >= (options.startLimit ?? START_LIMIT)) {
-      c.header("Retry-After", String(Math.max(1, Math.ceil((starts[0]! + START_WINDOW_MS - time) / 1000))));
+    const ipRetry = charge(buckets, c.get("clientIp"), options.startLimit ?? START_LIMIT, time);
+    if (ipRetry !== null) {
+      c.header("Retry-After", String(ipRetry));
       return c.json({ error: "Too many runs. Try again shortly." }, 429);
     }
-    starts.push(time);
-    buckets.set(ip, starts);
     let body;
     try { body = await c.req.json(); } catch { return c.json({ error: "Invalid JSON." }, 400); }
     if (!body || !isId(body.playerId)) return c.json({ error: "Invalid player id." }, 400);
+    const playerRetry = charge(playerBuckets, body.playerId.toLowerCase(), PLAYER_START_LIMIT, time);
+    if (playerRetry !== null) {
+      c.header("Retry-After", String(playerRetry));
+      return c.json({ error: "Too many runs. Try again shortly." }, 429);
+    }
     const name = validateName(body.name);
     if (name.error) return c.json({ error: name.error }, 400);
     if ("team" in body && !isTeam(body.team)) return c.json({ error: "Choose Tabs or Spaces." }, 400);
