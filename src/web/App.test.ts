@@ -88,27 +88,6 @@ const { App } = await import(${moduleUrl("App.tsx")});
 let tree;
 const text = node => typeof node === "object" ? node.children.map(text).join(" ") : String(node);
 try {
-  // New moderation rules invalidate saved identities and require a fresh UUID.
-  for (const name of ["fuuuck", "admin"]) {
-    stored = JSON.stringify({ ...identity, name }); session = undefined;
-    const previous = stored;
-    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
-    assert.equal(session, undefined);
-    const input = tree.root.findByType("input");
-    assert.ok(!input.props.readOnly);
-    act(() => { input.props.onChange({ target: { value: name } }); });
-    act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
-    assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
-    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "That name is reserved");
-    assert.equal(session, undefined); assert.equal(stored, previous);
-    act(() => { input.props.onChange({ target: { value: "Scunthorpe" } }); });
-    await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
-    assert.ok(session.current);
-    assert.equal(session.identity.name, "Scunthorpe");
-    assert.notEqual(session.identity.playerId, identity.playerId);
-    assert.equal(JSON.parse(stored).playerId, session.identity.playerId);
-    act(() => { tree.unmount(); }); tree = undefined;
-  }
   // New and legacy identities use the same one-tap entry, without network waits.
   for (const legacy of [false, true]) {
     for (const team of ["tabs", "spaces"]) {
@@ -167,6 +146,27 @@ try {
       assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 0, "Reload must not rearm");
       act(() => { tree.unmount(); }); tree = undefined;
     }
+  }
+  // New moderation rules invalidate saved identities and require a fresh UUID.
+  for (const name of ["fuuuck", "admin"]) {
+    saved.identity = JSON.stringify({ ...identity, name }); session = undefined;
+    const previous = saved.identity;
+    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    assert.equal(session, undefined);
+    const input = tree.root.findByType("input");
+    assert.ok(!input.props.readOnly);
+    act(() => { input.props.onChange({ target: { value: name } }); });
+    act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
+    assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
+    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "That name is reserved");
+    assert.equal(session, undefined); assert.equal(saved.identity, previous);
+    act(() => { input.props.onChange({ target: { value: "Scunthorpe" } }); });
+    await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
+    assert.ok(session.current);
+    assert.equal(session.identity.name, "Scunthorpe");
+    assert.notEqual(session.identity.playerId, identity.playerId);
+    assert.equal(JSON.parse(saved.identity).playerId, session.identity.playerId);
+    act(() => { tree.unmount(); }); tree = undefined;
   }
   saved.identity = null; storageFails = true;
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
