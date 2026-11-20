@@ -21,6 +21,8 @@ A cutoff is a survivor, never a death. Missing groups cannot pass. Gates use unr
 
 CI asserts the full default matrix's original target object and runs a real ten-seed broad slice (200 cases), protecting each priority's 55-second floor, idle/death ceilings and scores. Enumeration and independent fixtures cover completeness, separate drone priorities, inclusive boundaries, hidden weak builds, cutoffs, invalid scores, reporting and command status. The full broad acceptance run stays outside `bun run check`. The existing 402-case first-card idle regression remains intact.
 
+The slice also replays seeded offers independently of the harness selector and compares actual acquired builds with their named priorities, including choices that differ from the first card for every priority. Command checks use the production dispatcher and both scenario generators, stubbing only individual scenario execution; this also exercises broad idle callbacks despite idle combat ending before upgrades. These checks enumerate the full workload without adding a full broad combat run to CI. Mutation checks reject first-card/fixed-priority selection, first-card broad idle selection and always-fast/always-broad dispatch; equivalent cloned priority/viewport arrays pass.
+
 ### Broad results
 
 All values are gameplay seconds. Each priority has 200 evasive cases; each shape has 500.
@@ -55,7 +57,7 @@ The first laser gives **4× robot firing rate** (1.5 seconds × 0.25 = **0.375 s
 
 Three-hit health, persistent contact attackers, no contact scoring/removal, shield refill cap, bomb recharge/repick rules, choice pauses, upgrade counts, finish payloads and server plausibility rules are unchanged. Deterministic tests exercise actual firing counts, cooldown acquisition, non-stacking, unchanged drones/projectiles, late spawn/pursuit values and cumulative spawn limits.
 
-`bun run check`: TypeScript and **200 tests / 86,383 assertions** pass. `bun run build`, default pacing and full broad pacing pass.
+`bun run check`: TypeScript and **200 tests / 86,489 assertions** pass. `bun run build`, default pacing and full broad pacing pass. The coverage repair reproduces the committed full broad after report exactly; combat and rendering are unchanged, so the recorded Chrome evidence below still applies.
 
 ### Fresh Chrome evidence
 

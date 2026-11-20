@@ -50,9 +50,9 @@ export function runScenario(scenario: Scenario, horizon = 600, policy?: ChoicePo
     validScore: finish !== null && plausible(finish, 0, state.time * 1000) && state.squashes <= state.nextId - 1 };
 }
 export type Result = ReturnType<typeof runScenario>;
-export function runMatrix(seeds: readonly number[] = SCENARIOS.map(s => s.seed)): Result[] {
+export function runMatrix(seeds: readonly number[] = SCENARIOS.map(s => s.seed), run = runScenario): Result[] {
   return (["idle", "evasive"] as const).flatMap(mode => VIEWPORTS.flatMap(viewport =>
-    SCENARIOS.filter(s => seeds.includes(s.seed)).map(s => runScenario({ ...s, mode, viewport }))));
+    SCENARIOS.filter(s => seeds.includes(s.seed)).map(s => run({ ...s, mode, viewport }))));
 }
 export const BROAD_SEEDS = Array.from({ length: 100 }, (_, seed) => seed);
 export const PRIORITIES = SCENARIOS.map(s => s.priority);
@@ -63,8 +63,8 @@ export function broadScenarios(seeds: readonly number[] = BROAD_SEEDS): Scenario
   return seeds.flatMap(seed => PRIORITIES.flatMap(priority => VIEWPORTS.flatMap(viewport =>
     (["idle", "evasive"] as const).map(mode => ({ seed, priority, viewport, mode })))));
 }
-export function runBroadMatrix(seeds: readonly number[] = BROAD_SEEDS): Result[] {
-  return broadScenarios(seeds).map(s => runScenario(s, 600,
+export function runBroadMatrix(seeds: readonly number[] = BROAD_SEEDS, run = runScenario): Result[] {
+  return broadScenarios(seeds).map(s => run(s, 600,
     offer => selectCard("evasive", offer, s.priority)));
 }
 export function under60(rows: readonly Result[]) {
@@ -136,13 +136,13 @@ function printSummary(label: string, rows: readonly Result[]): void {
   const s = summarize(rows);
   console.log(`${label}: count=${rows.length} median=${s.cutoffs >= Math.ceil(rows.length / 2) ? ">=" : ""}${s.median.toFixed(2)}s longest=${s.cutoffs ? ">=" : ""}${s.longest.toFixed(2)}s cutoffs=${s.cutoffs}`);
 }
-export function pacingCommand(args: readonly string[], run = (broad: boolean) => broad ? runBroadMatrix() : runMatrix(),
+export function pacingCommand(args: readonly string[], run = runScenario,
   report = printReport): number {
   const flags = args[0] === "--" ? args.slice(1) : args;
   if (flags.length > 1 || (flags.length === 1 && flags[0] !== "--broad")) {
     console.error("Usage: bun run pacing [--] [--broad]"); return 1;
   }
-  const broad = flags[0] === "--broad", rows = run(broad);
+  const broad = flags[0] === "--broad", rows = broad ? runBroadMatrix(undefined, run) : runMatrix(undefined, run);
   report(rows, broad);
   return Object.values(broad ? broadTargets(rows) : targets(rows)).every(Boolean) ? 0 : 1;
 }

@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
-import { CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS } from "../src/shared/upgrades";
+import { CHOICE_INTERVAL, CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS, type UpgradeId } from "../src/shared/upgrades";
 import { createSimulation, IDLE, step } from "../src/web/game/simulation";
+import { acquiredUpgrades, createUpgrades, openChoice, selectUpgrade } from "../src/web/game/upgrades";
 import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, printReport, PRIORITIES, priorityKey, resolveChoice, runBroadMatrix, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, under60, VIEWPORTS, type Result } from "./pacing";
 
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
@@ -23,7 +24,7 @@ test("broad enumeration crosses 100 seeds, five full priorities, both shapes and
   expect(new Set(cases.map(s => `${s.seed}/${s.mode}/${s.viewport.join("x")}/${priorityKey(s.priority)}`)).size).toBe(2000);
   expect([...new Set(cases.map(s => s.seed))]).toEqual(Array.from({ length: 100 }, (_, i) => i));
   for (const mode of ["idle", "evasive"] as const) for (const viewport of VIEWPORTS) for (const priority of PRIORITIES)
-    expect(cases.filter(s => s.mode === mode && s.viewport === viewport && s.priority === priority)).toHaveLength(100);
+    expect(cases.filter(s => s.mode === mode && s.viewport[0] === viewport[0] && s.viewport[1] === viewport[1] && priorityKey(s.priority) === priorityKey(priority))).toHaveLength(100);
   expect(PRIORITIES.filter(p => p[0] === REVIEW_LASER)).toHaveLength(1);
   expect(PRIORITIES.filter(p => p[0] === CI_DRONE)).toHaveLength(2);
 });
@@ -33,10 +34,21 @@ test("ten-seed broad slice protects every build's evasive floor and idle, death 
   expect(rows).toHaveLength(200);
   const gates = broadTargets(rows);
   expect(Object.entries(gates).filter(([name]) => name !== "evasiveMedian75to110").every(([, pass]) => pass)).toBe(true);
-  // Broad idle uses its named priority, unlike the legacy first-card matrix.
-  const scenario = broadScenarios([0]).find(s => s.mode === "idle" && s.priority[0] === REVIEW_LASER)!;
-  expect(rows.find(r => r.mode === "idle" && r.seed === 0 && r.viewport === scenario.viewport && r.priority === scenario.priority))
-    .toEqual(runScenario(scenario, 600, offer => selectCard("evasive", offer, scenario.priority)));
+  // Idle runs currently die before a choice. Moving runs exercise the policy:
+  // replay their seeded offers without reusing the harness's card selector.
+  const differsFromFirstCard = new Set<string>();
+  for (const row of rows.filter(r => r.mode === "evasive")) {
+    const expected = createUpgrades(row.seed);
+    // A fatal contact at a choice boundary ends the run before that offer opens.
+    for (let at = CHOICE_INTERVAL; at < row.elapsed - 1e-7; at += CHOICE_INTERVAL) {
+      openChoice(expected);
+      const chosen = row.priority.find(id => expected.offer!.includes(id))!;
+      if (chosen !== expected.offer![0]) differsFromFirstCard.add(priorityKey(row.priority));
+      selectUpgrade(expected, expected.choiceNumber, chosen);
+    }
+    expect(row.build).toEqual(acquiredUpgrades(expected));
+  }
+  expect([...differsFromFirstCard].sort()).toEqual(PRIORITIES.map(priorityKey).sort());
 });
 
 function broadFixture(evasive = 90): Result[] {
@@ -86,19 +98,35 @@ test("under-60 diagnostics use raw times, boundary tolerance and only evasive ru
   evasive[0]!.dead = false;
   expect(under60(rows)).toEqual({ count: 0, total: 10, percent: 0 });
 });
-test("command selects the requested workload and returns failure for unknown flags or failed gates", () => {
-  const selected: boolean[] = [], reportedModes: boolean[] = [];
-  const run = (broad: boolean) => { selected.push(broad); return broadFixture(); };
-  const report = (_rows: readonly Result[], broad = false) => { reportedModes.push(broad); };
+test("production command dispatch enumerates the requested workload and rejects unknown flags or failed gates", () => {
+  let executions = 0;
+  const reports: { broad: boolean; count: number }[] = [];
+  const idlePriorities = new Set<string>();
+  // Stub only combat execution, below the real dispatcher and both generators.
+  const run: typeof runScenario = (scenario, _horizon, policy) => {
+    executions++;
+    // Idle combat ends before choices today; exercise its actual broad callback
+    // with an offer where first-card selection disagrees with named priorities.
+    if (scenario.mode === "idle" && policy && !idlePriorities.has(priorityKey(scenario.priority))) {
+      const offer: readonly UpgradeId[] = [REVIEW_LASER, REFACTOR_BOMB, CI_DRONE];
+      expect(policy(offer, 1)).toBe(scenario.priority.find(id => offer.includes(id))!);
+      idlePriorities.add(priorityKey(scenario.priority));
+    }
+    return { ...reported(scenario.mode, scenario.viewport, scenario.mode === "idle" ? 30 : 90), ...scenario };
+  };
+  const report = (rows: readonly Result[], broad = false) => { reports.push({ broad, count: rows.length }); };
   expect(pacingCommand([], run, report)).toBe(0);
   expect(pacingCommand(["--"], run, report)).toBe(0);
   expect(pacingCommand(["--broad"], run, report)).toBe(0);
   expect(pacingCommand(["--", "--broad"], run, report)).toBe(0);
-  expect(selected).toEqual([false, false, true, true]); expect(reportedModes).toEqual(selected);
+  expect(reports).toEqual([{ broad: false, count: 20 }, { broad: false, count: 20 },
+    { broad: true, count: 2000 }, { broad: true, count: 2000 }]);
+  expect(executions).toBe(4040);
+  expect([...idlePriorities].sort()).toEqual(PRIORITIES.map(priorityKey).sort());
   for (const args of [["--unknown"], ["--broad", "extra"], ["--broad", "--broad"]])
     expect(pacingCommand(args, run, report)).toBe(1);
-  expect(selected).toHaveLength(4);
-  expect(pacingCommand(["--broad"], () => broadFixture(74), report)).toBe(1);
+  expect(executions).toBe(4040);
+  expect(pacingCommand(["--broad"], scenario => ({ ...run(scenario), elapsed: scenario.mode === "idle" ? 30 : 74 }), report)).toBe(1);
 });
 test("broad output retains case records and every mode/shape/full-priority summary and gate", () => {
   const lines: string[] = [], log = spyOn(console, "log").mockImplementation(line => { lines.push(String(line)); });
