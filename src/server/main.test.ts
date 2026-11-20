@@ -19,6 +19,8 @@ const env = {
   DATA_DIR: undefined,
   NODE_ENV: undefined,
   LOAD_TEST_START_LIMIT: undefined,
+  PUBLIC_ORIGIN: undefined,
+  RAILWAY_PUBLIC_DOMAIN: undefined,
 };
 
 // Run the actual entry point without opening a TCP listener. Capture the options
@@ -27,17 +29,22 @@ const probe = `
 let options;
 Bun.serve = (value) => { options = value; return {}; };
 await import("./src/server/main.ts");
-const page = await options.fetch(new Request("http://startup.test/"));
+const page = await options.fetch(new Request("http://startup.test/", { headers: { "X-Forwarded-Host": "spoofed.test", "X-Forwarded-Proto": "https" } }));
 const html = await page.text();
 const assetPath = html.match(/src="([^"]+\\.js)"/)?.[1];
 if (!assetPath) throw new Error("Built HTML has no JavaScript bundle");
 const asset = await options.fetch(new Request(new URL(assetPath, "http://startup.test")));
 const boards = [];
-for (const path of ["/board", "/board/", "/board?stream=1"]) {
+for (const path of ["/index.html", "/board", "/board/", "/board?stream=1", "/unknown-spa-path"]) {
   const response = await options.fetch(new Request("http://startup.test" + path));
   boards.push({ path, status: response.status, html: await response.text() });
 }
 const assets = [];
+const images = [];
+for (const path of ["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png", "/og-image.png"]) {
+  const response = await options.fetch(new Request("http://startup.test" + path));
+  images.push({ path, status: response.status, type: response.headers.get("content-type"), size: (await response.arrayBuffer()).byteLength });
+}
 for (const file of new Bun.Glob("assets/*").scanSync("dist")) {
   const response = await options.fetch(new Request("http://startup.test/" + file));
   assets.push({ path: file, status: response.status, type: response.headers.get("content-type") });
@@ -51,7 +58,7 @@ for (let i = 0; i < 32; i++) {
   starts.push(response.status);
 }
 await Bun.write("startup.json", JSON.stringify({
-  boards, assets, starts,
+  boards, assets, starts, images,
   port: options.port,
   hostname: options.hostname,
   pageStatus: page.status,
@@ -92,6 +99,17 @@ test("invalid load override fails before creating a database or starting a liste
   expect(existsSync(dataDir)).toBe(false);
 });
 
+test("invalid public origin fails before opening the database", () => {
+  const dataDir = join(scratch, "invalid-origin-data");
+  const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
+    cwd: scratch, env: { ...env, DATA_DIR: dataDir, PUBLIC_ORIGIN: "https://example.test/path" },
+    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+  });
+  expect(child.exitCode).not.toBe(0);
+  expect(child.stderr.toString()).toContain("PUBLIC_ORIGIN");
+  expect(existsSync(dataDir)).toBe(false);
+});
+
 test.each([
   { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
   {
@@ -108,6 +126,8 @@ test.each([
     dataDir: join(scratch, "dev-data"),
     hostname: "127.0.0.1",
   },
+  { name: "public origin", overrides: { PUBLIC_ORIGIN: "https://custom.test/", RAILWAY_PUBLIC_DOMAIN: "ignored.test", DATA_DIR: join(scratch, "origin-data") }, port: 3000, dataDir: join(scratch, "origin-data"), hostname: "0.0.0.0" },
+  { name: "Railway origin", overrides: { RAILWAY_PUBLIC_DOMAIN: "swarm.up.railway.app", DATA_DIR: join(scratch, "railway-data") }, port: 3000, dataDir: join(scratch, "railway-data"), hostname: "0.0.0.0" },
 ])("startup uses $name", async ({ overrides, port, dataDir, hostname }) => {
   const child = Bun.spawnSync([process.execPath, "--eval", probe], {
     cwd: scratch, env: { ...env, ...overrides }, stdout: "pipe", stderr: "pipe", timeout: 10_000,
@@ -119,7 +139,15 @@ test.each([
   expect(result.starts.slice(0, 30)).toEqual(Array(30).fill(201));
   expect(result.starts.slice(30)).toEqual(overrides.NODE_ENV === "production" ? [201, 429] : [429, 429]);
   if (overrides.NODE_ENV === "production") expect(child.stderr.toString()).toContain("LOAD TEST");
-  if (overrides.NODE_ENV !== "production") return; // Bundle assertions only need one startup case.
+  const origin = overrides.PUBLIC_ORIGIN ? "https://custom.test" : overrides.RAILWAY_PUBLIC_DOMAIN ? "https://swarm.up.railway.app" : "http://startup.test";
+  expect(result.html).toContain(`property="og:url" content="${origin}/"`);
+  expect(result.html).toContain(`property="og:image" content="${origin}/og-image.png"`);
+  expect(result.html).not.toContain("__BUG_SWARM_PUBLIC_ORIGIN__");
+  for (const image of result.images) {
+    expect(image.status).toBe(200);
+    expect(image.type).toMatch(/^image\//);
+    expect(image.size).toBeGreaterThan(100);
+  }
   expect(result.pageStatus).toBe(200);
   expect(result.html.toLowerCase()).toContain("<!doctype html>");
   expect(result.assetStatus).toBe(200);
