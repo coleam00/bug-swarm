@@ -1,11 +1,31 @@
 import { expect, test } from "bun:test";
-import { BUG_KINDS, ROBOT_RADIUS, STEP, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier } from "./config";
+import { BUG_KINDS, ROBOT_RADIUS, ROBOT_SPEED, STEP, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier } from "./config";
 import { createSimulation as createLiveSimulation, IDLE, nearestBug, spawnBug, step } from "./simulation";
 // Isolate individual combat rules; upgraded pacing lives in scripts/pacing.test.ts.
 const createSimulation: typeof createLiveSimulation = (...args) => {
   const state = createLiveSimulation(...args); state.upgrades.nextChoiceAt = Infinity; return state;
 };
 const [BASE, FAST] = BUG_KINDS;
+
+test("directional speed is explicit, clamped and independent of direction magnitude or mouse targets", () => {
+  for (const [speed, fraction] of [[undefined, 1], [0.5, 0.5], [0, 0], [-1, 0], [2, 1]] as const) {
+    for (const [x, y] of [[0.01, 0], [1, 1], [-3, -4]]) {
+      const s = createSimulation(1);
+      step(s, { x: x!, y: y!, speed, target: { x: 0, y: 0 } }, STEP);
+      const length = Math.hypot(x!, y!);
+      expect(s.robot.x).toBeCloseTo(300 + x! / length * ROBOT_SPEED * STEP * fraction);
+      expect(s.robot.y).toBeCloseTo(300 + y! / length * ROBOT_SPEED * STEP * fraction);
+    }
+  }
+  const s = createSimulation(1);
+  step(s, { x: 0, y: 0, speed: 0, target: { x: 301, y: 300 } }, STEP);
+  expect(s.robot).toEqual({ x: 301, y: 300 });
+  step(s, { x: 0, y: 0, target: { x: 301, y: 300 } }, STEP);
+  expect(s.robot).toEqual({ x: 301, y: 300 });
+  s.robot = { x: 585, y: 15 };
+  step(s, { x: 1, y: -1, speed: 0.5, target: null }, 1);
+  expect(s.robot).toEqual({ x: 600 - ROBOT_RADIUS, y: ROBOT_RADIUS });
+});
 
 test("bugs chase the robot", () => {
   const s = createSimulation(1);

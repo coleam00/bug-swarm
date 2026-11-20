@@ -1,6 +1,6 @@
 import { ROBOT_RADIUS } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
-import { viewport, type Viewport } from "./input";
+import { TOUCH_RADIUS, viewport, type Joystick, type Viewport } from "./input";
 import { Assets, type CanvasFactory } from "./assets";
 import { BUG_STYLES } from "./styles";
 import { dronePosition, type Simulation } from "./simulation";
@@ -22,7 +22,7 @@ export class Renderer {
     this.assets?.dispose();
     this.assets = new Assets(Math.max(0.1, this.view.scale * ratio), Math.max(0.01, this.view.scale), arena, this.factory);
   }
-  draw(state: Simulation, fx: Effects): void {
+  draw(state: Simulation, fx: Effects, joystick?: Readonly<Joystick> | null): void {
     // A restart may change world shape without changing the canvas's CSS size.
     if (this.view.arena.width !== state.arena.width || this.view.arena.height !== state.arena.height) {
       this.resize(this.width, this.height, this.ratio, state.arena);
@@ -132,6 +132,16 @@ export class Renderer {
       ctx.drawImage(art.label, x - w / 2, y - h / 2, w, h);
     }
     ctx.restore();
+    // Screen coordinates: outside the world clip, scale, shake and vignette.
+    if (joystick) {
+      ctx.save();
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+      ctx.strokeStyle = "#65dfcb66"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(joystick.x, joystick.y, TOUCH_RADIUS, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#65dfcb88";
+      ctx.beginPath(); ctx.arc(joystick.x + joystick.dx, joystick.y + joystick.dy, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
   }
   dispose(): void { this.assets?.dispose(); this.assets = null; }
 }
