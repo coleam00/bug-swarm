@@ -41,7 +41,7 @@ let rollingStart = 0, rollingFrames = 0, lastShot = 0, lastHit = 0, lastBurst = 
 let peakParticles = 0, peakTrails = 0, peakLabels = 0, minBugs = Infinity, maxBugs = 0;
 let minFastBugs = Infinity, maxFastBugs = 0;
 let stopped = false;
-let blocks = 0, detonations = 0, laserKills = 0, droneShots = 0, peakRings = 0;
+let blocks = 0, detonations = 0, laserKills = 0, droneShots = 0, peakRings = 0, peakShieldFlashes = 0;
 const droneCooldowns = new Float64Array(state.drones.length);
 let frame = 0;
 function resize() {
@@ -84,7 +84,7 @@ function report() {
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),
     fixtureMeanMs: mean(fixtures), fixtureP95Ms: percentile(fixtures, 0.95),
-    blocks, detonations, laserKills, droneShots, peakRings, peakParticles, peakTrails, peakLabels, minBugs, maxBugs, minFastBugs, maxFastBugs,
+    blocks, detonations, laserKills, droneShots, peakRings, peakShieldFlashes, peakParticles, peakTrails, peakLabels, labelCapacity: fx.labels.capacity, minBugs, maxBugs, minFastBugs, maxFastBugs,
     worldWidth: state.arena.width, worldHeight: state.arena.height,
     viewport: [innerWidth, innerHeight], dpr: devicePixelRatio, renderDpr: Math.min(devicePixelRatio || 1, 2), userAgent: navigator.userAgent };
 }
@@ -117,6 +117,7 @@ function tick(timestamp: number) {
     for (const bug of state.bugs) if (bug.kind === "fast") fastBugs++;
     minFastBugs = Math.min(minFastBugs, fastBugs); maxFastBugs = Math.max(maxFastBugs, fastBugs);
     peakRings = Math.max(peakRings, fx.ring.life > 0 ? 1 : 0);
+    peakShieldFlashes = Math.max(peakShieldFlashes, Number(fx.shieldFlash > 0));
     peakParticles = Math.max(peakParticles, fx.particles.count); peakTrails = Math.max(peakTrails, fx.trails.count); peakLabels = Math.max(peakLabels, fx.labels.count);
     rollingFrames++;
     if (timestamp - rollingStart >= 1000) { rolling.push(rollingFrames * 1000 / (timestamp - rollingStart)); rollingFrames = 0; rollingStart = timestamp; }
@@ -124,7 +125,7 @@ function tick(timestamp: number) {
   previous = timestamp;
   if (elapsed - lastReadout >= 500) {
     readout.textContent = sampleStart === null ? `150 bugs · ${burst ? "burst" : "normal"}\nWarmup ${Math.floor(elapsed / 1000)} / 10s` :
-      `150 bugs · ${burst ? "burst" : "normal"}\n${(1000 / mean(intervals)).toFixed(1)} FPS · ${Math.min(60, Math.floor((timestamp - sampleStart) / 1000))} / 60s\nupdate ${mean(updates).toFixed(2)} ms · draw ${mean(draws).toFixed(2)} ms\nparticles ${fx.particles.count}/1024 · labels ${fx.labels.count}/256`;
+      `150 bugs · ${burst ? "burst" : "normal"}\n${(1000 / mean(intervals)).toFixed(1)} FPS · ${Math.min(60, Math.floor((timestamp - sampleStart) / 1000))} / 60s\nupdate ${mean(updates).toFixed(2)} ms · draw ${mean(draws).toFixed(2)} ms\nparticles ${fx.particles.count}/${fx.particles.capacity} · labels ${fx.labels.count}/${fx.labels.capacity} · block ${Number(fx.shieldFlash > 0)}`;
     lastReadout = elapsed;
   }
   if (sampleStart !== null && timestamp - sampleStart >= duration) {

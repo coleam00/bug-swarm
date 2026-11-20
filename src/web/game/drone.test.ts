@@ -3,6 +3,7 @@ import { CI_DRONE, REVIEW_LASER } from "../../shared/upgrades";
 import { createSimulation, dronePosition, IDLE, nearestBug, step } from "./simulation";
 import { pick } from "./upgrade-fixture.test-support";
 import { openChoice } from "./upgrades";
+import { SHOT_SPEED, SHOT_LIFETIME } from "./config";
 
 test("drone orbit is deterministic, evenly spaced, and acquisition preserves existing cooldowns", () => {
   const s = createSimulation(1); s.spawnIn = s.fireIn = Infinity;
@@ -28,11 +29,23 @@ test("drones target independently from their own position, share laser budgets, 
   expect(nearestBug(s)!.id).toBe(1);
   step(s, IDLE, 0.001);
   expect(s.shots).toHaveLength(2); expect(s.shots[0]!.vx).toBeGreaterThan(0); expect(s.shots[1]!.vx).toBeLessThan(0);
-  expect(s.shots.every(shot => shot.remaining === 2 && shot.laser)).toBe(true);
+  expect(s.shots.every(shot => shot.remaining === 2 && shot.laser && shot.source === "drone")).toBe(true);
   s.shots = []; step(s, IDLE, 0.5); expect(s.shots).toHaveLength(0);
   step(s, IDLE, 1); expect(s.shots).toHaveLength(2); // 1.5-second firing cadence
   openChoice(s.upgrades); const paused = structuredClone(s); step(s, IDLE, 50); expect(s).toEqual(paused);
   s.upgrades.offer = null; s.dead = true; const dead = structuredClone(s); step(s, IDLE, 50); expect(s).toEqual(dead);
+});
+
+test("both firing paths stamp source without changing shot velocity, lifetime or piercing", () => {
+  const s = createSimulation(1); s.spawnIn = Infinity;
+  pick(s, CI_DRONE); pick(s, REVIEW_LASER); pick(s, REVIEW_LASER);
+  s.fireIn = 0; s.bugs = [{ id: 1, kind: "base", x: 590, y: 300 }];
+  step(s, IDLE, 0.001);
+  expect(s.shots.map(shot => shot.source)).toEqual(["robot", "drone"]);
+  for (const shot of s.shots) {
+    expect(shot.remaining).toBe(3); expect(shot.laser).toBe(true);
+    expect(Math.hypot(shot.vx, shot.vy)).toBeCloseTo(SHOT_SPEED); expect(shot.life).toBeCloseTo(SHOT_LIFETIME - 0.001);
+  }
 });
 
 test("drones skip empty targets and kill through the same scoring and collision path", () => {
