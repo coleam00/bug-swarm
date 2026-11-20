@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Best, Finish, Leader, RunStarted, Standing, TeamTotals } from "../../shared/api";
+import type { Best, Finish, Leader, RunStarted, Saved, Standing, TeamTotals } from "../../shared/api";
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
 import { FakeTiming } from "./timing.test-support";
@@ -12,7 +12,7 @@ import { step, IDLE } from "./simulation";
 
 test("every start samples arena once and isolates dimensions from its provider", () => {
   let calls = 0, dimensions = { ...arenaForViewport(390, 844) };
-  const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }), teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
+  const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }), teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true, held: false }),
     best: async () => ({ best: null }), leaders: async () => [] };
   const session = new Session(identity, api, () => 42, undefined, () => { calls++; return dimensions; });
   const first = startRun(session);
@@ -143,7 +143,7 @@ function fixture(overrides: Partial<GameApi> = {}) {
   const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }),
     teams: async () => ({ tabs: 0, spaces: 0 }),
     start: async () => ({ runId: `run-${++starts}` }),
-    finish: async (id, result) => { finishes.push({ id, result }); return { saved: true }; },
+    finish: async (id, result) => { finishes.push({ id, result }); return { saved: true, held: false }; },
     best: async () => ({ best: 7 }), leaders: async () => [{ playerId: "other", name: "Server", score: 99 }],
     ...overrides,
   };
@@ -237,12 +237,60 @@ test("offline start and rejected finish log failures and keep restart usable", a
     startRun(session); expect(session.view.over).toBe(false);
   }
 });
-test("a pending save from an old run never changes current save state", async () => {
-  const saved = deferred<{ saved: true }>();
+test("a pending held save from an old run never changes current save state", async () => {
+  const saved = deferred<{ saved: true; held: boolean }>();
   const { session } = fixture({ finish: () => saved.promise });
   startRun(session); session.end(); await flush(); startRun(session);
-  saved.resolve({ saved: true }); await flush(); expect(session.view.save).toBe("pending");
+  saved.resolve({ saved: true, held: true }); await flush(); expect(session.view.save).toBe("pending");
 });
+
+test("held is a successful server save that retains the score and refreshes all result reads", async () => {
+  let bests = 0, leaders = 0, teams = 0;
+  const { session, logs } = fixture({ finish: async () => ({ saved: true, held: true }),
+    best: async () => { bests++; return { best: 13800 }; },
+    leaders: async () => { leaders++; return []; }, teams: async () => { teams++; return { tabs: 0, spaces: 0 }; } });
+  const run = startRun(session); run.simulation.score = 13800;
+  session.end(); await flush();
+  expect(session.view).toMatchObject({ score: 13800, save: "held", best: 13800, leaders: [], teamTotals: { tabs: 0, spaces: 0 } });
+  expect([bests, leaders, teams]).toEqual([2, 2, 2]); expect(logs).toEqual([]);
+  startRun(session); expect(session.view.over).toBe(false);
+});
+test("review reads retain durable saves on failure, ignore older held responses and stop after approval", async () => {
+  const replies: ReturnType<typeof deferred<Saved>>[] = [];
+  const calls: { id: string; result: Finish }[] = [];
+  const { session, logs } = fixture({ leaders: async () => [], finish: (id, result) => {
+    calls.push({ id, result });
+    if (calls.length === 1) return Promise.resolve({ saved: true, held: true });
+    const reply = deferred<Saved>(); replies.push(reply); return reply.promise;
+  } });
+  const run = startRun(session); session.end(); await flush();
+  const older = session.refreshReview(run), failed = session.refreshReview(run);
+  const failure = new Error("offline"); replies[1]!.reject(failure); await failed;
+  expect(session.view.save).toBe("held");
+  expect(logs.some(log => log.error === failure && log.message.includes(run.runId!))).toBe(true);
+  const approved = session.refreshReview(run);
+  replies[2]!.resolve({ saved: true, held: false }); await approved;
+  replies[0]!.resolve({ saved: true, held: true }); await older;
+  expect(session.view.save).toBe("saved");
+  await session.refreshReview(run);
+  expect(session.view.leaders).toEqual([]);
+  expect(session.view.standing?.rank).toBeNull(); // Approval does not depend on public visibility.
+  expect(calls).toHaveLength(4);
+  expect(calls.every(call => call.id === run.runId && call.result === run.result)).toBe(true);
+});
+
+test("late review approval cannot change a restarted run", async () => {
+  const reply = deferred<Saved>(); let finishes = 0;
+  const { session } = fixture({ finish: () => ++finishes === 1 ? Promise.resolve({ saved: true, held: true }) : reply.promise });
+  const run = startRun(session); session.end(); await flush();
+  const pending = session.refreshReview(run);
+  startRun(session);
+  reply.resolve({ saved: true, held: false }); await pending;
+  expect(session.view.save).toBe("pending");
+  await session.refreshReview(run);
+  expect(finishes).toBe(2);
+});
+
 test("reads follow the server and stale reads cannot overwrite newer reads or runs", async () => {
   const reads: ReturnType<typeof deferred<Leader[]>>[] = [], bests: ReturnType<typeof deferred<Best>>[] = [];
   const { session } = fixture({

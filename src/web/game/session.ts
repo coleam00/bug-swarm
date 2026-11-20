@@ -25,7 +25,7 @@ export interface LocalRun {
 }
 export interface SessionView {
   restartReady: boolean; choiceReady: boolean;
-  token: number; over: boolean; score: number; save: "pending" | "saved" | "failed" | "rate-limited";
+  token: number; over: boolean; score: number; save: "pending" | "saved" | "held" | "failed" | "rate-limited";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   standing: Standing | null; standingStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
@@ -70,6 +70,7 @@ export class Session {
     if (this.poll) { clearInterval(this.poll); this.poll = undefined; }
     if (this.listeners.size && this.view.over) this.poll = setInterval(() => {
       void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!); void this.refreshStanding(this.current!);
+      void this.refreshReview(this.current!);
     }, 2000);
   }
   private clearGuardTimer() {
@@ -169,14 +170,27 @@ export class Session {
       // is a conservative lower bound on server elapsed time; delay only the save.
       const readyAt = run.registeredAt! + run.result!.seconds * 1000;
       while (this.clock.now() < readyAt) await this.clock.sleep(Math.ceil(readyAt - this.clock.now()));
-      await this.api.finish(id, run.result!);
+      const saved = await this.api.finish(id, run.result!);
       if (this.current !== run) return;
-      this.view = { ...this.view, save: "saved" }; this.emit();
+      this.view = { ...this.view, save: saved.held ? "held" : "saved" }; this.emit();
       void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run); void this.refreshStanding(run);
     } catch (error) {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);
       if (this.current !== run) return;
       this.view = { ...this.view, save: run.startFailure ?? "failed" }; this.emit();
+    }
+  }
+  async refreshReview(run: LocalRun): Promise<void> {
+    if (this.current !== run || this.view.save !== "held" || !run.runId || !run.result) return;
+    try {
+      // Identical finish retries read the persisted hold without writing another event.
+      const saved = await this.api.finish(run.runId, run.result);
+      if (!saved.held && this.current === run && this.view.save === "held") {
+        this.view = { ...this.view, save: "saved" }; this.emit();
+      }
+    } catch (error) {
+      // The score is already durable; a status-read failure must not become a save failure.
+      this.log(`Review status read failed [${run.runId}]`, error);
     }
   }
   async refreshBest(run: LocalRun): Promise<void> {

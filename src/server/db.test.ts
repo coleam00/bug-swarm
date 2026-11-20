@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { countEvents, finishRun, getRun, hideName, leaderboard, openDb, personalBest, rankedPlayers, startRun, teamTotals } from "./db";
+import { approveRun, countEvents, finishRun, getRun, hideName, leaderboard, listHeldRuns, openDb, personalBest, rankedPlayers, startRun, teamTotals } from "./db";
 
 test("actual legacy schema migrates additively and survives repeated reopen", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-db-")), path = join(dir, "app.db");
@@ -30,8 +30,9 @@ test("event failure rolls back the entire start and finish transaction", () => {
     db.exec("DROP TRIGGER fail_event;");
     const id = (startRun(db, player, "Robot", 0, "tabs") as { runId: string }).runId;
     db.exec("CREATE TRIGGER fail_event BEFORE INSERT ON events BEGIN SELECT RAISE(ABORT, 'test'); END;");
-    expect(() => finishRun(db, id, { playerId: player, score: 20, squashes: 0, seconds: 20, touch: false, upgrades: [{ id: UPGRADE_IDS[0], count: 1 }] }, 20000)).toThrow();
+    expect(() => finishRun(db, id, { playerId: player, score: 13800, squashes: 1350, seconds: 300, touch: false, upgrades: [{ id: UPGRADE_IDS[0], count: 1 }] }, 300000)).toThrow();
     expect(getRun(db, id)?.ended_at_ms).toBeNull();
+    expect(getRun(db, id)?.held).toBe(0);
     expect(getRun(db, id)?.upgrades).toBe("[]");
     expect(countEvents(db).run_ended).toBe(0);
   } finally { db.close(); }
@@ -135,5 +136,75 @@ test("team moderation filters each player's run-team sums without changing retai
     expect(history()).toEqual(before);
     hideName(db, "Hancock", 0);
     expect(teamTotals(db)).toEqual({ tabs: 0, spaces: 0 });
+  } finally { db.close(); }
+});
+
+test("hold migration backfills only finished high scores once and preserves approvals and history on reopen", () => {
+  const dir = mkdtempSync(join(tmpdir(), "swarm-holds-")), path = join(dir, "app.db");
+  let db = new Database(path);
+  try {
+    db.exec(`CREATE TABLE players (id TEXT PRIMARY KEY, name TEXT NOT NULL, name_key TEXT NOT NULL, team TEXT);
+      CREATE TABLE runs (id TEXT PRIMARY KEY, player_id TEXT, started_at_ms INTEGER NOT NULL,
+        ended_at_ms INTEGER, score INTEGER, squashes INTEGER, seconds INTEGER, touch INTEGER,
+        upgrades TEXT NOT NULL DEFAULT '[]', team TEXT);
+      CREATE TABLE events (id INTEGER PRIMARY KEY, type TEXT NOT NULL, at TEXT NOT NULL, run_id TEXT);
+      INSERT INTO players VALUES ('player', 'Robot', 'robot', 'tabs');
+      INSERT INTO runs VALUES ('high', 'player', 0, 300000, 13800, 1350, 300, 1, '[{"id":"ci-drone","count":1}]', 'tabs');
+      INSERT INTO runs VALUES ('boundary', 'player', 0, 100000, 3000, 290, 100, 0, '[]', 'tabs');
+      INSERT INTO runs VALUES ('below', 'player', 0, 99000, 2999, 290, 99, 0, '[]', 'tabs');
+      INSERT INTO runs VALUES ('above', 'player', 0, 101000, 3001, 290, 101, 0, '[]', 'tabs');
+      INSERT INTO runs (id, player_id, started_at_ms, score) VALUES ('pending', 'player', 0, 13800);
+      INSERT INTO events VALUES (1, 'run_ended', '2026-11-20T00:05:00.000Z', 'high');`);
+    const before = db.query("SELECT * FROM runs ORDER BY id").all() as Record<string, unknown>[];
+    db.close(); db = openDb(path);
+    expect(getRun(db, "high")?.held).toBe(1);
+    expect(getRun(db, "boundary")?.held).toBe(0);
+    expect(getRun(db, "below")?.held).toBe(0);
+    expect(getRun(db, "above")?.held).toBe(1);
+    expect(getRun(db, "pending")?.held).toBe(0);
+    expect(db.query("SELECT * FROM runs ORDER BY id").all().map(row => {
+      const { held, ...rest } = row as Record<string, unknown>; return rest;
+    })).toEqual(before);
+    expect(approveRun(db, "high")).toBe("approved");
+    db.close(); db = openDb(path); db.close(); db = openDb(path);
+    expect(getRun(db, "high")?.held).toBe(0);
+    expect(approveRun(db, "high")).toBe("already-eligible");
+    expect(countEvents(db).run_ended).toBe(1);
+    expect(() => db.exec("UPDATE runs SET held = 2")).toThrow();
+  } finally { db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("held runs leave earlier eligible bests, tie times and ten public ranks intact; approval respects moderation", () => {
+  const db = openDb(":memory:");
+  const add = (playerId: string, name: string, score: number, at: number) => {
+    const started = startRun(db, playerId, name, 0, "tabs");
+    if ("error" in started) throw new Error(started.error);
+    finishRun(db, started.runId, { playerId, score, squashes: 700, seconds: 225, touch: false }, at);
+    return started.runId;
+  };
+  try {
+    add("returning", "Returning", 100, 20);
+    const held = add("returning", "Returning", 3001, 1);
+    for (let i = 0; i < 10; i++) add(`p${i}`, `Robot ${i}`, 99 - i, 10);
+    const rival = add("rival", "Rival", 3001, 10); approveRun(db, rival);
+    const later = add("returning", "Returning", 3001, 30); approveRun(db, later);
+    // The held finish at t=1 cannot beat the rival's eligible t=10.
+    expect(leaderboard(db).slice(0, 2).map(row => row.playerId)).toEqual(["rival", "returning"]);
+    db.query("UPDATE runs SET held = 1 WHERE id = ?").run(later);
+    const rows = leaderboard(db);
+    expect(rows).toHaveLength(10); expect(rows[1]).toEqual({ playerId: "returning", name: "Returning", score: 100 });
+    expect(personalBest(db, "returning")).toBe(3001);
+    expect(teamTotals(db).tabs).toBe(3001 + 100 + 945);
+    const hidden = add("hidden", "Hidden Robot", 13800, 2);
+    const blocked = add("blocked", "admin", 13800, 3);
+    hideName(db, "Hidden Robot", 0);
+    expect(listHeldRuns(db).map(row => row.id)).toContain(hidden);
+    expect(listHeldRuns(db).map(row => row.id)).toContain(blocked);
+    const events = countEvents(db);
+    approveRun(db, hidden); approveRun(db, blocked); approveRun(db, held);
+    expect(leaderboard(db)[0]?.playerId).toBe("returning");
+    expect(leaderboard(db).some(row => ["hidden", "blocked"].includes(row.playerId))).toBe(false);
+    expect(teamTotals(db).tabs).toBe(3001 + 3001 + 100 + 945);
+    expect(personalBest(db, "hidden")).toBe(13800); expect(countEvents(db)).toEqual(events);
   } finally { db.close(); }
 });

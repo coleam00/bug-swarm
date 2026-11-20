@@ -3,7 +3,7 @@ import { STEP } from "../src/web/game/config";
 import { chooseUpgrade, createSimulation, IDLE, step, type Input, type Simulation } from "../src/web/game/simulation";
 import { acquiredUpgrades } from "../src/web/game/upgrades";
 import { CI_DRONE as D, REFACTOR_BOMB as B, REVIEW_LASER as L, TEST_SHIELD as S, type UpgradeId } from "../src/shared/upgrades";
-import { parseFinish, plausible } from "../src/server/rules";
+import { needsReview, parseFinish, plausible } from "../src/server/rules";
 
 export const SCENARIOS = [
   { seed: 1, priority: [S, D, B, L] }, { seed: 42, priority: [D, B, S, L] },
@@ -130,6 +130,7 @@ export function printReport(rows: readonly Result[], broad = false): void {
     const share = under60(rows);
     console.log(`evasive under60: ${share.count}/${share.total} (${share.percent.toFixed(1)}%)`);
   }
+  console.log(`review candidates: ${rows.filter(r => needsReview(r.score)).length} (informational)`);
   console.log(`score failures: ${rows.filter(r => !r.validScore).length}`);
   for (const [name, pass] of Object.entries(broad ? broadTargets(rows) : targets(rows))) console.log(`${pass ? "PASS" : "FAIL"} ${name}`);
 }

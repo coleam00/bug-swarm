@@ -2,6 +2,8 @@ import { expect, spyOn, test } from "bun:test";
 import { CHOICE_INTERVAL, CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS, type UpgradeId } from "../src/shared/upgrades";
 import { createSimulation, IDLE, step } from "../src/web/game/simulation";
 import { acquiredUpgrades, createUpgrades, openChoice, selectUpgrade } from "../src/web/game/upgrades";
+import { finishRun, getRun, openDb, startRun } from "../src/server/db";
+import { needsReview } from "../src/server/rules";
 import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, printReport, PRIORITIES, priorityKey, resolveChoice, runBroadMatrix, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, under60, VIEWPORTS, type Result } from "./pacing";
 
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
@@ -16,6 +18,27 @@ test("default matrix keeps all five seeds, modes, shapes and distinct upgrade pr
   for (const priority of priorities) expect([...priority].sort()).toEqual([...UPGRADE_IDS].sort());
   expect(priorities.some(p => p[0] === TEST_SHIELD)).toBe(true);
   expect(priorities.some(p => p[0] === CI_DRONE && p[1] === REFACTOR_BOMB)).toBe(true);
+});
+
+test("honest high-score scenario is saved for review; plausible review candidates pass both pacing commands", () => {
+  const measured = runScenario({ seed: 46, mode: "evasive", viewport: [1280, 800],
+    priority: [CI_DRONE, REVIEW_LASER, REFACTOR_BOMB, TEST_SHIELD] });
+  // Evasion can diverge across platforms; verify the workflow, not an exact tally.
+  expect(measured.dead).toBe(true); expect(measured.validScore).toBe(true);
+  expect(needsReview(measured.score)).toBe(true);
+  const db = openDb(":memory:"), playerId = crypto.randomUUID();
+  try {
+    const started = startRun(db, playerId, "Honest Robot", 0, "tabs");
+    if ("error" in started) throw new Error(started.error);
+    expect(finishRun(db, started.runId, { playerId, score: measured.score, seconds: measured.seconds,
+      squashes: measured.squashes, touch: false, upgrades: measured.build }, Math.ceil(measured.elapsed * 1000)))
+      .toEqual({ saved: true, held: true });
+    expect(getRun(db, started.runId)?.score).toBe(measured.score);
+  } finally { db.close(); }
+  for (const args of [[], ["--broad"]]) expect(pacingCommand(args, scenario => ({
+    ...reported(scenario.mode, scenario.viewport, scenario.mode === "idle" ? 30 : 90), ...scenario,
+    ...(scenario.mode === "evasive" ? { score: 3090, seconds: 90, squashes: 300 } : {}), validScore: true,
+  }), () => {})).toBe(0);
 });
 
 test("broad enumeration crosses 100 seeds, five full priorities, both shapes and modes exactly once", () => {

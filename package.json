@@ -10,6 +10,8 @@
     "stats": "bun scripts/stats.ts",
     "pacing": "bun scripts/pacing.ts",
     "hide": "bun scripts/hide.ts",
+    "review": "bun scripts/review.ts",
+    "approve": "bun scripts/approve.ts",
     "load": "bun scripts/load.ts",
     "reset": "bun scripts/reset.ts"
   },

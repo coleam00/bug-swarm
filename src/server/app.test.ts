@@ -2,9 +2,10 @@ import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Finish } from "../shared/api";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
-import { countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
+import { approveRun, countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
 import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
 import { acquiredUpgrades } from "../web/game/upgrades";
 import { arenaForViewport } from "../web/game/arena";
@@ -41,6 +42,37 @@ test("events are counted by type, with zeros for types not seen", async () => {
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
+test.each([
+  { score: 2999, squashes: 290, seconds: 99, held: false },
+  { score: 3000, squashes: 290, seconds: 100, held: false },
+  { score: 3001, squashes: 290, seconds: 101, held: true },
+  { score: 7000, squashes: 670, seconds: 300, held: true },
+  { score: 13800, squashes: 1350, seconds: 300, held: true },
+])("plausible $score-point finish is saved with held=$held; retries follow approval", async ({ score, squashes, seconds, held }) => {
+  let time = 0;
+  const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+  const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" }))).json() as { runId: string };
+  time = seconds * 1000;
+  const result = { playerId, score, squashes, seconds, touch: true };
+  const send = (body: Finish = result) => app.request(`/api/runs/${runId}/finish`, post(body));
+  // A high but impossible submission is still refused and leaves no finish or hold.
+  expect((await send({ ...result, score: 13810, squashes: 1351, seconds: 300 })).status).toBe(400);
+  expect(getRun(db, runId)?.ended_at_ms).toBeNull(); expect(getRun(db, runId)?.held).toBe(0);
+  for (let i = 0; i < 2; i++) {
+    const response = await send(); expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ saved: true, held });
+  }
+  expect(getRun(db, runId)).toMatchObject({ score, seconds, squashes, held: Number(held), ended_at_ms: time, touch: 1 });
+  expect(await (await app.request("/api/leaderboard")).json()).toEqual(held ? [] : [{ playerId, name: "Robot", score }]);
+  expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: held ? 0 : score, spaces: 0 });
+  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: score });
+  expect(await (await app.request(`/api/players/${playerId}/standing`)).json()).toEqual({ rank: held ? null : 1, total: held ? 0 : 1, next: null });
+  approveRun(db, runId);
+  expect(await (await send()).json()).toEqual({ saved: true, held: false });
+  expect((await send({ ...result, touch: false })).status).toBe(409);
+  expect(countEvents(db).run_ended).toBe(1);
+});
+
 test("personal standings rank eligible bests, target ties, and change population after moderation", async () => {
   let time = 1000;
   const app = createApp(db, { now: () => time });
@@ -53,6 +85,9 @@ test("personal standings rank eligible bests, target ties, and change population
   ids.forEach((id, i) => add(id, i < 2 ? "Same Name" : `Robot${i}`, i === 13 ? 0 : 100 - i, i));
   add(ids[0]!, "Same Name", 100, 999); // Repeating a best retains its first achievement.
   add(ids[1]!, "Same Name", 100, 1);
+  // A held best neither replaces an earlier eligible best nor inflates targets.
+  add(ids[1]!, "Same Name", 7000, 0);
+  const heldOnly = crypto.randomUUID(); add(heldOnly, "Held Robot", 7000, 0);
   const excluded = ["admin", "fuuuck", "Hidden Robot"].map(name => {
     const id = crypto.randomUUID(); add(id, name, 1000, 0); return id;
   });
@@ -69,7 +104,7 @@ test("personal standings rank eligible bests, target ties, and change population
   expect(await read(ids[9]!)).toEqual({ rank: 10, total: 14, next: { rank: 9, pointsToBeat: 2 } });
   expect(await read(ids[10]!)).toEqual({ rank: 11, total: 14, next: { rank: 10, pointsToBeat: 2 } });
   expect(await read(ids[13]!)).toEqual({ rank: 14, total: 14, next: { rank: 13, pointsToBeat: 89 } });
-  for (const id of [...excluded, unfinished, crypto.randomUUID()]) {
+  for (const id of [...excluded, heldOnly, unfinished, crypto.randomUUID()]) {
     expect(await read(id)).toEqual({ rank: null, total: 14, next: null });
   }
   hideName(db, "Same Name", time);
