@@ -11,3 +11,5 @@ Quick commands:
 - `bun install` then `bun run dev`
 - `bun run check` must pass before any pull request.
 - `bun run stats` prints the bet's numbers. `bun run hide "<name>"` hides a name from every board.
+- `bun run review` lists held scores; `bun run approve <run id>` releases one. Scores strictly above 3,000 await review, including honest outliers, and do not count on public boards, personal standings or team totals until approved. Commands use `DATA_DIR/app.db` (default `data/app.db`).
+- Pacing reports review candidates without failing on them.

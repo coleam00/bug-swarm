@@ -29,7 +29,7 @@ export function Board({ controller: supplied, origin = window.location.origin }:
       <div className={`board-race-bar${race && !race.totals.tabs && !race.totals.spaces ? " board-neutral" : ""}`} aria-hidden="true">
         {TEAMS.map(team => <span key={team} style={{ width: `${(race?.shares[team] ?? 0.5) * 100}%`, background: TEAM_COLOURS[team] }} />)}
       </div>
-      <p className="board-race-note">{!race ? "Waiting for team scores…" : !race.totals.tabs && !race.totals.spaces ? "No team scores yet" : "Every finished run counts"}</p>
+      <p className="board-race-note">{!race ? "Waiting for team scores…" : !race.totals.tabs && !race.totals.spaces ? "No team scores yet" : "Every team score counts"}</p>
     </section>
     <section className="board-leaders" aria-labelledby="board-top-ten">
       <h2 id="board-top-ten">Top 10</h2>

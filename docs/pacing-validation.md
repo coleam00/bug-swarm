@@ -69,6 +69,35 @@ Two representative rejected curves were captured with the [historical script at 
 Gentle uses `(time, interval)` knots `(0,.95), (15,.9), (20,.2), (22,.2), (23,10), (45,10)` before the original late knots. It preserves every evasive gate but fails both idle gates; 359/1,000 broad idle cases leave the proposed range. Pressure uses `(0,2), (15,2), (20,.02), (22,.02), (23,10), (45,10)` before the original late knots. It brings all but 31/1,000 broad idle cases inside the range, but fails the default evasive gate, broad overall median and four of the five per-priority floors. Every run in both candidates ends by 240 seconds.
 
 Complete rejected reports: [gentle default](steering-evidence/gentle-default.txt), [gentle broad](steering-evidence/gentle-broad.txt), [pressure default](steering-evidence/pressure-default.txt), [pressure broad](steering-evidence/pressure-broad.txt). These are historical diagnostic failures, not acceptance evidence for the final change.
+## Score review ceiling: issue #49
+
+`bun run pacing --broad` at `31b5ee6481b59ff19b78784e123f31a9ff96851f` measured a maximum **4,816 points** across **2,000 runs**: evasive seed **46**, **1280x800**, priority **ci-drone / review-laser / refactor-bomb / test-shield**. The owner set **`REVIEW_SCORE = 3000`**, independent of that measurement: only scores strictly above 3,000 are held. Approving an honest top run is preferable to leaving a forged #1 on stream. Plausibility remains an independent rejection gate; plausible **7,000 / 300 seconds / 670 squashes** and **13,800 / 300 seconds / 1,350 squashes** finishes are saved but held.
+
+The historical calibration used Windows and Bun **1.4.2**. Linux CI with Bun **1.4.5** scored the same maximum scenario at **3,950**: floating-point evasion can diverge across runtime/platform versions. Its regression asserts a valid, completed finish saved for review rather than an exact historical tally.
+
+Both pacing commands retain every plausibility, completeness, death-time and median gate. Review-candidate counts are informational: honest outliers can require approval without failing pacing. Default and broad command fixtures cover a plausible 3,090-point evasive result without changing gameplay. Lower forged scores can still pass; cheat-proof scoring remains a non-goal.
+
+The additive `runs.held` migration holds existing finished scores above the ceiling only when adding the column. Approvals persist across retries and reopen. Held runs stay in private bests and bet stats, but are excluded before public best selection, tie ordering, the top-ten cutoff, personal standing population/targets and team sums. Manual hides and current name validation remain authoritative after approval.
+
+Owner commands use `DATA_DIR/app.db` (default `data/app.db`):
+
+```sh
+bun run review
+bun run approve <run-id>
+bun run hide "Robot Name"
+```
+
+Review prints run id, JSON-escaped name, score, submitted seconds, squashes and UTC finish time, oldest first, including hidden or now-blocked names. An empty or missing database prints `No held runs` without creating a missing file. Approve releases one finished run; an already eligible run is a successful no-op. Invalid arguments, missing databases and unknown or unfinished ids fail. Approval retains all finish fields and events. Hide applies to held players too. See [architecture.md](../architecture.md#owner-commands) for command semantics.
+
+Validation on Windows, 2026-11-20:
+
+- `bun run check`: TypeScript and **458 tests** passed. The file-backed integration verifies approval at one-second cache expiry and both clients' two-second polls, including standing, review-status clearance and hidden-player exclusion.
+- `bun run pacing` (**20 cases**) and `bun run pacing --broad` (**2,000 cases**) passed every gate. Review candidates: **1** and **73** respectively on Windows/Bun **1.4.2**; these counts are measurements, not acceptance gates. `bun run build` passed.
+- [Chrome evidence](review-evidence/browser.json): Chrome **156.0.8078.4**, **390x844** portrait and **844x390** landscape. A synthetic **7,000-point** finish passed through real API handlers, scratch SQLite and actual `review` / `approve` subprocesses. The held result showed score, private best, `Under review`, and `Not ranked`; it was absent from public rows and team sums. Approval reached both foreground views, team totals and personal standing, and cleared `Under review` to `Score saved`, in **1.86 s / 1.87 s**. Replay worked in both sizes, touch targets met 44 px, and there was no horizontal overflow or page error. [Held portrait](review-evidence/held-390.png), [held landscape](review-evidence/held-844.png), [approved game](review-evidence/approved-game-390.png), [approved board](review-evidence/approved-board-390.png).
+
+The suite covers strict 2,999/3,000/3,001 boundaries, both forgery fixtures, migration/reopen, atomic rollback, retries, moderation, owner CLIs, private stats, eligible bests/ties, standings and polling. While the result screen stays open, held status refreshes every two seconds through an identical finish retry. Approval clears `Under review` to `Score saved` without replay or another finish event; public rows, standings and totals refresh independently. Status-read failures retain the durable save, and delayed replies cannot change a replayed run.
+
+Reproduce Chrome evidence with [review-validation.probe.ts](review-validation.probe.ts): create a scratch directory with its own `package.json`, install `playwright-core` there, set `SCRATCH` to it and `CHROME` to an isolated Chrome executable, run `bun run build`, then `bun docs/review-validation.probe.ts`. The probe creates its own home/profile and databases below scratch and closes every browser/database handle. Its server clock uses a synthetic offset to exercise a 300-second fixture immediately, then advances with real elapsed time for cache expiry. This proves browser layout and the review workflow, not human gameplay or mobile hardware performance.
 
 ## Score plausibility calibration: issue #34
 
@@ -80,7 +109,7 @@ Before changing validation, `runBroadMatrix()` from `scripts/pacing.ts` at `e5bd
 
 All three maxima occur in evasive seed **46**, viewport **1280×800**, priority **ci-drone → review-laser → refactor-bomb → test-shield**. The maximum score is **4,816**, rather than the issue's approximate 2,600. Reproduce by importing `runBroadMatrix`, then reducing the returned rows by `squashes / seconds`, `squashes / elapsed` and `elapsed`, respectively.
 
-`rules.ts` caps squashes at **4.5 per submitted second** (approximately 1.5 × the measured maximum, rounded upward) and submitted gameplay duration at **300 seconds**. Submitted seconds cannot exceed whole server elapsed seconds. Extra wall-clock time, including upgrade choices, earns no extra squash allowance; an otherwise legal short finish can still arrive after a long pause. These empirical bounds limit obvious forgeries, not cheating: the maximum accepted score is still **13,800**, and the owner hides bad entries manually. Exceptional legitimate runs can exceed these measured bounds.
+`rules.ts` caps squashes at **4.5 per submitted second** (approximately 1.5 × the measured maximum, rounded upward) and submitted gameplay duration at **300 seconds**. Submitted seconds cannot exceed whole server elapsed seconds. Extra wall-clock time, including upgrade choices, earns no extra squash allowance; an otherwise legal short finish can still arrive after a long pause. These empirical bounds limit obvious forgeries, not cheating: the maximum accepted score is still **13,800**. Issue #49 now holds scores above **3,000** for owner review, as described above; lower forged scores can still pass. Exceptional legitimate runs can exceed these measured bounds.
 
 The harness feeds every finish through the real `plausible()` function using `Math.ceil(state.time * 1000)` as its synthetic server completion timestamp, the first integer millisecond at or after completion. Raw `elapsed` remains unchanged for measurements. This avoids microscopic floating-point drift below a whole second when simulation scoring uses `floor(time + 1e-9)`; the server gains no clock slack. The seeded API simulation fixture uses the same convention. Default-matrix acceptance and the existing ten-seed broad slice cover compatibility, including whole-second finishes; full broad validation remains a manual command.
 

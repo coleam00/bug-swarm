@@ -104,7 +104,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
         <div className="over-summary">
           <h1>Game over</h1><p className="final-score">Score {exactScore(view.score)}</p>
           <TeamRace view={view} />
-          <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
+          <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "held" ? "Under review" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
           <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best === null ? "No saved runs yet" : exactScore(view.best)}</p>
           <PersonalStanding view={view} />
           <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
