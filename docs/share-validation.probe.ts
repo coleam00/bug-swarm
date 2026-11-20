@@ -110,6 +110,7 @@ try {
       selection: getComputedStyle(el).userSelect, buttons: [...el.querySelectorAll("button")].every(b => getComputedStyle(b).touchAction === "manipulation") }));
     assert.deepEqual(dialog, { overflow: "auto", overscroll: "none", selection: "none", buttons: true });
     await page.screenshot({ path: join(evidence, `${key}-choice.png`) });
+    await page.locator('dialog button[aria-disabled="false"]').first().waitFor();
     await page.locator("dialog button").first().tap(); await page.locator("dialog").waitFor({ state: "detached" });
     // Force game over for gesture evidence; the accelerated result is correctly rejected by the API.
     await session("end"); await page.locator(".over ol li").nth(9).waitFor();
@@ -122,7 +123,8 @@ try {
     assert.equal(scroll.overscroll, "none"); if (scroll.range > 0) assert.ok(scroll.top > 0);
     await page.screenshot({ path: join(evidence, `${key}-over.png`) });
     const restart = starts;
-    // Any stationary overlay tap restarts, even after scrolling the results.
+    // After the guard, a stationary overlay tap restarts, even after scrolling the results.
+    await page.getByRole("button", { name: "Play again" }).waitFor({ state: "visible" });
     await page.locator(".over").tap({ position: { x: 20, y: 20 } });
     await page.locator(".over").waitFor({ state: "detached" });
     await page.waitForTimeout(100); assert.equal(starts, restart + 1);

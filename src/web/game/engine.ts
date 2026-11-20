@@ -47,7 +47,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     renderer.resize(width, height, ratio, session.current?.simulation.arena);
   };
   const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
-  const restart = (touch: boolean) => { clear(); token = session.start(touch).token; };
+  const restart = (touch: boolean) => session.restart(session.view.token, touch);
   const locate = (event: PointerEvent) => {
     const box = canvas.getBoundingClientRect();
     target = mapPointer(event.clientX - box.left, event.clientY - box.top, viewport(width, height, session.current?.simulation.arena));
@@ -56,7 +56,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     if (session.view.choice) return;
     if (event.button !== 0) return;
     if (pointer.id !== null) return;
-    if (session.view.over) restart(event.pointerType === "touch");
+    if (session.view.over && !restart(event.pointerType === "touch")) { event.preventDefault(); return; }
     const box = canvas.getBoundingClientRect();
     pointer.down(event.pointerId, event.pointerType, event.clientX - box.left, event.clientY - box.top);
     canvas.setPointerCapture(event.pointerId);
@@ -94,8 +94,11 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
     if (key === "f" && !event.repeat) { showDebug = !showDebug; if (!showDebug) debug(""); return; }
     if (MOVEMENT_KEYS.has(key) || key === " ") event.preventDefault();
     if (session.view.over) {
+      if (key === "enter") event.preventDefault();
       if (!event.repeat && !heldAtDeath.has(key) && !["shift", "control", "alt", "meta", "tab", "escape"].includes(key)) {
-        restart(false); keys.add(key);
+        event.preventDefault();
+        if (restart(false)) keys.add(key);
+        else heldAtDeath.add(key);
       }
       return;
     }

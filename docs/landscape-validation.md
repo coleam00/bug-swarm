@@ -27,7 +27,7 @@ Chrome's `Emulation.setSafeAreaInsetsOverride` supplied real `env(safe-area-inse
 
 HUD, canvas, results controls and all three upgrade cards stay inside those bounds. At 740×360 with the 44/44/21 insets, the results viewport is 339 px high; row ten ends at 284 px and Play again at 272 px, without scrolling. Portrait still scrolls its long leaderboard inside the safe results panel. All three portrait upgrade cards fit, including at 360×640 with insets. Dialog focus starts on a card, remains in the modal and restores to canvas on selection.
 
-A separate smoke used the real Hono app and a fresh SQLite database. Rotating portrait → landscape preserved steering: CDP touch down/drag moved the robot. Rotating a pending upgrade choice to portrait and back preserved that choice. After selection, a fresh unmodified run played and saved successfully through the real API. One touch on Play again issued exactly one new start, immediately resumed play and selected the existing 800×450 landscape simulation arena. There were **zero uncaught browser errors**.
+A separate smoke used the real Hono app and a fresh SQLite database. Rotating portrait → landscape preserved steering: CDP touch down/drag moved the robot. Rotating a pending upgrade choice to portrait and back preserved that choice. After selection, a fresh unmodified run played and saved successfully through the real API. Once the existing restart guard allowed replay, one touch on Play again issued exactly one new start, resumed play and selected the existing 800×450 landscape simulation arena. There were **zero uncaught browser errors**.
 
 The layout only changes CSS display dimensions. The existing canvas ResizeObserver updates rendering size; no simulation dimensions, Session behavior, input rules, pacing, renderer or per-frame work were added or changed. This is browser layout evidence on the factory machine, with no new frame-rate claim.
 
@@ -46,6 +46,8 @@ Replayed the reported mutations against the repaired checks:
 - Reordering metadata to `viewport-fit = cover , initial-scale = 1 , width = device-width` passes the metadata tests and all **49 game / eight board** browser cases. Removing `viewport-fit=cover` still fails the required-value assertion.
 
 All temporary mutations were restored. The fresh final production build passed all 57 browser cases, real save, rotation, steering and single replay. Source inspection found entry, the game shell and the dialog already inset-aware; the game cases continue to cover the shell and dialog geometry. Other viewport metadata assertions check their intended values; no other viewport directive string comparison remains. The browser probe remains a manually invoked developer check.
+
+Merged newer `main` at `ecca27f` to resolve overlapping game-over markup and tests. Kept its 800 ms replay guard, 350 ms choice guard, input handlers and guard tests; the guarded restart controls stay inside the left summary. The layout probe waits for published control readiness before successful input and screenshots. The inherited guard probe's landscape-scrolling assertion was updated to the new no-scroll layout, matching the already-superseded team validation. Session and engine files match `main` exactly. Rechecked the 57 cases and reported mutations after integration. The guard browser probe also passed at 390×844, 844×390 and 1280×720, including early-input rejection, fresh inputs, reduced motion, focus, offline replay and zero uncaught errors. All ten requested playing/results screenshot files were byte-identical to fresh post-merge captures, so their existing PR links remain valid.
 
 ## Screenshots
 
@@ -67,8 +69,8 @@ The probe intercepts every request to a synthetic HTTPS origin, serving built as
 
 Validation completed:
 
-- `bun test src/web/App.test.ts src/server/share-meta.test.ts`: 23 passed. Phase transitions, score/race adjacency within the summary, all upgrades/counts, server-derived values, failure feedback, immediate single restart and viewport metadata are covered.
-- `bun run check`: TypeScript and **302 tests passed**, 90,032 assertions, zero failures after the review repairs.
+- `bun test src/web/App.test.ts src/server/share-meta.test.ts`: 23 passed. Phase transitions, score/race adjacency within the summary, all upgrades/counts, server-derived values, failure feedback, guarded single restart and viewport metadata are covered.
+- `bun run check`: TypeScript and **311 tests passed**, 90,137 assertions, zero failures after merging the input guards and review repairs.
 - `bun run pacing` with no flags: all **20 default cases** passed `idle60`, `evasiveMedian60to180`, `allDead240`, `scoresPlausible`; evasive median 78.69 s, longest 136.87 s, zero score failures.
 - `bun run build`: production build passed.
 - `bun docs/landscape-validation.probe.ts`: all **49 game and eight board cases**, real save, rotation, touch steering and single replay passed.

@@ -175,6 +175,7 @@ async function finish(fixture: any, state: string) {
     : state === "rate-limited" ? "Too many runs right now. Your next run will save." : "Score saved";
   await fixture.page.getByText(text, { exact: true }).waitFor();
   if (state !== "loading") await fixture.page.waitForFunction(() => !document.querySelector(".over")?.textContent?.includes("Loading…"));
+  await fixture.page.locator(".over button").waitFor({ state: "visible" });
 }
 
 try {
@@ -194,6 +195,7 @@ try {
       await measure(fixture.page, `${width}x${height}-playing`, touch);
       await action(fixture.page, "choice");
       await fixture.page.locator("dialog[open]").waitFor();
+      await fixture.page.locator('.choices button[aria-disabled="false"]').first().waitFor();
       await measure(fixture.page, `${width}x${height}-choice`, touch, none, width === 740);
       assert.equal(await fixture.page.evaluate(() => document.activeElement?.tagName), "BUTTON");
       const focusedCard = () => fixture.page.evaluate(() => [...document.querySelectorAll(".choices button")].indexOf(document.activeElement!));
@@ -219,6 +221,7 @@ try {
       const m = await measure(f.page, `${width}x${height}-desktop`, false);
       assert.ok(m.footer.text.includes("FPS"));
       await action(f.page, "choice"); await f.page.locator("dialog[open]").waitFor();
+      await f.page.locator('.choices button[aria-disabled="false"]').first().waitFor();
       await measure(f.page, `${width}x${height}-desktop-choice`, false, none, false);
       await f.page.keyboard.press("1");
       await finish(f, "populated");
@@ -236,6 +239,7 @@ try {
     try {
       await measure(f.page, `${prefix}-playing`, true, insets, false);
       await action(f.page, "choice"); await f.page.locator("dialog[open]").waitFor();
+      await f.page.locator('.choices button[aria-disabled="false"]').first().waitFor();
       await measure(f.page, `${prefix}-choice`, true, insets);
       await f.page.keyboard.press("1");
       await finish(f, "zero");
@@ -261,12 +265,14 @@ try {
     await f.page.setViewportSize({ width: 844, height: 390 });
     await measure(f.page, "rotation-choice-landscape", true, none, false);
     assert.deepEqual((await action(f.page, "read")).choice, choice, "Rotation preserves choice");
+    await f.page.locator('.choices button[aria-disabled="false"]').first().waitFor();
     await f.page.getByRole("button").first().tap();
     // Start a fresh, unmodified run for real score acceptance after modal fixtures.
     await action(f.page, "start");
     await f.page.waitForTimeout(1100);
     await action(f.page, "end");
     await f.page.getByText("Score saved", { exact: true }).waitFor({ timeout: 5000 });
+    await f.page.locator(".over button").waitFor({ state: "visible" });
     const before = f.starts();
     await f.page.getByRole("button", { name: "Play again" }).tap();
     await f.page.locator(".game[data-phase=playing]").waitFor();

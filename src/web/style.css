@@ -73,3 +73,8 @@ button:focus-visible, canvas:focus-visible { outline: 3px solid #fff4ab; outline
   .over ol { margin: 4px auto; }
   .over li { padding: 0 0 0 4px; line-height: 20px; }
 }
+
+/* Readiness changes never restart this animation: the group mounts once per choice. */
+.choice-cards { animation: choice-arrival var(--choice-guard) linear both; }
+@keyframes choice-arrival { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .choice-cards { animation: none; } }
