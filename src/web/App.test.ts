@@ -28,8 +28,12 @@ api.finish = async () => ({ saved: true });
 api.teams = async () => ({ tabs: 0, spaces: 0 });
 api.best = async () => ({ best: null }); api.leaders = async () => [];
 let session;
-mock.module(${moduleUrl("game/session.ts")}, () => ({ Session: class extends Session {
-  constructor(...args) { super(...args, { now: () => clock, sleep: async ms => { wait(ms); } }); session = this; }
+mock.module(${moduleUrl("game/session.ts")}, () => ({ CHOICE_GUARD_MS: 350, Session: class extends Session {
+  constructor(...args) {
+    super(...args, { now: () => clock, sleep: async ms => { wait(ms); } },
+      { now: () => clock, schedule: (fn, delay) => setTimeout(fn, delay), cancel: id => clearTimeout(id) });
+    session = this;
+  }
 } }));
 mock.module(${moduleUrl("game/engine.ts")}, () => ({ mountGame: () => () => {} }));
 
@@ -61,8 +65,8 @@ let stored = JSON.stringify(identity), storageFails = false;
 globalThis.localStorage = { getItem: () => stored, setItem: (_key, value) => {
   if (storageFails) throw new Error("disabled"); stored = value;
 } };
-globalThis.window = { innerWidth: 390, innerHeight: 844 };
-globalThis.document = { activeElement: null };
+globalThis.window = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844 });
+globalThis.document = Object.assign(new EventTarget(), { activeElement: null });
 const focusable = () => ({ focus() { document.activeElement = this; } });
 const canvas = focusable(), dialogs = [];
 function createNodeMock(element) {
@@ -108,7 +112,7 @@ try {
       if (legacy) assert.equal(selected.playerId, identity.playerId);
       await act(async () => { session.end(); });
       assert.equal(session.view.save, "failed");
-      act(() => { session.start(); });
+      act(() => { wait(800); session.start(); });
       assert.equal(tree.root.findAllByType("input").length, 0);
       act(() => { tree.unmount(); }); tree = undefined;
       api.start = start;
@@ -123,7 +127,7 @@ try {
   act(() => { tree.root.findByType("input").props.onChange({ target: { value: "Robot" } }); });
   await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
   assert.equal(session.identity.team, "tabs"); assert.equal(stored, null);
-  act(() => { session.start(); }); assert.equal(tree.root.findAllByType("input").length, 0);
+  act(() => { wait(800); session.start(); }); assert.equal(tree.root.findAllByType("input").length, 0);
   act(() => { tree.unmount(); }); tree = undefined;
   storageFails = false; stored = JSON.stringify(identity);
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
@@ -131,12 +135,76 @@ try {
   const portrait = session.current;
   assert.deepEqual(portrait.simulation.arena, { width: 450, height: 800 });
   window.innerWidth = 844; window.innerHeight = 390;
-  act(() => { session.start(); });
+  act(() => { wait(800); session.start(); });
   assert.deepEqual(session.current.simulation.arena, { width: 800, height: 450 });
   assert.deepEqual(portrait.simulation.arena, { width: 450, height: 800 });
 
+  // Wall-clock guards publish without input, keep their layout, and never queue a press.
+  const pointerEvent = { pointerType: "touch", pointerId: 7, button: 0, clientX: 5, clientY: 5 };
+  const keyEvent = key => ({ key, repeat: false, prevented: false, preventDefault() { this.prevented = true; } });
+  function openChoice() {
+    act(() => { wait(800); session.start(); });
+    const simulation = session.current.simulation;
+    simulation.time = 19.99; simulation.spawnIn = simulation.fireIn = Infinity;
+    act(() => { step(simulation, IDLE, 0.02); session.publishChoice(); });
+    return tree.root.findByType("dialog");
+  }
+  for (const key of ["Enter", " "]) {
+    const dialog = openChoice(), choice = session.view.choice;
+    const card = dialog.findAllByType("button")[0], group = dialog.findByProps({ className: "choice-cards" });
+    assert.equal(group.props.style["--choice-guard"], "350ms");
+    assert.equal(card.props["aria-disabled"], true);
+    act(() => { card.props.onClick({ detail: 0 }); }); assert.equal(session.view.choice, choice);
+    act(() => { card.props.onPointerDown(pointerEvent); });
+    const early = keyEvent(key); act(() => { dialog.props.onKeyDown(early); });
+    assert.ok(early.prevented, "Early native key activation must be suppressed");
+    // Re-record the early pointer; a key may clear the previous pointer modality.
+    act(() => { card.props.onPointerDown(pointerEvent); wait(349); });
+    assert.equal(card.props["aria-disabled"], true);
+    act(() => { wait(1); });
+    assert.equal(card.props["aria-disabled"], false);
+    assert.equal(dialog.findByProps({ className: "choice-cards" }), group, "Readiness must not remount the fade");
+    act(() => { card.props.onPointerUp(pointerEvent); card.props.onClick({ detail: 1 }); });
+    assert.equal(session.view.choice, choice, "An early down cannot activate on a late release");
+    const repeat = { ...keyEvent(key), repeat: true };
+    act(() => { dialog.props.onKeyDown(repeat); card.props.onClick({ detail: 0 }); });
+    assert.ok(repeat.prevented); assert.equal(session.view.choice, choice);
+    const up = keyEvent(key); act(() => { dialog.props.onKeyUp(up); });
+    assert.ok(up.prevented, "Early Space must not generate a keyup click");
+    act(() => { card.props.onPointerDown(pointerEvent); dialog.props.onPointerCancel(); card.props.onClick({ detail: 1 }); });
+    assert.equal(session.view.choice, choice);
+    for (const target of [window, document]) {
+      act(() => { card.props.onPointerDown(pointerEvent); target.dispatchEvent(new Event(target === window ? "blur" : "visibilitychange")); card.props.onClick({ detail: 1 }); });
+      assert.equal(session.view.choice, choice);
+    }
+    act(() => { card.props.onClick({ detail: 0 }); });
+    assert.equal(session.view.choice, null); assert.equal(session.current.touch, false);
+  }
+  act(() => { session.end(); });
+  const guardedToken = session.view.token;
+  const overlay = tree.root.findByProps({ "aria-label": "Game over" });
+  const controls = tree.root.findByProps({ className: "restart-controls" });
+  assert.equal(controls.props.style.visibility, "hidden"); assert.equal(controls.props["aria-hidden"], true);
+  assert.equal(controls.findByType("button").props.tabIndex, -1);
+  assert.ok(text(overlay).includes("Score")); assert.ok(text(overlay).includes("Live top 10"));
+  act(() => { overlay.props.onPointerDown(pointerEvent); controls.findByType("button").props.onClick({ detail: 0 }); wait(799); });
+  assert.equal(session.view.token, guardedToken); assert.equal(controls.props.style.visibility, "hidden");
+  const earlySpace = keyEvent(" "); act(() => { overlay.props.onKeyDown(earlySpace); wait(1); }); assert.ok(earlySpace.prevented);
+  assert.equal(controls.props.style.visibility, "visible"); assert.equal(controls.findByType("button").props.tabIndex, 0);
+  act(() => { overlay.props.onPointerUp(pointerEvent); controls.findByType("button").props.onClick({ detail: 0 }); });
+  assert.equal(session.view.token, guardedToken, "Crossing readiness cannot revive pointer or keyboard activation");
+  const spaceUp = keyEvent(" "); act(() => { overlay.props.onKeyUp(spaceUp); }); assert.ok(spaceUp.prevented);
+  for (const cancel of [() => overlay.props.onPointerCancel(), () => window.dispatchEvent(new Event("blur")), () => document.dispatchEvent(new Event("visibilitychange"))]) {
+    act(() => { overlay.props.onPointerDown(pointerEvent); cancel(); overlay.props.onPointerUp(pointerEvent); });
+    assert.equal(session.view.token, guardedToken);
+  }
+  act(() => { overlay.props.onPointerDown(pointerEvent); overlay.props.onPointerUp({ ...pointerEvent, pointerId: 8 }); });
+  assert.equal(session.view.token, guardedToken);
+  act(() => { controls.findByType("button").props.onClick({ detail: 0 }); });
+  assert.equal(session.view.token, guardedToken + 1);
+
   for (let index = 0; index < 3; index++) {
-    act(() => { session.start(); });
+    act(() => { wait(800); session.start(); });
     const s = session.current.simulation;
     s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
     act(() => { step(s, IDLE, 0.02); session.publishChoice(); });
@@ -157,7 +225,7 @@ try {
     assert.equal(session.view.choice, choice);
     assert.ok(dialog.open);
     const id = choice.offer[index];
-    act(() => { cards[index].props.onPointerDown({ pointerType: "touch" }); cards[index].props.onClick(); });
+    act(() => { cards[index].props.onPointerDown({ pointerType: "touch", pointerId: 1, button: 0 }); cards[index].props.onPointerUp({ pointerId: 1 }); cards[index].props.onClick({ detail: 1 }); });
     assert.equal(session.view.choice, null, "Touch must resume the run");
     assert.deepEqual(session.view.upgrades, [{ id, count: 1 }]);
     assert.equal(session.current.touch, true);
@@ -165,7 +233,7 @@ try {
     assert.equal(document.activeElement, canvas, "Selecting must restore game focus");
   }
 
-  act(() => { session.start(); });
+  act(() => { wait(800); session.start(); });
   const s = session.current.simulation;
   UPGRADE_IDS.forEach((id, index) => { for (let n = 0; n <= index; n++) pick(s, id); });
   await act(async () => { session.end(); });
@@ -176,7 +244,7 @@ try {
   assert.ok(race().findAllByType("p").some(node => text(node).trim()), "An empty race needs feedback");
   let resolveTeams;
   api.teams = () => new Promise(resolve => { resolveTeams = resolve; });
-  await act(async () => { session.start(); session.end(); });
+  await act(async () => { wait(800); session.start(); session.end(); });
   assert.ok(text(race().findByProps({ role: "status" })).trim(), "Loading needs feedback");
   assert.equal(race().findAllByProps({ className: "team-labels" }).length, 0, "Loading cannot invent totals");
   await act(async () => { resolveTeams({ tabs: 30, spaces: 10 }); });
@@ -203,23 +271,24 @@ try {
   assert.ok(text(race().findByProps({ role: "status" })).trim(), "Unavailable totals need feedback");
   assert.equal(tree.root.findAllByProps({ className: "race-bar" }).length, 0);
   api.teams = async () => ({ tabs: 0, spaces: 0 });
-  await act(async () => { session.start(); session.end(); });
+  await act(async () => { wait(800); session.start(); session.end(); });
   const empty = text(tree.root.findByProps({ className: "build" }));
   assert.ok(empty.trim(), "Empty build must have explanatory text");
   assert.ok(UPGRADE_IDS.every(id => !empty.includes(UPGRADE_NAMES[id])));
   const normalStart = api.start;
   api.start = async () => { throw new RateLimitError(); };
-  await act(async () => { session.start(); session.end(); });
+  await act(async () => { wait(800); session.start(); session.end(); });
   assert.ok(tree.root.findAllByProps({ role: "status" }).some(node => text(node) === "Too many runs right now. Your next run will save."));
   assert.equal(session.view.save, "rate-limited");
+  act(() => { wait(800); });
   const over = tree.root.findByProps({ "aria-label": "Game over" });
   const token = session.view.token;
-  act(() => { over.props.onPointerDown({ clientX: 1, clientY: 1 }); over.props.onPointerUp({ clientX: 1, clientY: 100, pointerType: "touch" }); });
+  act(() => { over.props.onPointerDown({ clientX: 1, clientY: 1, pointerId: 1, button: 0 }); over.props.onPointerUp({ clientX: 1, clientY: 100, pointerType: "touch", pointerId: 1 }); });
   assert.equal(session.view.token, token, "Scrolling must not restart");
   const restart = over.findAllByType("button")[0];
   act(() => {
-    over.props.onPointerDown({ clientX: 1, clientY: 1 });
-    over.props.onPointerUp({ clientX: 1, clientY: 1, pointerType: "touch" });
+    over.props.onPointerDown({ clientX: 1, clientY: 1, pointerId: 1, button: 0 });
+    over.props.onPointerUp({ clientX: 1, clientY: 1, pointerType: "touch", pointerId: 1 });
     restart.props.onClick({ detail: 1 });
   });
   assert.equal(session.view.token, token + 1, "A button tap must start exactly once");
@@ -267,7 +336,7 @@ try {
     assert.ok(session.current, "A conflicted identity still plays offline");
     assert.equal(tree.root.findAllByType("input").length, 0, "Recovery must not ask for another selection");
     offline = false;
-    await act(async () => { session.start(); });
+    await act(async () => { wait(800); session.start(); });
     assert.deepEqual(session.identity, authoritative);
     assert.deepEqual(JSON.parse(stored), authoritative);
     act(() => { tree.unmount(); }); tree = undefined;
