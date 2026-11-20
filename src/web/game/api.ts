@@ -1,4 +1,4 @@
-import type { Best, Finish, Identity, Leader, RunStarted, Saved, TeamTotals } from "../../shared/api";
+import type { Best, Finish, Identity, Leader, RunStarted, Saved, Standing, TeamTotals } from "../../shared/api";
 import { isTeam, type Team } from "../../shared/teams";
 
 export class RateLimitError extends Error {
@@ -13,6 +13,7 @@ export interface GameApi {
   start(identity: Identity): Promise<RunStarted>;
   finish(runId: string, result: Finish): Promise<Saved>;
   best(playerId: string): Promise<Best>;
+  standing(playerId: string): Promise<Standing>;
   leaders(): Promise<Leader[]>;
   teams(): Promise<TeamTotals>;
 }
@@ -45,6 +46,7 @@ export const api: GameApi = {
   start: (identity) => request("/api/runs", identity),
   finish: (id, finish) => request(`/api/runs/${id}/finish`, finish),
   best: (id) => request(`/api/players/${id}/best`),
+  standing: (id) => request(`/api/players/${id}/standing`),
   leaders: () => request("/api/leaderboard"),
   teams: () => request("/api/teams"),
 };

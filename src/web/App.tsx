@@ -9,6 +9,7 @@ import { arenaForViewport } from "./game/arena";
 import { UPGRADE_NAMES, nextPickDescription } from "../shared/upgrades";
 import type { SessionView } from "./game/session";
 import { TEAMS, TEAM_NAMES, TEAM_COLOURS, type Team } from "../shared/teams";
+import { exactScore } from "./format";
 import "./style.css";
 
 function readIdentity(): Identity | null {
@@ -90,10 +91,11 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
             Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) session.restart(start.token, event.pointerType === "touch");
         }}>
         <div className="over-summary">
-          <h1>Game over</h1><p className="final-score">Score {view.score}</p>
+          <h1>Game over</h1><p className="final-score">Score {exactScore(view.score)}</p>
           <TeamRace view={view} />
           <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
-          <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
+          <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best === null ? "No saved runs yet" : exactScore(view.best)}</p>
+          <PersonalStanding view={view} />
           <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
             <p className="restart">Tap or press a key to play again</p>
             <button type="button" tabIndex={view.restartReady ? 0 : -1} onClick={(event) => {
@@ -105,7 +107,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
           <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
           <h2>Live top 10</h2>
           {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
-            <ol>{view.leaders.map((row) => <li key={row.playerId}><div className="leader-row"><span>{row.name}</span><strong>{row.score}</strong></div></li>)}</ol> : <p>No saved scores yet</p>}
+            <ol>{view.leaders.map((row) => <li key={row.playerId} aria-current={row.playerId === session.identity.playerId ? "true" : undefined}><div className="leader-row"><span className="leader-name">{row.name}</span><strong>{exactScore(row.score)}</strong></div></li>)}</ol> : <p>No saved scores yet</p>}
         </div>
       </section>}
     </div>
@@ -113,12 +115,24 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
   </main>;
 }
 
+function PersonalStanding({ view }: { view: SessionView }) {
+  if (view.standingStatus === "loading") return <p>Loading ranking…</p>;
+  if (view.standingStatus === "failed" || !view.standing) return <p>Ranking unavailable</p>;
+  const { rank, total, next } = view.standing;
+  if (rank === null) return <p>Not ranked</p>;
+  return <div className="personal-standing">
+    <p>Your best is #{exactScore(rank)} of {exactScore(total)}</p>
+    {rank <= 10 ? <p>You're in the top 10!</p> : next &&
+      <p>{exactScore(next.pointsToBeat)} {next.pointsToBeat === 1 ? "point" : "points"} to beat #{exactScore(next.rank)}</p>}
+  </div>;
+}
+
 function TeamRace({ view }: { view: SessionView }) {
   if (view.teamsStatus === "loading") return <p role="status">Loading team totals…</p>;
   if (view.teamsStatus === "failed" || !view.teamTotals) return <p role="status">Couldn't load team totals</p>;
   const totals = view.teamTotals, sum = totals.tabs + totals.spaces;
   return <div className="team-race" aria-label="Tabs vs Spaces">
-    <div className="team-labels">{TEAMS.map(team => <span key={team} style={{ color: TEAM_COLOURS[team] }}>{TEAM_NAMES[team]} <strong>{totals[team]}</strong></span>)}</div>
+    <div className="team-labels">{TEAMS.map(team => <span key={team} style={{ color: TEAM_COLOURS[team] }}>{TEAM_NAMES[team]} <strong>{exactScore(totals[team])}</strong></span>)}</div>
     <div className={`race-bar${sum ? "" : " empty"}`} aria-hidden="true">{TEAMS.map(team => <span key={team} style={{ width: `${sum ? totals[team] / sum * 100 : 50}%`, background: sum ? TEAM_COLOURS[team] : "#7f91a9" }} />)}</div>
     {!sum && <p>No team scores yet</p>}
   </div>;
