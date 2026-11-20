@@ -12,8 +12,14 @@ test("validated browser identity persists; corrupt, blocked, or old invalid name
   }
   storeIdentity(storage, { ...identity, team: "spaces" });
   expect(loadIdentity(storage)).toEqual({ ...identity, team: "spaces" });
-  for (const value of ["{", "null", JSON.stringify({ ...identity, name: "5h1t" }), JSON.stringify({ ...identity, playerId: "invalid" })]) {
+  for (const value of ["{", "null",
+    ...["5h1t", "nigga", "f u c k", "fuuuck", "cole medin", "M0D3R470R"].map(name => JSON.stringify({ ...identity, name })),
+    JSON.stringify({ ...identity, playerId: "invalid" })]) {
     saved.set(IDENTITY_KEY, value); expect(loadIdentity(storage)).toBeNull();
+  }
+  for (const name of ["Scunthorpe", "Hancock", "Annalise", "Jason", "therapist"]) {
+    storeIdentity(storage, { ...identity, name });
+    expect(loadIdentity(storage)).toEqual({ ...identity, name });
   }
 });
 test("storage read/write failure does not prevent in-memory play", () => {

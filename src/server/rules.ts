@@ -1,4 +1,4 @@
-import { BLOCKED_WORDS } from "./blocked-words";
+import { APPROVED_NAMES, BLOCKED_WORDS, RESERVED_NAMES } from "./blocked-words";
 import type { Finish } from "../shared/api";
 import { CHOICE_INTERVAL, UPGRADE_IDS, type AcquiredUpgrade } from "../shared/upgrades";
 
@@ -12,13 +12,27 @@ export const MAX_RUN_SECONDS = 300;
 export const isId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export const nameKey = (name: string) => name.trim().toLowerCase();
 
+const swaps: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b" };
+// Browser-safe and deliberately separate from persisted manual-hide nameKey.
+function moderationKey(name: string): string {
+  return name.toLowerCase().replace(/[ _-]/g, "").replace(/[0134578]/g, c => swaps[c]!)
+    .replace(/([a-z])\1+/g, "$1");
+}
+const blocked = [...new Set(BLOCKED_WORDS.map(moderationKey))];
+const shortBlocked = new Set(blocked.filter(word => word.length <= 3));
+const substringBlocked = blocked.filter(word => word.length >= 4);
+const approved = new Set(APPROVED_NAMES.map(moderationKey));
+const reserved = new Set(RESERVED_NAMES.map(moderationKey));
+
 export function validateName(value: unknown): { name: string; error?: never } | { error: string; name?: never } {
   if (typeof value !== "string") return { error: "Enter a name." };
   const name = value.trim();
   if (!/^[A-Za-z0-9 _-]{2,16}$/.test(name)) return { error: "Use 2–16 letters, numbers, spaces, hyphens or underscores." };
-  const swaps: Record<string, string> = { "0": "o", "1": "i", "3": "e", "4": "a", "5": "s" };
-  const normalized = name.toLowerCase().replace(/[01345]/g, (c) => swaps[c]!);
-  if (BLOCKED_WORDS.some((word) => normalized.includes(word))) return { error: "That name isn't allowed. Pick another." };
+  const normalized = moderationKey(name);
+  if (reserved.has(normalized)) return { error: "That name is reserved" };
+  if (!approved.has(normalized) && (shortBlocked.has(normalized) || substringBlocked.some(word => normalized.includes(word)))) {
+    return { error: "That name isn't allowed. Pick another." };
+  }
   return { name };
 }
 

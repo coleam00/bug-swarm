@@ -28,6 +28,21 @@ test("bet counts accepted finishes, hidden players, grouped median, rounding and
     expect(report(db)).toBe("players: 3\nfinished_runs: 10\nmedian_runs_per_player: 2.0\ntouch_share: 30%");
   } finally { db.close(); }
 });
+test("blocked and reserved legacy players still contribute to the bet", () => {
+  const db = openDb(":memory:");
+  try {
+    for (const [i, name] of ["nigga", "f u c k", "fuuuck", "admin", "cole medin"].entries()) {
+      const playerId = crypto.randomUUID();
+      for (let n = 0; n <= i; n++) {
+        const result = startRun(db, playerId, name, 0, "tabs");
+        if ("error" in result) throw new Error(result.error);
+        finishRun(db, result.runId, { playerId, score: 1, seconds: 1, squashes: 0, touch: true }, 1000);
+      }
+    }
+    expect(report(db)).toBe("players: 5\nfinished_runs: 15\nmedian_runs_per_player: 3.0\ntouch_share: 100%");
+  } finally { db.close(); }
+});
+
 test("ISO flags support offsets, optional separator and independent bounds; reject invalid arguments", () => {
   expect(parseWindow(["--", "--since", "2026-11-28T09:00:00-06:00"])).toEqual({ since: Date.parse("2026-11-28T15:00:00Z"), until: Infinity });
   expect(parseWindow(["--until", "2026-11-28T16:15:00Z"]).since).toBe(-Infinity);
