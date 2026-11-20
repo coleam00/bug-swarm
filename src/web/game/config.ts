@@ -16,7 +16,7 @@ export const FIRST_SPAWN_DELAY = 9.3;
 export const OPENING_SPEED_CURVE = [
   { time: 0, multiplier: 0.6 }, { time: 15, multiplier: 1 },
 ] as const;
-// Idle target: 18–40 seconds. Broad evasive median target: 75–110 seconds.
+// Idle stops at the first choice or dies in 18–40s. Broad evasive median: 75–110s.
 export const SPAWN_CURVE = [
   // Time to learn steering, then a short wave before the first upgrade. The
   // existing schedule resumes at 20s; weapons and upgrades do not change.

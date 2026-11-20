@@ -2,24 +2,28 @@
 
 ## Issue 40: gentler opening
 
-### Review correction: balance remains blocked
+### Current acceptance: idle stops at the first choice
 
-The 3.2× speed surge in `1d13d82` was outside the owner's ruling and has been removed. Current pursuit rises linearly from 60% at zero to normal speed at 15 seconds, never exceeding normal speed before the original late ramp. The first delay and spawn curve remain 9.3 seconds and `(0,.35), (11.7,.35), (20,4), (30,4), (60,.3), (120,.2), (180,.18)`; weapons, upgrades and all rules from 20 seconds onward remain unchanged. **This is an incomplete correction, not merge-ready balance.**
+The owner's second 11/20 ruling defines idle as **no movement and no upgrade selection**. The harness stops at the first pending choice; that paused endpoint passes, as does death inside **18–40 gameplay seconds** (inclusive, raw-time tolerance 1e-7). It never invokes a choice policy for idle, even when supplied by a caller. A diagnostic cutoff, missing idle shape, incomplete broad group or acquired idle upgrade cannot pass. Reports label the paused endpoint `CHOICE`, count it separately and reserve `CUTOFF` / `>=` for an actual diagnostic horizon. The legacy `idle60` and `allDead240` names remain; they also accept idle's first-choice endpoint. Every evasive run must still die by 240 seconds, and every evasive median and score gate is unchanged.
 
-Both reproduced seeds now satisfy the full 18–40-second range and have dedicated regression cases using the production pacing runner: `2070972806` at 390×844 dies at 20.666667 seconds with one drone; `2278550863` at 844×390 dies at 18.516667 seconds with no upgrade. However, many other stationary builds reach upgrades and sustain far beyond 40 seconds:
+Round 2's opening is retained exactly: first spawn at **9.3 seconds**, spawn knots `(0,.35), (11.7,.35), (20,4), (30,4), (60,.3), (120,.2), (180,.18)`, with the existing exponential tail. Pursuit rises linearly from **60% to normal speed by 15 seconds**, with no speed surge. There are **12 scheduled bugs by 15 seconds**, versus 15 before this item. Weapons, upgrades, fast-bug unlock/cadence, health, scoring and rules from 20 seconds onward remain unchanged. The initial quiet period is shared by everyone, independent of browser onboarding state.
 
-| Current matrix | Idle range | Evasive median | Longest | Score failures | Failed gates |
-| --- | --- | ---: | ---: | ---: | --- |
-| Default, 20 runs | 20.25–117.62s | 79.02s | 130.43s | 0 | idle18to40, idle60 |
-| Broad, 2,000 runs | 18.90–139.10s | 77.02s | 164.42s | 0 | idle18to40, idle60 |
+Windows/Bun 1.4.2 measurements:
 
-Every evasive gate, completeness, score validation and the 240-second ceiling still passes. Complete current failures: [default](steering-evidence/issue-40-review-default.txt), [broad](steering-evidence/issue-40-review-broad.txt). The earlier reports below are superseded.
+| Matrix | Idle elapsed range | Idle deaths / choices | Evasive median | Longest | Score failures |
+| --- | --- | --- | ---: | ---: | ---: |
+| Default, 20 runs | 20.00–20.00s | 0 / 10 | 79.02s | 130.43s | 0 |
+| Broad, 2,000 runs | 18.90–20.00s | 35 / 965 | 77.02s | 164.42s | 0 |
 
-Opening-only experiments varied first delay, sparse primers, quiet gaps, wave timing/density, relief before 20 seconds, and monotonic speed ramps from approximately 60% to full around 15 seconds. None tested satisfied every gate. Increasing ordinary-speed opening density to end idle runs before the first choice also reduced evasive survival below its gates. Sparse profiles preserved evasive survival but allowed upgraded stationary builds to outlast 40 seconds. This does not prove no curve exists; it means no compliant replacement was established. No experimental curve is selected or shipped, and no idle detector, choice bypass, weaker upgrade, later rule change or relaxed target was introduced. Replan the opening balance before merging this draft.
+Every gate passes; there are no cutoffs and no idle upgrades. Default portrait/landscape evasive medians are **80.72 / 76.45 seconds**. Broad priority medians in registry order are **72.72, 77.76, 71.97, 112.29 and 80.62 seconds**, all above the unchanged 55-second floor. All 1,000 broad evasive runs die by 240 seconds; none die below 60 seconds. Review candidates remain informational (default **1**, broad **74**). Complete reports: [default](steering-evidence/issue-40-idle-default.txt), [broad](steering-evidence/issue-40-idle-broad.txt), [raw summary](steering-evidence/issue-40-idle-summary.json). Baselines remain [default](steering-evidence/before-default.txt) and [broad](steering-evidence/before-broad.txt).
 
-The delayed-registration fixture now disables unrelated random spawns, firing and upgrade offers, creates one controlled squash and a persistent contact, and enforces a 900-step budget. It derives the finish from the resulting simulation rather than pinning seeded balance or score. All 27 Session tests also pass with opening-speed interpolation temporarily bypassed, reproducing the review's mutation without a hang; production configuration was restored afterward. The other death loops were checked: the pacing runner has a finite horizon and resolves choices; simulation schedule tests bound elapsed time and disable choices; the browser probe has an explicit timeout.
+The review seeds are retained: `2070972806` at 390×844 now stops at its first choice at 20 seconds with no upgrades; `2278550863` at 844×390 dies at 18.516667 seconds without upgrades. The 402-case consecutive/spread seed regression and real ten-seed broad slice enforce the same definition. Independent fixtures check inclusive death boundaries, invalid survivors, late or upgraded choice endpoints, reporting and both command exit codes. Evasive builds are still replayed independently against the seeded offers and named priorities.
 
-After merging main's personal-standing change and updating this branch's API fixtures, the focused check passes TypeScript and 246 tests but fails four existing pacing regressions (default matrix, ten-seed broad slice, two-seed upgraded pacing and 402-case idle ceiling). The two new seed tests pass independently, as do the speed-profile and controlled-registration tests. `bun run build` passes. Both pacing commands exit nonzero as required. Full-suite execution remains with project automation. Hint rendering, state, input observation and storage behavior are unchanged from the approved delivery.
+The delayed-registration fixture remains controlled and bounded: it disables unrelated random spawning, firing and offers, creates a squash and persistent contact, and enforces a 900-step budget. Its finish is derived from the simulation, independent of opening balance. Hint rendering, state, input observation and persistence remain as approved; [current Chrome and frame evidence](steering-validation.md) covers the real paused choice and controls.
+
+### Historical round 2 harness artifact
+
+Before the second ruling, the no-surge opening failed the former idle gates because default idle automatically selected the first card and broad idle selected by named priority. These upgraded stationary builds lasted 20.25–117.62 seconds default and 18.90–139.10 seconds broad, despite unchanged passing evasive gates. Reports are retained as historical diagnostics: [default](steering-evidence/issue-40-review-default.txt), [broad](steering-evidence/issue-40-review-broad.txt). They do not model the owner-defined idle player, who never selects a card and remains paused at the choice. No further combat tuning was made to address that artifact.
 
 ### Superseded delivery evidence (`1d13d82`)
 
@@ -49,7 +53,7 @@ The brief charge after 15 seconds supplies pressure before the first upgrade. Wi
 
 Broad priority medians are **72.50, 77.27, 71.57, 109.05 and 79.91 seconds**, each above the unchanged 55-second floor. Both matrices pass every gate; all runs die before 240 seconds. Fifteen of the 1,000 broad evasive runs die below 60 seconds (1.5%), a diagnostic rather than an acceptance threshold. Default overall and both shape medians remain within 60–180 seconds; the broad overall median remains within 75–110 seconds.
 
-Complete evidence: [baseline default](steering-evidence/before-default.txt), [baseline broad](steering-evidence/before-broad.txt), [final default](steering-evidence/issue-40-final-default.txt), [final broad](steering-evidence/issue-40-final-broad.txt), and [raw summary](steering-evidence/issue-40-final-summary.json). Reproduce with `bun run pacing` and `bun run pacing --broad`, using scratch home/data paths. [Chrome validation](steering-validation.md) includes a real, unprotected idle run ending at 19.40 seconds, the hint's lifecycle/layout checks and 150-bug frame measurements.
+Historical evidence: [baseline default](steering-evidence/before-default.txt), [baseline broad](steering-evidence/before-broad.txt), [rejected default](steering-evidence/issue-40-final-default.txt), [rejected broad](steering-evidence/issue-40-final-broad.txt), and [raw summary](steering-evidence/issue-40-final-summary.json). The filenames retain their original labels; these are not current acceptance reports. The earlier Chrome idle death at 19.40 seconds also used the rejected surge and has been replaced by current browser evidence.
 
 ## Earlier curve-only investigation (superseded)
 
@@ -57,7 +61,7 @@ Before the owner's 11/20 ruling, curve-only tuning did not satisfy the original 
 
 Baseline reports for this checkout: [default](steering-evidence/before-default.txt), [full broad](steering-evidence/before-broad.txt). The baseline default idle range is 12.45–15.90 seconds, evasive median 78.69 seconds. The broad evasive median is 76.73 seconds, longest run 156.93 seconds, with zero score failures and every existing gate passing.
 
-Curve-only experiments varied quiet openings, linear opening intervals, pressure around 15–20 seconds, short pressure after the first choice, and relief before the unchanged 60-second knot. Reaching the first choice changes the stationary robot's build: laser's firing bonus/penetration and bomb's acquisition clear can sustain it through a sparse opening. Increasing pressure to overwhelm those builds also kills the scripted evasive shield/drone builds early. Default idle still takes the first card; broad idle still follows each named priority. No idle detector, artificial death, upgrade bypass, steering-policy change or scoring relaxation was used.
+Curve-only experiments varied quiet openings, linear opening intervals, pressure around 15–20 seconds, short pressure after the first choice, and relief before the unchanged 60-second knot. Reaching the first choice changed the stationary robot's build: laser's firing bonus/penetration and bomb's acquisition clear could sustain it through a sparse opening. Increasing pressure to overwhelm those builds also killed the scripted evasive shield/drone builds early. At that stage default idle took the first card and broad idle followed each named priority. No idle detector, artificial death, upgrade bypass, steering-policy change or scoring relaxation was used.
 
 Two representative rejected curves were captured with the [historical script at 7f1e238](https://github.com/coleam00/bug-swarm/blob/7f1e23861b50ec6b51c285fb6258ae7dad46f9c5/docs/steering-pacing-investigation.ts), before opening-speed tuning was permitted. Their [exact knots and summaries](steering-evidence/pacing-investigation.json) and complete reports remain archived. To reproduce those historical numbers, check out that commit and run its script with scratch environment/data paths.
 
@@ -69,6 +73,7 @@ Two representative rejected curves were captured with the [historical script at 
 Gentle uses `(time, interval)` knots `(0,.95), (15,.9), (20,.2), (22,.2), (23,10), (45,10)` before the original late knots. It preserves every evasive gate but fails both idle gates; 359/1,000 broad idle cases leave the proposed range. Pressure uses `(0,2), (15,2), (20,.02), (22,.02), (23,10), (45,10)` before the original late knots. It brings all but 31/1,000 broad idle cases inside the range, but fails the default evasive gate, broad overall median and four of the five per-priority floors. Every run in both candidates ends by 240 seconds.
 
 Complete rejected reports: [gentle default](steering-evidence/gentle-default.txt), [gentle broad](steering-evidence/gentle-broad.txt), [pressure default](steering-evidence/pressure-default.txt), [pressure broad](steering-evidence/pressure-broad.txt). These are historical diagnostic failures, not acceptance evidence for the final change.
+
 ## Score review ceiling: issue #49
 
 `bun run pacing --broad` at `31b5ee6481b59ff19b78784e123f31a9ff96851f` measured a maximum **4,816 points** across **2,000 runs**: evasive seed **46**, **1280x800**, priority **ci-drone / review-laser / refactor-bomb / test-shield**. The owner set **`REVIEW_SCORE = 3000`**, independent of that measurement: only scores strictly above 3,000 are held. Approving an honest top run is preferable to leaving a forged #1 on stream. Plausibility remains an independent rejection gate; plausible **7,000 / 300 seconds / 670 squashes** and **13,800 / 300 seconds / 1,350 squashes** finishes are saved but held.
@@ -117,7 +122,9 @@ Client saving also accounts for asynchronous registration: Session records the s
 
 Return validation: `bun run check --test-name-pattern '^(?!Vite serves cards)'` passes TypeScript and **258 tests / 87,446 assertions**. The two existing Vite tests are excluded because they open TCP listeners, which this task's socket-only isolation forbids; the unfiltered check is left to CI. `bun run pacing` (20 cases) and `bun run pacing --broad` (2,000 cases) pass every gate with **zero rejected finishes**. Rule and API regressions reject the 20-second / 120-squash forgery; the API confirms no event, personal best, leaderboard or team credit, then accepts a legal finish on the same run.
 
-## Current correction: issue #30
+## Earlier correction: issue #30 (historical)
+
+This section records issue #30's original acceptance and measurements. Its upgrade-picking idle definition and opening were superseded by issue #40 above; the evasive targets remain in force.
 
 The fixed broad harness was captured against unchanged combat at `0339ee9`, before tuning. [Complete before report](pacing-validation/issue-30-before.txt) and [complete after report](pacing-validation/issue-30-after.txt) contain all 2,000 cases, acquired builds, grouping summaries and gates. Older evidence below describes issue #21 and remains historical.
 

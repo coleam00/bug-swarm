@@ -53,7 +53,7 @@ try {
         const path = new URL(route.request().url()).pathname;
         if (path.startsWith("/api/")) {
           if (offline) return route.abort();
-          return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } : path.endsWith("/finish") ? { saved: true } :
+          return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } : path.endsWith("/finish") ? { saved: true, held: false } :
             path === "/api/teams" ? { tabs: 0, spaces: 0 } : path.endsWith("/best") ? { best: null } :
             path.endsWith("/standing") ? { rank: null, total: 0, next: null } : [] });
         }
@@ -86,7 +86,7 @@ try {
       assert.equal(await page.evaluate(() => localStorage.getItem("bug-swarm-steering-hint-seen")), null);
       await page.goto("http://localhost/"); await page.locator("#name").fill("Hint Robot");
       await page.getByRole("button", { name: "Join Tabs" }).click(); await discover();
-      assert.ok((await hint.textContent())?.trim());
+      assert.equal((await hint.textContent())?.trim(), touch ? "Drag anywhere to move" : "WASD, arrows or mouse");
       const layout = await hint.evaluate((element: HTMLElement) => {
         const r = element.getBoundingClientRect(), surface = element.parentElement!, arena = surface.getBoundingClientRect();
         return { x: r.x, y: r.y, width: r.width, height: r.height, arena: { x: arena.x, y: arena.y, width: arena.width, height: arena.height },
@@ -126,15 +126,27 @@ try {
         await page.waitForFunction(at => (window as any).hintSession.current.simulation.time >= at,
           FIRST_SPAWN_DELAY - 0.2, { timeout: 15000 });
         assert.equal(await page.evaluate(() => (window as any).hintSession.current.simulation.nextId), 1);
-        await page.waitForFunction(() => (window as any).hintSession.view.over, undefined, { timeout: 45000 });
-        const run = await page.evaluate(() => {
+        await page.waitForFunction(() => {
+          const view = (window as any).hintSession.view;
+          return view.over || view.choice;
+        }, undefined, { timeout: 45000 });
+        const terminalSnapshot = () => page.evaluate(() => {
           const s = (window as any).hintSession.current.simulation;
-          return { elapsed: s.time, dead: s.dead, robot: { ...s.robot }, hits: s.hits };
+          return { elapsed: s.time, dead: s.dead, robot: { ...s.robot }, hits: s.hits,
+            choiceNumber: s.upgrades.choiceNumber, offer: s.upgrades.offer, counts: s.upgrades.counts };
         });
-        assert.ok(run.dead && run.elapsed >= 18 - 1e-7 && run.elapsed <= 40 + 1e-7);
-        assert.deepEqual(run.robot, quiet); assert.equal(run.hits, 3);
+        const run = await terminalSnapshot();
+        assert.deepEqual(run.robot, quiet);
+        assert.ok(Object.values(run.counts).every(count => count === 0));
+        assert.ok(run.dead ? run.elapsed >= 18 - 1e-7 && run.elapsed <= 40 + 1e-7 :
+          run.elapsed === 20 && run.choiceNumber === 1 && run.offer?.length === 3);
+        if (!run.dead) {
+          await page.waitForTimeout(1200);
+          assert.deepEqual(await terminalSnapshot(), run);
+          assert.equal(await hint.count(), 0);
+        }
         report.openingIdle = run;
-        assertions.push("Desktop seed 1: quiet first-spawn delay and actual idle death inside 18–40 gameplay seconds");
+        assertions.push("Desktop seed 1: quiet first-spawn delay; idle dies in 18–40s or pauses at the first choice without upgrades; pending choice stays frozen for 1.2s");
       }
       // A blocked storage getter still permits play and one hint for this page.
       await page.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw Error("blocked storage"); } }); });

@@ -92,7 +92,7 @@ The factory files one phase at a time. Each phase leaves the game playable.
 - **Proves:** the upgrade choice makes runs different and long enough to want another.
 - **Outcome:** the swarm grows over the run (more bugs, faster spawns), a second kind of bug (fast and fragile) joins after 30 seconds, and every 20 seconds play pauses for a choice of 3 upgrades. Typical runs last 1 to 3 minutes.
 - **Acceptance:**
-  - [ ] Spawn rate and bug count ramp over the run so that an idle player loses within 60 seconds; a test steps the simulation to check it.
+  - [ ] Spawn rate and bug count ramp over the run. An idle player (no movement or upgrade selection) dies in 18–40 gameplay seconds or reaches the first paused upgrade choice; deterministic tests check both endpoints. This follows issue #40's second owner ruling.
   - [ ] The look from `direction.md` ("The look"): the robot glows and leaves a short trail, bugs have animated legs and turn to face the robot, a squashed bug pops in a burst of particles with a floating "+10", a hit flashes the robot and shakes the screen briefly, each upgrade has its own visible effect, and the arena has a dark grid floor with a soft vignette. All drawn on the canvas in code, with no image files.
   - [ ] The fast bug appears after 30 seconds, moves at least 1.5x the base speed, and dies in one shot.
   - [ ] Every 20 seconds play pauses with 3 different upgrades drawn from the pool, chosen by tap or the keys 1-3: **Review laser** (shots pierce through bugs), **Test shield** (blocks the next hit), **Refactor bomb** (clears the screen once, recharges after 30 s), **CI drone** (orbits the robot and fires too). Picking one twice makes it stronger.

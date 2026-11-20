@@ -1,20 +1,32 @@
 {
   "chrome": "158.0.8127.36",
-  "at": "2026-11-20T10:15:10.363Z",
+  "at": "2026-11-20T11:30:31.615Z",
   "assertions": [
     "390x844: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
     "844x390: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
-    "Desktop seed 1: quiet first-spawn delay and actual idle death inside 18–40 gameplay seconds",
+    "Desktop seed 1: quiet first-spawn delay; idle dies in 18–40s or pauses at the first choice without upgrades; pending choice stays frozen for 1.2s",
     "1280x720: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play"
   ],
   "openingIdle": {
-    "elapsed": 19.40000000000018,
-    "dead": true,
+    "elapsed": 20,
+    "dead": false,
     "robot": {
       "x": 400,
       "y": 225
     },
-    "hits": 3
+    "hits": 0,
+    "choiceNumber": 1,
+    "offer": [
+      "review-laser",
+      "ci-drone",
+      "refactor-bomb"
+    ],
+    "counts": {
+      "review-laser": 0,
+      "test-shield": 0,
+      "refactor-bomb": 0,
+      "ci-drone": 0
+    }
   },
   "layouts": [
     {
