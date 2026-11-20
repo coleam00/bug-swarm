@@ -84,7 +84,7 @@ test.each([
     while (!s.dead) { step(s, IDLE, 1 / 60); await advanceTo(Math.ceil(s.time * 1000)); }
     await advanceTo(now + scenario.pause);
     const expected = { playerId: identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: true, upgrades: [] };
-    expect(expected).toMatchObject({ score: 93, squashes: 8, seconds: 13 });
+    expect(expected).toMatchObject({ score: 79, squashes: 6, seconds: 19 });
     session.end(); session.end(); await flush();
     if (scenario.restart) {
       await advanceTo(now + RESTART_GUARD_MS - 1);

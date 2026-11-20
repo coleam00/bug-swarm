@@ -1,11 +1,21 @@
 {
   "chrome": "158.0.8127.36",
-  "at": "2026-11-20T09:34:35.266Z",
+  "at": "2026-11-20T10:05:41.574Z",
   "assertions": [
     "390x844: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
     "844x390: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
+    "Desktop seed 1: quiet first-spawn delay and actual idle death inside 18–40 gameplay seconds",
     "1280x720: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play"
   ],
+  "openingIdle": {
+    "elapsed": 19.40000000000018,
+    "dead": true,
+    "robot": {
+      "x": 400,
+      "y": 225
+    },
+    "hits": 3
+  },
   "layouts": [
     {
       "size": {

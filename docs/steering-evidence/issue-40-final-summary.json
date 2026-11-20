@@ -1,0 +1,39 @@
+{
+  "default": {
+    "count": 20,
+    "idleMin": 18.300000000000242,
+    "idleMax": 19.6333333333335,
+    "evasiveMedian": 77.29999999999902,
+    "longest": 125.21666666666637,
+    "scoreFailures": 0,
+    "gates": {
+      "idle18to40": true,
+      "idle60": true,
+      "evasiveMedian60to180": true,
+      "allDead240": true,
+      "scoresPlausible": true
+    }
+  },
+  "broad": {
+    "count": 2000,
+    "idleMin": 18.083333333333588,
+    "idleMax": 19.850000000000154,
+    "evasiveMedian": 76.6583333333324,
+    "longest": 164.41666666667018,
+    "scoreFailures": 0,
+    "gates": {
+      "completeGroups": true,
+      "idle18to40": true,
+      "evasiveMedian75to110": true,
+      "evasiveMedian55:test-shield,ci-drone,refactor-bomb,review-laser": true,
+      "evasiveMedian55:ci-drone,refactor-bomb,test-shield,review-laser": true,
+      "evasiveMedian55:refactor-bomb,ci-drone,review-laser,test-shield": true,
+      "evasiveMedian55:review-laser,test-shield,ci-drone,refactor-bomb": true,
+      "evasiveMedian55:ci-drone,review-laser,refactor-bomb,test-shield": true,
+      "idle60": true,
+      "allDead240": true,
+      "scoresPlausible": true
+    }
+  },
+  "first15Spawns": 12
+}

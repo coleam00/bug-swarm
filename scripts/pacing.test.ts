@@ -7,7 +7,7 @@ import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, prin
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
   const rows = runMatrix();
   expect(rows).toHaveLength(20);
-  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
+  expect(targets(rows)).toEqual({ idle18to40: true, idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
   for (const seed of [1, 42, 12345, 7, 99]) for (const mode of ["idle", "evasive"] as const)
     for (const viewport of [[390, 844], [1280, 800]])
       expect(rows.filter(r => r.seed === seed && r.mode === mode && r.viewport[0] === viewport[0] && r.viewport[1] === viewport[1])).toHaveLength(1);
@@ -34,10 +34,9 @@ test("ten-seed broad slice protects every build's evasive floor and idle, death 
   expect(rows).toHaveLength(200);
   const gates = broadTargets(rows);
   expect(Object.entries(gates).filter(([name]) => name !== "evasiveMedian75to110").every(([, pass]) => pass)).toBe(true);
-  // Idle runs currently die before a choice. Moving runs exercise the policy:
-  // replay their seeded offers without reusing the harness's card selector.
+  // Replay both modes' seeded builds without reusing the harness's selector.
   const differsFromFirstCard = new Set<string>();
-  for (const row of rows.filter(r => r.mode === "evasive")) {
+  for (const row of rows) {
     const expected = createUpgrades(row.seed);
     // A fatal contact at a choice boundary ends the run before that offer opens.
     for (let at = CHOICE_INTERVAL; at < row.elapsed - 1e-7; at += CHOICE_INTERVAL) {
@@ -52,9 +51,9 @@ test("ten-seed broad slice protects every build's evasive floor and idle, death 
 });
 
 function broadFixture(evasive = 90): Result[] {
-  return broadScenarios([0]).map(s => ({ ...reported(s.mode, s.viewport, s.mode === "idle" ? 60 : evasive), ...s }));
+  return broadScenarios([0]).map(s => ({ ...reported(s.mode, s.viewport, s.mode === "idle" ? 30 : evasive), ...s }));
 }
-test.each([75, 110])("broad gates accept inclusive %i-second overall median, 60s idle and 240s maximum", duration => {
+test.each([75, 110])("broad gates accept inclusive %i-second overall median, 30s idle and 240s maximum", duration => {
   const rows = broadFixture(duration);
   expect(Object.values(broadTargets(rows)).every(Boolean)).toBe(true);
   rows.find(r => r.mode === "evasive")!.elapsed = 240;
@@ -105,7 +104,7 @@ test("production command dispatch enumerates the requested workload and rejects 
   // Stub only combat execution, below the real dispatcher and both generators.
   const run: typeof runScenario = (scenario, _horizon, policy) => {
     executions++;
-    // Idle combat ends before choices today; exercise its actual broad callback
+    // Exercise the actual broad idle callback
     // with an offer where first-card selection disagrees with named priorities.
     if (scenario.mode === "idle" && policy && !idlePriorities.has(priorityKey(scenario.priority))) {
       const offer: readonly UpgradeId[] = [REVIEW_LASER, REFACTOR_BOMB, CI_DRONE];
@@ -172,24 +171,59 @@ function reported(mode: Result["mode"], viewport: Result["viewport"], elapsed: n
   return { mode, viewport, elapsed, seed: 1, priority: [TEST_SHIELD, CI_DRONE, REFACTOR_BOMB, REVIEW_LASER],
     dead: true, score: Math.floor(elapsed), seconds: Math.floor(elapsed), squashes: 0, spawned: 0, build: [], validScore: true };
 }
-function reportFixture(portrait: readonly number[], landscape = portrait, idle = 60): Result[] {
+function reportFixture(portrait: readonly number[], landscape = portrait, idle = 30): Result[] {
   return [reported("idle", [390, 844], idle),
+    reported("idle", [1280, 800], idle),
     ...portrait.map(t => reported("evasive", [390, 844], t)),
     ...landscape.map(t => reported("evasive", [1280, 800], t))];
 }
+
+test.each([18, 40, 18 - 1e-8, 40 + 1e-8])("idle range accepts the inclusive raw boundary %f", elapsed => {
+  expect(targets(reportFixture([90], [90], elapsed)).idle18to40).toBe(true);
+  const broad = broadFixture();
+  for (const row of broad) if (row.mode === "idle") row.elapsed = elapsed;
+  expect(broadTargets(broad).idle18to40).toBe(true);
+});
+
+test.each([17.999, 40.001])("idle range rejects %f in gates, printed reports and command exit codes", elapsed => {
+  expect(targets(reportFixture([90], [90], elapsed)).idle18to40).toBe(false);
+  const broad = broadFixture();
+  for (const row of broad) if (row.mode === "idle") row.elapsed = elapsed;
+  expect(broadTargets(broad).idle18to40).toBe(false);
+  for (const mode of [false, true]) {
+    const lines: string[] = [], log = spyOn(console, "log").mockImplementation(line => { lines.push(String(line)); });
+    try {
+      expect(pacingCommand(mode ? ["--broad"] : [], scenario =>
+        ({ ...reported(scenario.mode, scenario.viewport, scenario.mode === "idle" ? elapsed : 90), ...scenario }))).toBe(1);
+    } finally { log.mockRestore(); }
+    expect(lines).toContain("FAIL idle18to40");
+    expect(lines).toContain("PASS idle60");
+  }
+});
+
+test("idle range rejects an in-range survivor, missing idle mode or incomplete broad group", () => {
+  for (const rows of [reportFixture([90]), broadFixture()]) {
+    rows.find(r => r.mode === "idle")!.dead = false;
+    expect(targets(rows).idle18to40).toBe(false); expect(broadTargets(rows).idle18to40).toBe(false);
+    const missing = rows.filter(r => r.mode !== "idle");
+    expect(targets(missing).idle18to40).toBe(false); expect(broadTargets(missing).idle18to40).toBe(false);
+  }
+  expect(broadTargets(broadFixture().slice(1)).idle18to40).toBe(false);
+  expect(targets(reportFixture([90]).filter(r => r.mode !== "idle" || r.viewport[0] === 390)).idle18to40).toBe(false);
+});
 test.each([60, 180])("target report accepts the inclusive %i-second evasive boundary", duration => {
-  expect(targets(reportFixture([duration]))).toEqual({ idle60: true, evasiveMedian60to180: true,
+  expect(targets(reportFixture([duration]))).toEqual({ idle18to40: true, idle60: true, evasiveMedian60to180: true,
     allDead240: true, scoresPlausible: true });
 });
 test("idle target rejects a completed run beyond 60 seconds", () => {
-  expect(targets(reportFixture([120], [120], 61))).toEqual({ idle60: false, evasiveMedian60to180: true,
+  expect(targets(reportFixture([120], [120], 61))).toEqual({ idle18to40: false, idle60: false, evasiveMedian60to180: true,
     allDead240: true, scoresPlausible: true });
 });
 test("overall ceiling checks the longest run even when both medians are valid", () => {
   const atLimit = reportFixture([60, 120, 240]);
-  expect(targets(atLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
+  expect(targets(atLimit)).toEqual({ idle18to40: true, idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
   const overLimit = reportFixture([60, 120, 241]);
-  expect(targets(overLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: false, scoresPlausible: true });
+  expect(targets(overLimit)).toEqual({ idle18to40: true, idle60: true, evasiveMedian60to180: true, allDead240: false, scoresPlausible: true });
 });
 test.each([59, 181])("evasive median rejects %i seconds overall and within either viewport", duration => {
   expect(targets(reportFixture([duration])).evasiveMedian60to180).toBe(false);
@@ -198,10 +232,10 @@ test.each([59, 181])("evasive median rejects %i seconds overall and within eithe
   expect(targets(reportFixture([120], [duration])).evasiveMedian60to180).toBe(false);
 });
 test("target report rejects missing groups and invalid scores", () => {
-  expect(targets([])).toEqual({ idle60: false, evasiveMedian60to180: false, allDead240: false, scoresPlausible: false });
+  expect(targets([])).toEqual({ idle18to40: false, idle60: false, evasiveMedian60to180: false, allDead240: false, scoresPlausible: false });
   expect(targets(reportFixture([120], [])).evasiveMedian60to180).toBe(false);
   const rows = reportFixture([120]); rows[0]!.validScore = false;
-  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: false });
+  expect(targets(rows)).toEqual({ idle18to40: true, idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: false });
 });
 
 test.each([

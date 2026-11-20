@@ -58,6 +58,11 @@ export function runMatrix(seeds: readonly number[] = SCENARIOS.map(s => s.seed),
 export const BROAD_SEEDS = Array.from({ length: 100 }, (_, seed) => seed);
 export const PRIORITIES = SCENARIOS.map(s => s.priority);
 const TOLERANCE = 1e-7;
+function idle18to40(rows: readonly Result[]): boolean {
+  const idle = rows.filter(r => r.mode === "idle");
+  return VIEWPORTS.every(v => idle.some(r => sameViewport(r.viewport, v))) &&
+    idle.every(r => r.dead && r.elapsed >= 18 - TOLERANCE && r.elapsed <= 40 + TOLERANCE);
+}
 const sameViewport = (a: Scenario["viewport"], b: Scenario["viewport"]) => a[0] === b[0] && a[1] === b[1];
 export const priorityKey = (priority: readonly UpgradeId[]) => priority.join(",");
 export function broadScenarios(seeds: readonly number[] = BROAD_SEEDS): Scenario[] {
@@ -83,6 +88,7 @@ export function broadTargets(rows: readonly Result[]): Record<string, boolean> {
   const evasive = rows.filter(r => r.mode === "evasive");
   const m = median(evasive.map(r => r.elapsed));
   return { completeGroups,
+    idle18to40: completeGroups && idle18to40(rows),
     evasiveMedian75to110: completeGroups && m >= 75 - TOLERANCE && m <= 110 + TOLERANCE,
     ...Object.fromEntries(PRIORITIES.map(priority => {
       const group = evasive.filter(r => priorityKey(r.priority) === priorityKey(priority));
@@ -107,7 +113,7 @@ export function targets(rows: readonly Result[]) {
   const medianInRange = (group: readonly Result[]) => {
     const m = median(group.map(r => r.elapsed)); return m >= 60 - 1e-7 && m <= 180 + 1e-7;
   };
-  return { idle60: idle.length > 0 && idle.every(r => within(r, 60)),
+  return { idle18to40: idle18to40(rows), idle60: idle.length > 0 && idle.every(r => within(r, 60)),
     evasiveMedian60to180: medianInRange(evasive) && VIEWPORTS.every(v =>
       medianInRange(evasive.filter(r => r.viewport[0] === v[0] && r.viewport[1] === v[1]))),
     allDead240: rows.length > 0 && rows.every(r => within(r, 240)),

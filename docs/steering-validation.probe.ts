@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { FIRST_SPAWN_DELAY } from "../src/web/game/config";
 
 const scratch = process.env.SCRATCH!;
 assert.ok(scratch, "Set SCRATCH to an isolated home containing playwright-core");
@@ -61,6 +62,10 @@ try {
         return route.fulfill({ body: readFileSync(join("dist", file)), contentType: file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html" });
       });
       const page = await context.newPage(); page.on("pageerror", (error: Error) => errors.push(error.message));
+      await page.addInitScript(() => {
+        // Keep the browser's run reproducible; identity still uses randomUUID.
+        crypto.getRandomValues = ((values: Uint32Array) => { values[0] = 1; return values; }) as typeof crypto.getRandomValues;
+      });
       const discover = () => page.evaluate(() => {
         const element = document.querySelector(".game") as any;
         let fiber = element[Object.keys(element).find(key => key.startsWith("__reactFiber"))!];
@@ -114,6 +119,22 @@ try {
       await hint.waitFor({ state: "detached", timeout: 1200 });
       assert.ok(await page.evaluate(() => (window as any).hintSession.current.simulation.time) > 3);
       await restart();
+      if (!touch) {
+        // A real, unprotected idle run with no input and no upgrade auto-pick.
+        const quiet = await snapshot();
+        await page.waitForFunction(at => (window as any).hintSession.current.simulation.time >= at,
+          FIRST_SPAWN_DELAY - 0.2, { timeout: 15000 });
+        assert.equal(await page.evaluate(() => (window as any).hintSession.current.simulation.nextId), 1);
+        await page.waitForFunction(() => (window as any).hintSession.view.over, undefined, { timeout: 45000 });
+        const run = await page.evaluate(() => {
+          const s = (window as any).hintSession.current.simulation;
+          return { elapsed: s.time, dead: s.dead, robot: { ...s.robot }, hits: s.hits };
+        });
+        assert.ok(run.dead && run.elapsed >= 18 - 1e-7 && run.elapsed <= 40 + 1e-7);
+        assert.deepEqual(run.robot, quiet); assert.equal(run.hits, 3);
+        report.openingIdle = run;
+        assertions.push("Desktop seed 1: quiet first-spawn delay and actual idle death inside 18–40 gameplay seconds");
+      }
       // A blocked storage getter still permits play and one hint for this page.
       await page.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw Error("blocked storage"); } }); });
       await page.reload(); await page.locator("#name").fill("Blocked Robot");
