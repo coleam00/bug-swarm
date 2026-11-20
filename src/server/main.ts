@@ -8,7 +8,7 @@ import { createShareAssets } from "./share-assets";
 import { configuredOrigin, renderShareMeta } from "./share-meta";
 
 // Production mode: one process serves the API and the built UI from dist/.
-const { port, dataDir, hostname, startLimit } = readConfig(process.env);
+const { port, dataDir, hostname, startLimit, trustProxyHops } = readConfig(process.env);
 const publicOrigin = configuredOrigin(process.env);
 const shareAssets = createShareAssets();
 // Development API startup works without a build; production reads the template once.
@@ -18,7 +18,7 @@ const db = openDb(join(dataDir, "app.db"));
 const peers = new WeakMap<Request, string>();
 const trusted = (process.env.TRUSTED_PROXIES ?? "").split(",").map((v) => v.trim()).filter(Boolean);
 const app = createApp(db, { startLimit, clientIp: (request) => resolveClientIp(
-  peers.get(request) ?? "unknown", request.headers.get("x-forwarded-for"), trusted,
+  peers.get(request) ?? "unknown", request.headers.get("x-forwarded-for"), trusted, trustProxyHops,
 ) });
 app.route("/", shareAssets);
 const html = (requestUrl: string) => template === undefined ? new Response("UI not built", { status: 404 }) :

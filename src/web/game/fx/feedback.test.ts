@@ -4,6 +4,8 @@ import { FixedStepper } from "../loop";
 import { chooseUpgrade, createSimulation, IDLE, step, type Bug } from "../simulation";
 import { Effects } from "./index";
 import { Feedback } from "./feedback";
+import { TEST_SHIELD } from "../../../shared/upgrades";
+import { openChoice } from "../upgrades";
 
 function fixture() {
   const state = createSimulation(1), fx = new Effects(), feedback = new Feedback(fx);
@@ -12,6 +14,38 @@ function fixture() {
   const shot = (x: number, y: number) => state.shots.push({ x, y, vx: 1, vy: 0, life: 1 });
   return { state, fx, feedback, advance, shot };
 }
+
+test("shield blocks have a separate replaceable flash, including the last charge; immunity and refills never flash", () => {
+  const h = fixture();
+  const refill = () => {
+    do { h.state.upgrades.offer = null; openChoice(h.state.upgrades); } while (!h.state.upgrades.offer!.includes(TEST_SHIELD));
+    chooseUpgrade(h.state, h.state.upgrades.choiceNumber, TEST_SHIELD);
+  };
+  refill(); h.advance(); expect(h.fx.shieldFlash).toBe(0);
+  h.state.bugs.push({ id: 1, kind: "base", x: 300, y: 300 }, { id: 2, kind: "base", x: 301, y: 300 });
+  h.fx.advance(0); h.advance();
+  expect(h.state.shieldCharges).toBe(0); expect(h.fx.shieldFlash).toBeCloseTo(0.22);
+  expect(h.fx.flash).toBe(0); expect(h.fx.shake.remaining).toBe(0);
+  expect(h.fx.labels.count).toBe(0); expect(h.state.squashes).toBe(0);
+  h.fx.advance(50); const remaining = h.fx.shieldFlash;
+  h.advance(); expect(h.fx.shieldFlash).toBe(remaining); // invulnerable grouped contacts
+  refill(); h.advance(); expect(h.fx.shieldFlash).toBe(remaining);
+  for (let t = 100; t <= 300; t += 50) h.fx.advance(t);
+  expect(h.fx.shieldFlash).toBe(0);
+  h.state.invulnerableUntil = 0; h.advance();
+  expect(h.state.shieldCharges).toBe(1); expect(h.fx.shieldFlash).toBeCloseTo(0.22);
+  h.fx.reset(); h.feedback.reset(); expect(h.fx.shieldFlash).toBe(0); expect(h.fx.liveCount).toBe(0);
+  h.state.shieldCharges = 0; h.state.invulnerableUntil = 0; h.advance();
+  expect(h.fx.shieldFlash).toBe(0); expect(h.fx.flash).toBeGreaterThan(0);
+});
+
+test("bomb observation reaches the farthest corner from its actual origin", () => {
+  const h = fixture(); h.state.robot.x = 20; h.state.robot.y = 30;
+  h.feedback.beforeStep(h.state);
+  h.state.bombDetonations++; h.state.bombOrigin.x = 20; h.state.bombOrigin.y = 30;
+  h.feedback.afterStep(h.state, STEP);
+  expect(h.fx.ring.radius).toBeCloseTo(Math.hypot(580, 570));
+});
 
 test.each(["base", "fast"] as const)("%s shot-only kills report precise post-movement positions and squash counts", (kind) => {
   const h = fixture();

@@ -23,7 +23,7 @@ A step above simple shapes, drawn entirely in code on the canvas (no image files
 - **Robot:** a small rounded body with a glowing core and a short light trail when it moves; flashes white when hit.
 - **Bugs:** beetle-like bodies with animated legs that turn to face the robot; each kind has its own color and size (the fast bug is small, bright and twitchy).
 - **Shots:** bright streaks with a glow; the review laser is a longer beam.
-- **Feedback:** a squash pops into a burst of particles with a floating "+10"; a hit shakes the screen briefly; the refactor bomb is an expanding ring; the test shield is a visible bubble; the CI drone orbits with its own small glow.
+- **Feedback:** a squash pops into a burst of particles with a floating score label (nearby squashes merge, such as "+30"); a hit shakes the screen briefly; the refactor bomb is an expanding ring; the test shield is a visible bubble; the CI drone orbits with its own small glow.
 - **Text:** big, bold, readable on a phone and on a stream shown small.
 The look never costs frames: if an effect drops below 58 fps with 150 bugs, it gets simpler.
 

@@ -74,7 +74,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
         }}>
         <h1>Game over</h1><p className="final-score">Score {view.score}</p>
         <TeamRace view={view} />
-        <p role="status">{view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
+        <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
         <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
         <p className="restart">Tap or press a key to play again</p>
         <button type="button" onClick={(event) => { if (event.detail === 0) session.start(); }}>Play again</button>

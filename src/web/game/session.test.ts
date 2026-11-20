@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Best, Finish, Leader, RunStarted, TeamTotals } from "../../shared/api";
-import type { GameApi } from "./api";
+import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { Session } from "./session";
 import { request } from "./api";
 import { createApp } from "../../server/app";
@@ -138,6 +138,62 @@ function fixture(overrides: Partial<GameApi> = {}) {
   return { session: new Session(identity, api, () => 42, (message, error) => logs.push({ message, error }), undefined, undefined,
     { now: () => now, sleep: async ms => { now += ms; } }), finishes, logs, starts: () => starts };
 }
+
+test.each(["before death", "after death", "after restart"])("start refusal %s stays on its local run and never submits", async (when) => {
+  const response = deferred<RunStarted>();
+  let starts = 0;
+  const { session, finishes, logs } = fixture({ start: () => ++starts === 1 ? response.promise : Promise.resolve({ runId: "next" }) });
+  const original = session.start();
+  expect(session.current).toBe(original); expect(session.view.over).toBe(false);
+  if (when === "before death") {
+    response.reject(new RateLimitError()); await flush();
+    expect(session.current).toBe(original); expect(session.view.over).toBe(false);
+    expect(original.result).toBeUndefined(); expect(original.simulation.dead).toBe(false);
+    const time = original.simulation.time;
+    step(original.simulation, IDLE, 1 / 60);
+    expect(original.simulation.time).toBeGreaterThan(time);
+  }
+  session.end();
+  if (when === "after restart") {
+    const next = session.start();
+    expect(session.current).toBe(next); expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
+  }
+  if (when !== "before death") { response.reject(new RateLimitError()); await flush(); }
+  await flush();
+  expect(finishes).toHaveLength(0);
+  expect(logs.some(log => log.error instanceof RateLimitError)).toBe(true);
+  if (when === "after restart") {
+    expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
+    session.end(); await flush();
+    expect(session.view.save).toBe("saved"); expect(finishes.map(finish => finish.id)).toEqual(["next"]);
+  } else {
+    expect(session.view.save).toBe("rate-limited");
+    session.start(); expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
+  }
+});
+
+test("429 after a team-conflict retry remains rate-limited, with no finish or further retry", async () => {
+  let starts = 0;
+  const { session, finishes } = fixture({ start: async () => {
+    if (++starts === 1) throw new TeamConflictError("spaces");
+    throw new RateLimitError();
+  } });
+  const run = session.start(); await flush();
+  expect(starts).toBe(2); expect(session.identity.team).toBe("spaces");
+  expect(session.current).toBe(run); expect(session.view.over).toBe(false);
+  expect(run.result).toBeUndefined(); expect(run.simulation.dead).toBe(false);
+  const time = run.simulation.time;
+  step(run.simulation, IDLE, 1 / 60);
+  expect(run.simulation.time).toBeGreaterThan(time);
+  session.end(); await flush();
+  expect(session.view.save).toBe("rate-limited"); expect(finishes).toHaveLength(0);
+});
+
+test("a finish refusal keeps generic save failure feedback", async () => {
+  const { session } = fixture({ finish: async () => { throw new RateLimitError(); } });
+  session.start(); session.end(); await flush();
+  expect(session.view.save).toBe("failed");
+});
 test("simulation starts immediately; a death before start response submits exactly once with its own id", async () => {
   const start = deferred<RunStarted>();
   const { session, finishes } = fixture({ start: () => start.promise });

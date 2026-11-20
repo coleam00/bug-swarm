@@ -1,5 +1,5 @@
 import type { Finish, Identity, Leader, TeamTotals } from "../../shared/api";
-import { TeamConflictError, type GameApi } from "./api";
+import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { createSimulation, chooseUpgrade, type Simulation } from "./simulation";
 import { acquiredUpgrades } from "./upgrades";
 import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
@@ -7,10 +7,10 @@ import { SQUARE_ARENA, type Arena } from "./arena";
 
 export interface LocalRun {
   token: number; simulation: Simulation; start: Promise<string | null>; runId?: string; registeredAt?: number;
-  touch: boolean; result?: Readonly<Finish>;
+  touch: boolean; result?: Readonly<Finish>; startFailure?: "rate-limited";
 }
 export interface SessionView {
-  token: number; over: boolean; score: number; save: "pending" | "saved" | "failed";
+  token: number; over: boolean; score: number; save: "pending" | "saved" | "failed" | "rate-limited";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
   teamTotals: TeamTotals | null; teamsStatus: "loading" | "ready" | "failed";
@@ -67,6 +67,7 @@ export class Session {
     }).then(({ runId }) => {
       run.registeredAt = this.clock.now(); run.runId = runId; return runId;
     }).catch((error) => {
+      if (error instanceof RateLimitError) run.startFailure = "rate-limited";
       this.log(`Run start failed [${run.token}]`, error); return null;
     });
     this.emit(); return run;
@@ -111,7 +112,7 @@ export class Session {
     } catch (error) {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);
       if (this.current !== run) return;
-      this.view = { ...this.view, save: "failed" }; this.emit();
+      this.view = { ...this.view, save: run.startFailure ?? "failed" }; this.emit();
     }
   }
   async refreshBest(run: LocalRun): Promise<void> {
