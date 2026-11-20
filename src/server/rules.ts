@@ -30,7 +30,11 @@ export function validateName(value: unknown): { name: string; error?: never } | 
   if (!/^[A-Za-z0-9 _-]{2,16}$/.test(name)) return { error: "Use 2–16 letters, numbers, spaces, hyphens or underscores." };
   const normalized = moderationKey(name);
   if (reserved.has(normalized)) return { error: "That name is reserved" };
-  if (!approved.has(normalized) && (shortBlocked.has(normalized) || substringBlocked.some(word => normalized.includes(word)))) {
+  // Strip a simple numeric suffix BEFORE leet folding (123 would otherwise become
+  // i2e). Only short-term rejection uses this candidate; never grant exceptions to it.
+  const unsuffixed = moderationKey(name.replace(/[ _-]/g, "").replace(/[0-9]+$/, ""));
+  if (!approved.has(normalized) && (shortBlocked.has(normalized) || shortBlocked.has(unsuffixed) ||
+    substringBlocked.some(word => normalized.includes(word)))) {
     return { error: "That name isn't allowed. Pick another." };
   }
   return { name };

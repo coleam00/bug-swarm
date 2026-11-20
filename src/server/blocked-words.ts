@@ -2,12 +2,15 @@
 // within categories. Add actual words/compounds, not case, separator or leet variants.
 // rules.ts folds case, spaces/-/_, 0/o 1/i 3/e 4/a 5/s 7/t 8/b and repeated letters
 // in BOTH names and vocabulary, precomputing deduplicated forms once per module load.
-// Folded terms >= 4 characters match substrings; shorter terms match whole names.
+// Folded terms >= 4 characters match substrings; shorter terms match whole names
+// or whole names followed by digits. Check that suffix before leet folding, so
+// fag123/coon123 and separator/leet variants cannot turn the digits into letters.
 // This avoids ass -> as blocking Jason/classic. Short-term abusive compounds need
 // explicit entries (e.g. badass); this is deliberately not exhaustive detection.
 // For a legitimate collision, add the COMPLETE name to APPROVED_NAMES and an
-// acceptance test in rules.test.ts. Never exempt arbitrary extensions or strip
-// numeric suffixes: Hancock passes, Hancock2 and Hancockfuck do not.
+// acceptance test in rules.test.ts, including full names such as Sam Hancock.
+// Never exempt arbitrary extensions or grant an exception after stripping digits:
+// Hancock passes, Hancock2 and Hancockfuck do not.
 // Reserved names use whole-name equality BEFORE exceptions. Deploy list changes
 // to update entry and board reads; existing players and history remain stored.
 export const BLOCKED_WORDS = [
@@ -367,15 +370,29 @@ export const RESERVED_NAMES = [
 
 // Exact normalized complete names only; each has an acceptance test.
 export const APPROVED_NAMES = [
-  "Annalise",
   "analysis",
+  "Annaliese",
+  "Annalisa",
+  "Annalise",
+  "Anush",
+  "Anusha",
+  "Anushka",
+  "Arsen",
+  "Arsene",
+  "Arsenio",
   "canal",
   "Cockburn",
+  "Dickens",
+  "Dickenson",
   "Dickinson",
   "Dickson",
+  "Draper",
   "Hancock",
   "Hitchcock",
+  "Larsen",
   "Peacock",
+  "Sam Hancock",
   "Scunthorpe",
   "therapist",
+  "Van Dyke",
 ] as const;
