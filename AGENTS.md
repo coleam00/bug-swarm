@@ -1,6 +1,6 @@
 # Bug Swarm
 
-A 2-minute browser survival game for a livestream audience: steer a robot through a growing swarm of bugs, pick upgrades, and land on a shared top 10 and a Tabs vs Spaces team race.
+A real-time multiplayer arena shooter for a livestream audience: viewers share arenas, aim and shoot through waves of bugs, revive teammates, and race for Tabs or Spaces on a shared top 10. Release 2 (Arena) is in progress; release 1's single-player game still runs at `/` until it is replaced.
 
 - What we're building and why: `PRD.md`
 - What's in and out of scope: `direction.md`

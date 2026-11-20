@@ -1,5 +1,22 @@
 # Architecture
 
+## Arena (release 2): the target shape
+
+Release 2 turns the game into a server-authoritative multiplayer arena (see `direction.md` and `PRD.md`). Everything under "Release 1" below describes the single-player game that still runs at `/` until the arena replaces it; do not extend release 1 mechanics.
+
+- **One process:** the existing Bun server also hosts the arenas. `Bun.serve` upgrades `GET /ws` to a WebSocket (Bun's built-in WebSocket, no new dependency). HTTP routes (Hono), SQLite and the static build stay as they are.
+- **Shared simulation, server-run:** `src/shared/arena/` holds the arena simulation as pure TypeScript: world, players, bugs, shots, waves, pickups, scoring. It advances by a fixed step (50 ms, 20 Hz) from per-player inputs and a seeded random generator, never reading the clock, `Math.random` or the DOM, so `bun test` covers it by stepping. The server runs it; the client imports only its types, constants and pure helpers (for prediction and drawing).
+- **Rooms:** `src/server/arena/` owns the room manager (arenas of at most 20 players; join the fullest arena with room, else open a new one; empty arenas close), the tick loop, the WebSocket protocol and the bridge to SQLite (a life's score is saved when the life ends, and for every live player on shutdown).
+- **Protocol:** small JSON messages defined once in `src/shared/arena/protocol.ts`, versioned, validated on receipt (unknown or oversized messages are dropped and counted). Client to server: `hello` (player id, name, team, touch flag, build id), `input` (sequence number, move vector, aim angle, fire held), `respawn`. Server to client: `welcome` (your id, arena id, build id, world size, constants), `snapshot` at 20 Hz (tick, players, bugs, shots, pickups, events since the last snapshot), `life_over` (score, best, rank), `error`. Snapshots carry only what clients draw; one file per message type is fine.
+- **Client:** `src/web/arena/` connects, sends inputs at the tick rate, interpolates other entities about 100 ms behind the latest snapshot and predicts its own robot's movement, reconciling with the server. The camera follows your robot over a world larger than the screen; a minimap shows teammates and the swarm. Rendering reuses the canvas look (procedural drawing, fixed pools, cached glows).
+- **Controls:** keyboard + mouse (move, aim, hold to fire) and twin touch sticks (left half moves, right half aims and fires while held), in `src/web/arena/input.ts`.
+- **Redeploy safety:** the server sends its build id in `welcome`; on `SIGTERM` it ends every life (saving scores) and closes sockets with a restart code; clients reconnect with backoff and reload the page when the build id changed.
+- **Bots:** `scripts/bots.ts` (`bun run bots -- --url <base> --count <n> --seconds <s> [--policy mover|aimer]`) connects real WebSocket clients that play with a scripted policy, and reports joins, message rates, errors and the server's tick p50/p95 (the server exposes tick timing on `GET /api/arena/stats`). The same policies run inside the pure simulation for skill measurements in tests.
+- **Seams so items don't collide:** one file per bug kind (`src/shared/arena/bugs/<kind>.ts`), per pickup (`src/shared/arena/pickups/<kind>.ts`) and per message type; a registry imports them. Adding a bug or pickup touches its own file, the registry and its test, nothing else.
+- **Tests:** the simulation is tested by stepping; the room manager and protocol are tested in process; at least one integration test starts the real server on an ephemeral port (`port: 0`) and connects two WebSocket clients. Close every server and socket before a test ends.
+
+## Release 1 (single-player, being retired)
+
 ## Stack
 - Bun (runtime, package manager, test runner), TypeScript strict, Vite for the browser build, Canvas 2D for the game, Hono on Bun for a small API, SQLite through `bun:sqlite` for runs and scores.
 - Why: the bootcamp's supported stack, with the same commands on Windows, macOS and Linux. A game loop needs no UI framework; the server exists for the shared leaderboard and the bet.
