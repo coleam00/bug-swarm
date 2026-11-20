@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Identity } from "../shared/api";
-import { validateName } from "../server/rules";
+import { StartScreen, type StartRequest } from "./entry/StartScreen";
 import { api } from "./game/api";
 import { loadIdentity, storeIdentity } from "./game/identity";
 import { mountGame, type Hud } from "./game/engine";
@@ -9,7 +9,7 @@ import { SteeringHint } from "./game/steering-hint";
 import { arenaForViewport } from "./game/arena";
 import { UPGRADE_NAMES, nextPickDescription } from "../shared/upgrades";
 import type { SessionView } from "./game/session";
-import { TEAMS, TEAM_NAMES, TEAM_COLOURS, type Team } from "../shared/teams";
+import { TEAMS, TEAM_NAMES, TEAM_COLOURS } from "../shared/teams";
 import { exactScore } from "./format";
 import "./style.css";
 
@@ -18,34 +18,19 @@ function readIdentity(): Identity | null {
 }
 export function App() {
   const [identity, setIdentity] = useState(readIdentity);
-  const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  const [started, setStarted] = useState(false);
   const entryTouch = useRef(false);
   function rememberIdentity(next: Identity) {
     try { storeIdentity(localStorage, next); } catch (cause) { console.error("Storage unavailable", cause); }
     setIdentity(next);
   }
-  function selectTeam(team: Team) {
-    const result = validateName(identity?.name ?? name);
-    if (result.error) { setError(result.error); return; }
-    const next: Identity = { playerId: identity?.playerId ?? crypto.randomUUID(), name: result.name!, team };
-    rememberIdentity(next);
+  function start({ name, team, touch }: StartRequest) {
+    entryTouch.current = touch;
+    rememberIdentity({ playerId: identity?.playerId ?? crypto.randomUUID(), name, team });
+    setStarted(true);
   }
-  if (identity?.team) return <Game identity={identity} initialTouch={entryTouch.current} onIdentity={rememberIdentity} />;
-  return <main className="entry"><h1>Bug Swarm</h1><p>Steer. Auto-fire. Survive.</p>
-    <form onPointerDown={(event) => { if (event.pointerType === "touch") entryTouch.current = true; }} onSubmit={(event) => {
-      event.preventDefault();
-      const result = validateName(identity?.name ?? name);
-      setError(result.error ?? "Choose Tabs or Spaces to play.");
-    }}>
-      <label htmlFor="name">Your name on the leaderboard</label>
-      <input id="name" value={identity?.name ?? name} readOnly={!!identity} onChange={(event) => setName(event.target.value)} autoComplete="off" maxLength={16} autoFocus={!identity} aria-describedby="name-help name-error" />
-      <p id="name-help">2–16 letters, numbers, spaces, - or _</p>
-      <p id="name-error" role="alert">{error}</p>
-      <p>{identity ? "Welcome back! Choose your team once." : "Choose your team to play."} Every score helps. Your team is permanent.</p>
-      <div className="team-choices">{TEAMS.map(team => <button key={team} type="button" style={{ background: TEAM_COLOURS[team] }} onClick={() => selectTeam(team)}>Join {TEAM_NAMES[team]}</button>)}</div>
-    </form><p>Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop. Your robot fires for you. Three hits end a run.</p>
-  </main>;
+  if (started && identity?.team) return <Game identity={identity} initialTouch={entryTouch.current} onIdentity={rememberIdentity} />;
+  return <StartScreen savedIdentity={identity} onStart={start} />;
 }
 
 function Game({ identity, initialTouch, onIdentity }: { identity: Identity; initialTouch: boolean; onIdentity: (identity: Identity) => void }) {

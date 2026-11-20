@@ -86,7 +86,7 @@ try {
     });
     const stationary = async () => { const before = await read(); await frames(); const after = await read(); assert.equal(after.x, before.x, JSON.stringify(await page.evaluate(() => (window as any).touchEvents))); assert.equal(after.y, before.y); };
     await page.goto("http://localhost/");
-    assert.ok((await page.locator(".entry").innerText()).includes("Drag farther to move faster; lift to stop."));
+    assert.equal(await page.locator(".entry p").innerText(), "Survive the swarm.");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.screenshot({ path: join(evidence, "portrait-hint.png"), fullPage: true });
     await page.setViewportSize({ width: 844, height: 390 });
@@ -95,7 +95,7 @@ try {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.locator("#name").fill("Touch Robot"); await page.getByRole("button", { name: "Join Tabs" }).tap();
     await page.locator("canvas").waitFor(); await findSession();
-    record("Portrait and landscape entry hints fit; auto-fire and three-hit explanation retained.");
+    record("Portrait and landscape clean entry fits.");
     for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
       await page.setViewportSize(size); await frames();
       await page.evaluate(() => (window as any).touchSession.start(true)); await frames(); await findSession();
