@@ -1,6 +1,8 @@
 import type { Leader, TeamTotals } from "../../shared/api";
 import { TEAMS, type Team } from "../../shared/teams";
 import { validateName } from "../../server/rules";
+import { exactScore } from "../format";
+export { exactScore } from "../format";
 
 export const HIGHLIGHT_MS = 3000;
 export interface Row extends Leader { rank: number; highlightUntil: number }
@@ -83,7 +85,5 @@ export function expireHighlights(state: BoardState, now: number): BoardState {
   };
 }
 
-const integer = new Intl.NumberFormat("en-US");
 const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
-export const exactScore = (score: number) => integer.format(score);
 export const displayScore = (score: number) => score <= 999_999 ? exactScore(score) : compact.format(score);

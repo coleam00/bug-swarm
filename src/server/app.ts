@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { isIP } from "node:net";
 import type { Database } from "bun:sqlite";
-import { countEvents, finishRun, getRun, leaderboard, personalBest, startRun, teamTotals } from "./db";
+import { countEvents, finishRun, getRun, rankedPlayers, personalBest, startRun, teamTotals } from "./db";
 import { isTeam } from "../shared/teams";
 import { isId, plausible, parseFinish, validateName } from "./rules";
-import type { Leader, TeamTotals } from "../shared/api";
+import type { Leader, Standing, TeamTotals } from "../shared/api";
 
 export const START_LIMIT = 300;
 export const PLAYER_START_LIMIT = 40;
@@ -39,7 +39,20 @@ export function createApp(db: Database, options: AppOptions = {}) {
     budget.set(key, starts);
     return null;
   }
-  let cached: { at: number; rows: Leader[] } | undefined;
+  let cached: { at: number; rows: Leader[]; total: number; standings: Map<string, Standing> } | undefined;
+  function ranking() {
+    const time = now();
+    if (!cached || time - cached.at >= 1000 || time < cached.at) {
+      const rows = rankedPlayers(db);
+      const standings = new Map<string, Standing>();
+      rows.forEach((row, index) => standings.set(row.playerId, {
+        rank: index + 1, total: rows.length,
+        next: index ? { rank: index, pointsToBeat: rows[index - 1]!.score - row.score + 1 } : null,
+      }));
+      cached = { at: time, rows: rows.slice(0, 10), total: rows.length, standings };
+    }
+    return cached;
+  }
   let cachedTeams: { at: number; totals: TeamTotals } | undefined;
   const app = new Hono<{ Variables: { clientIp: string } }>();
   app.onError((error, c) => {
@@ -120,9 +133,13 @@ export function createApp(db: Database, options: AppOptions = {}) {
     return c.json({ saved: true });
   });
   app.get("/api/leaderboard", (c) => {
-    const time = now();
-    if (!cached || time - cached.at >= 1000 || time < cached.at) cached = { at: time, rows: leaderboard(db) };
-    return c.json(cached.rows);
+    return c.json(ranking().rows);
+  });
+  app.get("/api/players/:playerId/standing", (c) => {
+    const id = c.req.param("playerId");
+    if (!isId(id)) return c.json({ error: "Invalid player id." }, 400);
+    const snapshot = ranking();
+    return c.json(snapshot.standings.get(id) ?? { rank: null, total: snapshot.total, next: null });
   });
   app.get("/api/teams", (c) => {
     const time = now();

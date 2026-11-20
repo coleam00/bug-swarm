@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { countEvents, finishRun, getRun, hideName, leaderboard, openDb, personalBest, startRun, teamTotals } from "./db";
+import { countEvents, finishRun, getRun, hideName, leaderboard, openDb, personalBest, rankedPlayers, startRun, teamTotals } from "./db";
 
 test("actual legacy schema migrates additively and survives repeated reopen", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-db-")), path = join(dir, "app.db");
@@ -50,8 +50,11 @@ test("best per player, first-best finish and id tie order, filtering before ten"
     expect(leaderboard(db).map((v) => v.playerId)).toEqual(["c", "b"]);
     expect(personalBest(db, "a")).toBe(100);
     for (let i = 0; i < 14; i++) score(`p${i}`, `Robot${i}`, 99 - i, 10);
+    score("zero", "Zero", 0, 0);
+    startRun(db, "unfinished", "Unfinished", 0, "tabs");
     // Legacy entries that no longer pass the current list never reach public output.
     score("bad", "shit", 1000, 0);
+    expect(rankedPlayers(db).map(row => row.playerId)).toEqual(["c", "b", ...Array.from({ length: 14 }, (_, i) => `p${i}`), "zero"]);
     expect(leaderboard(db)).toEqual([
       { playerId: "c", name: "Gamma", score: 100 }, { playerId: "b", name: "Beta", score: 100 },
       ...Array.from({ length: 8 }, (_, i) => ({ playerId: `p${i}`, name: `Robot${i}`, score: 99 - i })),
@@ -74,6 +77,7 @@ test("populated pre-team database preserves history and never backfills run snap
     db.close(); db = openDb(path); db.close(); db = openDb(path);
     expect(getRun(db, "finished")?.score).toBe(11);
     expect(getRun(db, "finished")?.team).toBeNull();
+    expect(rankedPlayers(db)).toEqual([{ playerId: "legacy", name: "Robot", score: 11 }]);
     expect(countEvents(db).run_ended).toBe(1);
     expect(teamTotals(db)).toEqual({ tabs: 0, spaces: 0 });
     const started = startRun(db, "legacy", "Robot", 0, "spaces");

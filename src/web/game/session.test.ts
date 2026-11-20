@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Best, Finish, Leader, RunStarted, TeamTotals } from "../../shared/api";
+import type { Best, Finish, Leader, RunStarted, Standing, TeamTotals } from "../../shared/api";
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
 import { FakeTiming } from "./timing.test-support";
@@ -12,7 +12,7 @@ import { step, IDLE } from "./simulation";
 
 test("every start samples arena once and isolates dimensions from its provider", () => {
   let calls = 0, dimensions = { ...arenaForViewport(390, 844) };
-  const api: GameApi = { teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
+  const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }), teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
     best: async () => ({ best: null }), leaders: async () => [] };
   const session = new Session(identity, api, () => 42, undefined, () => { calls++; return dimensions; });
   const first = startRun(session);
@@ -68,7 +68,7 @@ test.each([
     if (finish) statuses.push(response.status);
     return response;
   };
-  const api: GameApi = {
+  const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }),
     start: identity => request("/api/runs", identity, fetcher),
     finish: (id, result) => request(`/api/runs/${id}/finish`, result, fetcher),
     best: id => request(`/api/players/${id}/best`, undefined, fetcher),
@@ -140,7 +140,7 @@ test("choice publication is immutable and transition-only; stale selections and 
 function fixture(overrides: Partial<GameApi> = {}) {
   const finishes: { id: string; result: Finish }[] = [], logs: { message: string; error: unknown }[] = [];
   let starts = 0, now = 0;
-  const api: GameApi = {
+  const api: GameApi = { standing: async () => ({ rank: null, total: 0, next: null }),
     teams: async () => ({ tabs: 0, spaces: 0 }),
     start: async () => ({ runId: `run-${++starts}` }),
     finish: async (id, result) => { finishes.push({ id, result }); return { saved: true }; },
@@ -330,13 +330,13 @@ test("2500 ms leaderboard responses apply across 2000 ms polls, including a hidd
 });
 test("game-over polling refreshes every two seconds and stops when detached or restarted", async () => {
   const originalSet = globalThis.setInterval, originalClear = globalThis.clearInterval;
-  let callback: (() => void) | undefined, interval = 0, cleared = 0, reads = 0, teamReads = 0;
+  let callback: (() => void) | undefined, interval = 0, cleared = 0, reads = 0, teamReads = 0, standingReads = 0;
   globalThis.setInterval = ((fn: () => void, ms: number) => { callback = fn; interval = ms; return 1; }) as typeof setInterval;
   globalThis.clearInterval = (() => { cleared++; }) as typeof clearInterval;
   try {
-    const { session } = fixture({ leaders: async () => { reads++; return []; }, teams: async () => { teamReads++; return { tabs: 0, spaces: 0 }; } });
+    const { session } = fixture({ standing: async () => { standingReads++; return { rank: null, total: 0, next: null }; }, leaders: async () => { reads++; return []; }, teams: async () => { teamReads++; return { tabs: 0, spaces: 0 }; } });
     const detach = session.subscribe(() => {}); startRun(session); session.end(); await flush();
-    expect(interval).toBe(2000); const before = reads, teamsBefore = teamReads; callback!(); await flush(); expect(reads).toBe(before + 1); expect(teamReads).toBe(teamsBefore + 1);
+    expect(interval).toBe(2000); expect(standingReads).toBe(2); const standingBefore = standingReads; const before = reads, teamsBefore = teamReads; callback!(); await flush(); expect(reads).toBe(before + 1); expect(teamReads).toBe(teamsBefore + 1); expect(standingReads).toBe(standingBefore + 1);
     detach(); expect(cleared).toBeGreaterThan(0); const stop = session.subscribe(() => {});
     const beforeRestart = cleared; startRun(session); expect(cleared).toBeGreaterThan(beforeRestart); stop();
   } finally { globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
@@ -509,4 +509,74 @@ test("replacement and accepted selection cancel choice timers; death supersedes 
     time.advance(799); expect(session.canRestart(session.view.token)).toBe(false);
     time.advance(1); expect(session.view.restartReady).toBe(true);
   } finally { detach(); }
+});
+
+test("standing reads apply despite newer pending requests, reject stale results, and recover independently", async () => {
+  const reads: ReturnType<typeof deferred<Standing>>[] = [];
+  const { session, logs } = fixture({ standing: () => {
+    const read = deferred<Standing>(); reads.push(read); return read.promise;
+  } });
+  const run = startRun(session); run.simulation.score = 999;
+  session.end(); await flush();
+  expect(reads).toHaveLength(2); // Death and acknowledged save each refresh.
+  expect(session.view.standing).toBeNull();
+  reads[0]!.resolve({ rank: 37, total: 214, next: { rank: 36, pointsToBeat: 120 } }); await flush();
+  expect(session.view.standing).toEqual({ rank: 37, total: 214, next: { rank: 36, pointsToBeat: 120 } });
+  void session.refreshStanding(run);
+  reads[2]!.resolve({ rank: 10, total: 214, next: { rank: 9, pointsToBeat: 1 } }); await flush();
+  reads[1]!.reject(new Error("stale failure")); await flush();
+  expect(session.view.standing).toEqual({ rank: 10, total: 214, next: { rank: 9, pointsToBeat: 1 } });
+  void session.refreshStanding(run); void session.refreshStanding(run);
+  reads[4]!.resolve({ rank: null, total: 214, next: null }); await flush();
+  reads[3]!.resolve({ rank: 99, total: 214, next: { rank: 98, pointsToBeat: 99 } }); await flush();
+  expect(session.view.standing).toEqual({ rank: null, total: 214, next: null });
+  void session.refreshStanding(run);
+  const failure = new Error("offline");
+  reads[5]!.reject(failure); await flush();
+  expect(session.view.standingStatus).toBe("failed"); expect(session.view.standing).toBeNull();
+  expect(session.view.save).toBe("saved"); expect(session.view.best).toBe(7);
+  expect(session.view.leaders[0]?.score).toBe(99);
+  expect(logs.some(log => log.error === failure && log.message.includes("run-1"))).toBe(true);
+  void session.refreshStanding(run);
+  reads[6]!.resolve({ rank: 1, total: 214, next: null }); await flush();
+  expect(session.view.standingStatus).toBe("ready");
+  void session.refreshStanding(run); void session.refreshStanding(run); startRun(session);
+  reads[7]!.resolve({ rank: 99, total: 214, next: { rank: 98, pointsToBeat: 99 } });
+  reads[8]!.reject(new Error("late failure after restart")); await flush();
+  expect(session.view.standing).toBeNull(); expect(session.view.standingStatus).toBe("loading");
+});
+
+test("slow standing polls apply without starvation and remove hidden standings within five seconds", async () => {
+  const originalSet = globalThis.setInterval, originalClear = globalThis.clearInterval;
+  let now = 0, nextPoll = Infinity, poll: (() => void) | undefined, hidden = false, unavailable = false;
+  const pending: { at: number; totals: Standing; failed: boolean; reply: ReturnType<typeof deferred<Standing>> }[] = [];
+  globalThis.setInterval = ((fn: () => void) => { poll = fn; nextPoll = now + 2000; return 1; }) as typeof setInterval;
+  globalThis.clearInterval = (() => { poll = undefined; nextPoll = Infinity; }) as typeof clearInterval;
+  const { session } = fixture({ standing: () => {
+    const reply = deferred<Standing>();
+    pending.push({ at: now + 2500, totals: { rank: hidden ? null : 1, total: hidden ? 0 : 1, next: null }, failed: unavailable, reply });
+    return reply.promise;
+  } });
+  const detach = session.subscribe(() => {});
+  async function advanceTo(time: number) {
+    while (Math.min(nextPoll, pending[0]?.at ?? Infinity) <= time) {
+      now = Math.min(nextPoll, pending[0]?.at ?? Infinity);
+      if (nextPoll === now) { nextPoll += 2000; poll!(); }
+      while (pending[0]?.at === now) {
+        const read = pending.shift()!;
+        if (read.failed) read.reply.reject(new Error("unavailable")); else read.reply.resolve(read.totals);
+      }
+      await flush();
+    }
+    now = time;
+  }
+  try {
+    startRun(session); session.end(); await flush();
+    await advanceTo(2500); expect(session.view.standing?.rank).toBe(1);
+    hidden = true; await advanceTo(6500);
+    expect(pending.length).toBeGreaterThan(0);
+    expect(session.view.standing).toEqual({ rank: null, total: 0, next: null });
+    unavailable = true; await advanceTo(10500); expect(session.view.standingStatus).toBe("failed");
+    unavailable = false; await advanceTo(14500); expect(session.view.standingStatus).toBe("ready");
+  } finally { detach(); globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
 });

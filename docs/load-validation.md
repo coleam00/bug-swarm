@@ -2,6 +2,8 @@
 
 Run only against a server and data directory you own. The harness writes real scores and players. Keep benchmark data separate from stream data. No dependencies beyond the project's Bun install are required.
 
+The current player workload also reads personal standing on death, acknowledged save and every two-second game-over poll. The observer still reads only leaderboard and teams. Measurements including that endpoint are in [standing-validation.md](standing-validation.md#capacity); the measurements below record the earlier workload.
+
 ## Reproduce
 
 Build with `bun install --frozen-lockfile` and `bun run build`. Use two terminals with an explicit scratch home/data directory and a dedicated unused port. The examples use 43125; if startup reports an occupied port, choose another before making requests. Wait for the newly started server's `App on ...` message, then verify its `/health` response is `ok`.
