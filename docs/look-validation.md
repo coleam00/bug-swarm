@@ -121,6 +121,8 @@ The subsequent shield review exposed a missed case in that audit: stroke-colour 
 
 ## Phase 2 finish (issue #28, 2026-11-19)
 
+The owner's night ruling accepts the quiet-machine measurements below and closes the intermittent-dip investigation. The [final integration record](#owner-resolution-and-main-integration-2026-11-19) distinguishes this accepted pre-merge evidence from checks on the merged main tuning.
+
 F now includes the current bug population and live effects alongside FPS and update/draw timings. Effects are occupied particle, trail and label slots, plus one each for an active bomb ring, hit flash and shake. Projectiles, drones and shield outlines are excluded. The getter uses existing pool counts without scans, allocation or a second counter; it is read only at the existing one-second refresh while F is enabled. There is no added per-frame work. Focused tests cover exact populations, independent transients, replacement, expiry/reset, changing debug populations, repeat suppression, disabling, choice-modal input and restart cleanup.
 
 Fresh post-change measurements used headless Chrome **156.0.8078.4**, Windows 11 Home **10.0.26200**, AMD Ryzen 9 7950X3D desktop. Viewport **1280×720**, device/render DPR **1**, logical world **800×450**. The existing `?profile=stress` and `?profile=stress&burst` ran sequentially, each with **10 seconds warmup + 60 seconds sample**, after checks/build completed. No concurrent checks or browser workloads ran. Vite alone bound to 127.0.0.1:5191 with strictPort; Chrome used scratch home/profile directories. Both browser and our Vite process stopped after measurement.
@@ -139,7 +141,7 @@ Both profiles acquired four laser/shield/bomb picks and nine drones. Activity co
 
 `bun run check` passed **184 tests, 13,915 assertions**, with TypeScript clean; `bun run build` passed. The built application also passed the [fresh phone-layout and keyboard F probe](team-validation.md#phase-2-finish-issue-28-2026-11-19). The [1280×720 screenshot](team-evidence/issue-28/debug-desktop.png) shows the complete readout within the viewport, and a second F press restored the hint. These factory Chrome measurements satisfy the issue's owner ruling; the operator's own browser check remains required before merge.
 
-### Review follow-up (2026-11-19)
+### Historical review follow-up (2026-11-19, before the night ruling)
 
 Review reported an initial Chrome 156 normal-stress rolling minimum of **56.994 FPS**, followed by **59.988** when repeated without concurrent review commands; its burst run reached **59.994**. Product review's Chrome 153 normal run also reached **59.988**, but its additional 300-synthetic-squashes/second saturation runs reached **54.10** and **53.99** (means **59.43** and **59.62**). Those below-floor observations remain on record; the initial passing measurements above do not invalidate them.
 
@@ -163,34 +165,14 @@ Every trial used four laser/shield/bomb picks and nine drones, with no page erro
 
 The choice-screen test now advances both the sampling-initialization tick and a full additional second before checking that F stayed suppressed. Enabling F during a choice is rejected by that assertion. Nearby numeric assertions allow equivalent label placement/punctuation; effect composition remains in pool tests and immediate disable clearing remains in the existing F frame-rate test. The simplified wiring test still rejects missing bug counts, wrong effect counts, repeated-key toggles and effects surviving restart. `bun run check` passes **184 tests, 13,913 assertions**; `bun run build` passes with the same application assets. Production code and game-over layout are unchanged by this repair, so the existing phone evidence still applies.
 
-### Recurring dip investigation (second return, 2026-11-19; unresolved)
+### Archived dip investigation (2026-11-19)
 
-Product review of `e8e6940` reported **59.949 mean / 57.000 lowest rolling FPS** in normal stress, then **59.999 / 59.988** in burst and **59.999 / 59.992** in a subsequent normal trial. All held 150 bugs with all upgrades active. These three reported results are preserved in [the investigation report](upgrade-validation/issue-28-investigation.json), alongside every new capture. The 57 FPS finding is valid evidence. Passing retries did not establish its cause, and this investigation does **not** claim a causal performance fix or readiness to merge.
+Before the owner's final ruling, product review reported **59.949 mean / 57.000 lowest rolling FPS**, followed by passing burst and normal trials. The branch temporarily instrumented the developer benchmark with per-window and frame-gap details. Eleven profiling captures and two instrumented benchmark samples did not reproduce that failing window. These observations remain archived in the [investigation report](upgrade-validation/issue-28-investigation.json), [callback ledgers](upgrade-validation/issue-28-profiling-ledgers.json.gz) and [diagnostic reports](upgrade-validation/issue-28-diagnostic-benchmark.json). No-draw controls were diagnostic only; none is acceptance evidence. The investigation was unresolved at that point; its former request for a profiling window is superseded by the ruling below.
 
-The missing evidence was the work around the failing window: previous reports retained only averages, p95 and one rolling minimum. The existing developer benchmark now retains `result.frameAudit`, with every completed one-second window, maximum measured callback duration/RAF interval, and details for each interval over 25 ms. Gap details include preceding callback duration, time between callbacks, current callback delay/work and update/draw/fixture costs. The 25 ms cutoff selects detail only: **every frame still counts toward FPS**, including all gaps. Warmup, duration, bug count, upgrades and the ≥58 floor are unchanged. Callback work covers the fixture, simulation/FX, draw submission and readout up to the audit call; audit bookkeeping and final JSON reporting are excluded. Deferred browser raster/compositing work is not included, so a gap between short callbacks cannot alone distinguish GPU work from OS/browser scheduling. The recorder is developer-only, with scalar work per frame and objects emitted per completed window or gap. It is absent from the production bundle and has no API client.
+### Owner resolution and main integration (2026-11-19)
 
-Tests seed real-duration sample timestamps, preserve complete windows, count a deliberately lost interval as **55 FPS**, and distinguish an 80 ms preceding callback from a 100 ms delivery gap between short callbacks. `bun run check` passes **187 tests / 13,939 assertions** and `bun run build` passes with unchanged application assets. Existing phone/F/gameplay evidence remains applicable; no production, upgrade, scoring or layout code changed.
+The [issue #28 night ruling](https://github.com/coleam00/bug-swarm/issues/28) settles frame-rate acceptance: the documented quiet-machine `?profile=stress` run at **59.999 mean / 59.994 lowest rolling FPS**, with 150 bugs and every upgrade over a 60-second sample, is the accepted evidence. The owner attributes the intermittent dip during busy factory/browser work to machine contention and directs that it not be investigated further. The earlier reports remain historical evidence; no additional profiling window or physical device is required.
 
-Profiling used the same Windows/CPU/Chrome 156 environment, RTX 3090 via ANGLE D3D11, viewport 1280×720, DPR 1. Browser homes/profiles/data were scratch-only. Captures ran sequentially, without concurrent project checks or other validation workloads. Six captures used Chrome tracing; two used lighter callback ledgers with three-minute samples; three used a separately Vite-built fixture served entirely through browser interception and default Playwright RAF polling. No-draw cases suppress rendering only in scratch tooling, retain simulation/upgrades and are **diagnostic controls, not acceptance evidence**. All browser/Vite processes and handles were closed. No page errors or API requests occurred. Tracing and wrappers can perturb timing.
+Merged `main` at **d62f174**, including #23 balance and #31 pacing, before final validation. `config.ts`, `simulation.ts`, `src/shared/upgrades.ts` and the developer benchmark match that main revision exactly, including its late-pursuit fixture and shield-capacity helper. Removed the temporary frame-gap recorder and its tests now that the investigation is closed. Production changes for this item remain the F bug/live-effect counts; race-first layout and all main gameplay tuning are preserved.
 
-| Capture | Sample seconds | Mean / lowest rolling FPS | Maximum measured callback ms |
-| --- | ---: | ---: | ---: |
-| Traced normal, initial | 60 | 59.999 / 59.982 | 5.600 |
-| Traced normal A / B / C | 60 each | 59.999 / 59.994; 59.999 / 59.994; 59.999 / 59.988 | 4.600 / 4.400 / 4.200 |
-| Traced burst | 60 | 59.999 / 59.988 | 4.600 |
-| Traced no-draw control | 60 | 59.999 / 59.982 | 1.600 |
-| Longer normal | 180 | 59.999 / 59.982 | 6.100 |
-| Longer no-draw control | 180 | 59.999 / 59.988 | 3.200 |
-| Bundled normal A / B | 60 each | 59.999 / 59.994; 59.999 / 59.982 | 12.900 / 5.300 |
-| Bundled no-draw control | 60 | 59.999 / 59.994 | 1.900 |
-
-All 11 pre-change captures are retained: [reports and derived windows](upgrade-validation/issue-28-investigation.json), [gzip JSON callback ledgers](upgrade-validation/issue-28-profiling-ledgers.json.gz). The scratch wrappers measured complete callbacks, including final reporting; these maxima are not identical in scope to the maintained recorder. The initial trace found an **80.441 ms GPU raster flush during warmup**, and a maximum sampled raster flush of **13.675 ms**; that passing trace supplies no below-floor window to attribute. Neither drawing controls nor normal captures reproduced the returned failure, so there is no basis to blame or exonerate effects or machine contention.
-
-The revised benchmark itself was then measured normally (10-second warmup, 60-second sample, no tracing/wrappers):
-
-| Profile | Mean / lowest rolling FPS | Update mean / p95 ms | Draw mean / p95 ms | Fixture mean / p95 ms | Max measured callback / interval ms |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| stress | 59.982 / 59.020 | 0.095 / 0.200 | 0.869 / 1.500 | 0.003 / 0.000 | 3.300 / 33.300 |
-| stress + burst | 59.999 / 59.988 | 0.091 / 0.200 | 1.132 / 1.900 | 0.004 / 0.000 | 4.800 / 17.200 |
-
-[Full reports](upgrade-validation/issue-28-diagnostic-benchmark.json) retain all windows and one normal 33.3 ms gap: preceding measured work **0.9 ms**, current work **0.8 ms**, with **32.4 ms between callbacks**. This identifies a missed frame outside measured game callbacks, but not the cause of the earlier 57 FPS window. Both profiles held 150 bugs with four laser/shield/bomb picks and nine drones; activity was respectively **67/67 blocks, 10/10 bombs, 3309/3425 upgraded kills, 630/639 drone shots**. No failed or passing capture was discarded. The performance finding remains open pending a failing-window capture with the new audit and Chrome trace on the product-review path, or a controlled factory-machine profiling window. The operator's separate browser check remains required before merge. No physical device is requested.
+Post-merge `bun run check` passed **206 tests / 86,524 assertions**, with TypeScript clean; `bun run build` passed. The accepted FPS reports above predate the main merge and are retained under the explicit owner ruling, rather than presented as new measurements of the merged tuning. No new stress/profile run was requested or performed. The operator's browser check remains required before merge.
