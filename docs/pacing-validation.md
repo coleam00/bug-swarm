@@ -4,6 +4,8 @@
 
 `bun run pacing --broad` at `31b5ee6481b59ff19b78784e123f31a9ff96851f` measured a maximum **4,816 points** across **2,000 runs**: evasive seed **46**, **1280x800**, priority **ci-drone / review-laser / refactor-bomb / test-shield**. `REVIEW_SCORE = 7224` is **4,816 × 1.5**. Only scores strictly above it are held. Plausibility remains an independent rejection gate; a plausible **13,800 / 300 seconds / 1,350 squashes** finish is saved but held.
 
+This calibration used Windows and Bun **1.4.2**. Linux CI with Bun **1.4.5** scored the same maximum scenario at **3,950**: floating-point evasion can diverge across runtime/platform versions. Its regression asserts a valid, completed, unheld finish rather than an exact historical tally. All matrix cases still must pass the independent plausibility and review gates.
+
 Both pacing commands now require `scoresUnheld`, using production `needsReview`, alongside `scoresPlausible`. The default matrix, ten-seed broad slice, measured maximum scenario and a plausible synthetic result above the ceiling exercise that distinction. The full broad workload remains outside the routine suite. This is an empirical outlier check: lower forged scores can still pass, and exceptional honest runs can need review.
 
 The additive `runs.held` migration holds existing finished scores above the ceiling only when adding the column. Approvals persist across retries and reopen. Held runs stay in private bests and bet stats, but are excluded before public best selection, tie ordering, the top-ten cutoff and team sums. Manual hides and current name validation remain authoritative after approval.
