@@ -18,6 +18,14 @@ test("default matrix keeps all five seeds, modes, shapes and distinct upgrade pr
   expect(priorities.some(p => p[0] === CI_DRONE && p[1] === REFACTOR_BOMB)).toBe(true);
 });
 
+test("a whole-second gameplay finish remains plausible with an integer-millisecond server clock", () => {
+  const row = runScenario({ seed: 4, mode: "evasive", viewport: [390, 844],
+    priority: [REFACTOR_BOMB, CI_DRONE, REVIEW_LASER, TEST_SHIELD] });
+  expect(row.dead).toBe(true);
+  expect(row.seconds).toBe(70);
+  expect(row.validScore).toBe(true);
+});
+
 test("broad enumeration crosses 100 seeds, five full priorities, both shapes and modes exactly once", () => {
   const cases = broadScenarios();
   expect(cases).toHaveLength(2000);

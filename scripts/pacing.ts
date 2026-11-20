@@ -47,7 +47,8 @@ export function runScenario(scenario: Scenario, horizon = 600, policy?: ChoicePo
     squashes: state.squashes, seconds: state.seconds, touch: false, upgrades: build });
   return { ...scenario, elapsed: state.time, dead: state.dead, score: state.score, squashes: state.squashes,
     seconds: state.seconds, build, spawned: state.nextId - 1,
-    validScore: finish !== null && plausible(finish, 0, state.time * 1000) && state.squashes <= state.nextId - 1 };
+    // Server clocks use integer milliseconds; round completion up to avoid float drift at whole seconds.
+    validScore: finish !== null && plausible(finish, 0, Math.ceil(state.time * 1000)) && state.squashes <= state.nextId - 1 };
 }
 export type Result = ReturnType<typeof runScenario>;
 export function runMatrix(seeds: readonly number[] = SCENARIOS.map(s => s.seed), run = runScenario): Result[] {

@@ -58,20 +58,41 @@ test("server start, ownership, elapsed-time scoring, idempotency and conflicting
   const playerId = crypto.randomUUID(), identity = { playerId, name: "Robot", team: "tabs" as const };
   const start = await app.request("/api/runs", post(identity)); expect(start.status).toBe(201);
   const { runId } = await start.json() as { runId: string };
-  const result = { playerId, score: 61, squashes: 6, seconds: 1, touch: true };
+  const result = { playerId, score: 41, squashes: 4, seconds: 1, touch: true };
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(400);
   time = 2000;
   expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, playerId: crypto.randomUUID() }))).status).toBe(404);
   expect((await app.request(`/api/runs/${crypto.randomUUID()}/finish`, post(result))).status).toBe(404);
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
-  expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, score: 62, seconds: 2 }))).status).toBe(409);
+  expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, score: 42, seconds: 2 }))).status).toBe(409);
   expect(countEvents(db)).toEqual({ opened: 0, run_started: 1, run_ended: 1 });
   expect(getRun(db, runId)?.touch).toBe(1);
   expect((await app.request(`/api/runs/${runId}/finish`, post({ ...result, upgrades: [] }))).status).toBe(200);
-  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 61 });
+  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 41 });
   expect((await app.request("/api/runs", post({ ...identity, name: "Other" }))).status).toBe(409);
 });
+test("20-second squash forgery earns no credit and leaves the run available for a legal finish", async () => {
+  let time = 1000;
+  const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+  const start = await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" }));
+  expect(start.status).toBe(201);
+  const { runId } = await start.json() as { runId: string };
+  time += 20000;
+  const send = (squashes: number) => app.request(`/api/runs/${runId}/finish`,
+    post({ playerId, score: 10 * squashes + 20, squashes, seconds: 20, touch: false }));
+  expect((await send(120)).status).toBe(400);
+  expect(countEvents(db).run_ended).toBe(0);
+  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: null });
+  expect(await (await app.request("/api/leaderboard")).json()).toEqual([]);
+  expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: 0, spaces: 0 });
+  expect((await send(90)).status).toBe(200);
+  expect(countEvents(db).run_ended).toBe(1);
+  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 920 });
+  expect(await (await app.request("/api/leaderboard")).json()).toEqual([{ playerId, name: "Robot", score: 920 }]);
+  expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: 920, spaces: 0 });
+});
+
 test("malformed requests, names, ids and capped bodies with and without Content-Length", async () => {
   const app = createApp(db);
   for (const body of [null, [], {}, { playerId: "bad", name: "Robot", team: "tabs" as const }, { playerId: crypto.randomUUID(), name: "5h1t", team: "tabs" }]) {
@@ -107,7 +128,7 @@ test("finish invalidates rankings, a separate moderation connection expires with
   const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" as const }))).json() as { runId: string };
   expect(await (await app.request("/api/leaderboard")).json()).toEqual([]);
   expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: 0, spaces: 0 });
-  time += 100;
+  time += 1000;
   await app.request(`/api/runs/${runId}/finish`, post({ playerId, score: 1, squashes: 0, seconds: 1, touch: false }));
   const response = await app.request("/api/leaderboard"); expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(await response.json()).toEqual([{ playerId, name: "Robot", score: 1 }]);
@@ -150,7 +171,7 @@ test("seeded choice-driven finishes remain plausible in all arena shapes, with a
       let time = 0;
       const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
       const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" as const }))).json() as { runId: string };
-      time = s.time * 1000 + pause;
+      time = Math.ceil(s.time * 1000) + pause;
       const result = { playerId, seconds: s.seconds, squashes: s.squashes, score: s.score, touch: false, upgrades: acquiredUpgrades(s.upgrades) };
       expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
       expect(getRun(db, runId)?.upgrades).toBe(JSON.stringify(result.upgrades));

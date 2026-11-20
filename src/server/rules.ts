@@ -4,8 +4,11 @@ import { CHOICE_INTERVAL, UPGRADE_IDS, type AcquiredUpgrade } from "../shared/up
 
 export const POINTS_PER_SQUASH = 10;
 export const POINTS_PER_SECOND = 1;
-export const SCORE_SLACK_SECONDS = 2;
-export const MAX_SQUASHES_PER_SECOND = 6;
+// Issue #34: the 2,000-run broad pacing matrix at e5bd626 measured a maximum
+// 466 / 156 = 2.987179 squashes per submitted second; 4.5 rounds ~1.5x upward.
+export const MAX_SQUASHES_PER_SECOND = 4.5;
+// Longest measured gameplay was 156.933333 seconds; 300 adds headroom within #34's ceiling.
+export const MAX_RUN_SECONDS = 300;
 export const isId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export const nameKey = (name: string) => name.trim().toLowerCase();
 
@@ -45,7 +48,8 @@ export function parseFinish(value: unknown): Finish | null {
 
 export function plausible(finish: Finish, startedAt: number, now: number): boolean {
   const elapsed = Math.max(0, (now - startedAt) / 1000);
-  return finish.squashes <= Math.floor(MAX_SQUASHES_PER_SECOND * elapsed) &&
-    finish.seconds <= Math.floor(elapsed + SCORE_SLACK_SECONDS) &&
+  return finish.seconds <= Math.floor(elapsed) &&
+    finish.seconds <= MAX_RUN_SECONDS &&
+    finish.squashes <= Math.floor(MAX_SQUASHES_PER_SECOND * finish.seconds) &&
     finish.score === POINTS_PER_SQUASH * finish.squashes + POINTS_PER_SECOND * finish.seconds;
 }

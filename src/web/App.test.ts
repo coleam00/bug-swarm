@@ -225,7 +225,8 @@ try {
   Object.assign(api, realApi);
   const { openDb } = await import(${moduleUrl("../server/db.ts")});
   const { createApp } = await import(${moduleUrl("../server/app.ts")});
-  const db = openDb(":memory:"), server = createApp(db, { now: () => 1000 });
+  let serverTime = 1000;
+  const db = openDb(":memory:"), server = createApp(db, { now: () => serverTime });
   const playerId = crypto.randomUUID(), name = "Legacy Robot";
   db.query("INSERT INTO players(id, name, name_key) VALUES (?, ?, ?)").run(playerId, name, name.toLowerCase());
   let offline = false;
@@ -247,6 +248,7 @@ try {
     assert.deepEqual(session.identity, authoritative);
     assert.deepEqual(JSON.parse(stored), authoritative);
     session.current.simulation.seconds = session.current.simulation.score = 1;
+    serverTime += 1000;
     await act(async () => { session.end(); });
     assert.equal(session.view.save, "saved");
     assert.deepEqual(await realApi.teams(), { tabs: 1, spaces: 0 });
@@ -267,6 +269,7 @@ try {
     assert.deepEqual(session.identity, authoritative, "Online reload must recover an already-conflicted identity");
     assert.deepEqual(JSON.parse(stored), authoritative);
     session.current.simulation.seconds = session.current.simulation.score = 1;
+    serverTime += 1000;
     await act(async () => { session.end(); });
     assert.equal(session.view.save, "saved");
     assert.deepEqual(await realApi.teams(), { tabs: 2, spaces: 0 });
