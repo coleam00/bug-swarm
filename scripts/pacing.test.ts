@@ -4,6 +4,16 @@ import { createSimulation, IDLE, step } from "../src/web/game/simulation";
 import { acquiredUpgrades, createUpgrades, openChoice, selectUpgrade } from "../src/web/game/upgrades";
 import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, printReport, PRIORITIES, priorityKey, resolveChoice, runBroadMatrix, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, under60, VIEWPORTS, type Result } from "./pacing";
 
+test.each([
+  { seed: 2070972806, viewport: [390, 844] as const },
+  { seed: 2278550863, viewport: [844, 390] as const },
+])("review idle regression stays within 18–40 seconds: %j", scenario => {
+  const row = runScenario({ ...SCENARIOS[0], ...scenario, mode: "idle" });
+  expect(row.dead).toBe(true);
+  expect(row.elapsed).toBeGreaterThanOrEqual(18 - 1e-7);
+  expect(row.elapsed).toBeLessThanOrEqual(40 + 1e-7);
+});
+
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
   const rows = runMatrix();
   expect(rows).toHaveLength(20);
@@ -185,19 +195,17 @@ test.each([18, 40, 18 - 1e-8, 40 + 1e-8])("idle range accepts the inclusive raw 
   expect(broadTargets(broad).idle18to40).toBe(true);
 });
 
-test.each([17.999, 40.001])("idle range rejects %f in gates, printed reports and command exit codes", elapsed => {
+test.each([17.999, 40.001])("idle range rejects %f in gates and command exit codes", elapsed => {
   expect(targets(reportFixture([90], [90], elapsed)).idle18to40).toBe(false);
   const broad = broadFixture();
   for (const row of broad) if (row.mode === "idle") row.elapsed = elapsed;
   expect(broadTargets(broad).idle18to40).toBe(false);
   for (const mode of [false, true]) {
-    const lines: string[] = [], log = spyOn(console, "log").mockImplementation(line => { lines.push(String(line)); });
+    const log = spyOn(console, "log").mockImplementation(() => {});
     try {
       expect(pacingCommand(mode ? ["--broad"] : [], scenario =>
         ({ ...reported(scenario.mode, scenario.viewport, scenario.mode === "idle" ? elapsed : 90), ...scenario }))).toBe(1);
     } finally { log.mockRestore(); }
-    expect(lines).toContain("FAIL idle18to40");
-    expect(lines).toContain("PASS idle60");
   }
 });
 

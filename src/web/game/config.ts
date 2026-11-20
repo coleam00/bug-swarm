@@ -12,11 +12,9 @@ export const BUG_DEFINITIONS = Object.fromEntries(BUG_KINDS.map((kind) => [kind.
   Record<BugKind, typeof BUG_KINDS[number]>;
 export const FAST_BUG_EVERY = 4;
 export const FIRST_SPAWN_DELAY = 9.3;
-// Slower pursuit while players learn, then a brief charge before the first
-// choice. The original pursuit rules resume unchanged at 20 seconds.
+// Opening pursuit only eases toward normal speed; it never exceeds it.
 export const OPENING_SPEED_CURVE = [
   { time: 0, multiplier: 0.6 }, { time: 15, multiplier: 1 },
-  { time: 17.5, multiplier: 3.2 }, { time: 20, multiplier: 1 },
 ] as const;
 // Idle target: 18–40 seconds. Broad evasive median target: 75–110 seconds.
 export const SPAWN_CURVE = [

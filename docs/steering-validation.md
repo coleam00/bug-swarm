@@ -1,6 +1,6 @@
 # Issue 40: first-run steering hint
 
-The steering hint and gentler opening are implemented and validated under the owner's 11/20 ruling: **18–40 seconds idle survival**, unchanged evasive targets, weapons, upgrades and rules from 20 seconds onward. The approved hint is retained. See [final pacing](pacing-validation.md#issue-40-gentler-opening) for the first-spawn delay, opening speed profile, spawn curve and complete reports.
+The steering hint is approved and unchanged. Opening balance is incomplete: removing the rejected speed surge preserves the reproduced seeds' 18–40-second range but lets other upgraded idle builds exceed 40 seconds. Both pacing commands currently fail their idle gates. See the [review correction](pacing-validation.md#review-correction-balance-remains-blocked) for current results and the remaining blocker. The Chrome evidence below was captured at `1d13d82`; it remains historical hint/layout/performance evidence, not proof of current pacing.
 
 The overlay uses the exact touch/desktop messages, sits inside the arena surface above the robot, and neither captures input nor pauses gameplay. Separate localStorage persistence consumes eligibility at local start, including offline starts and existing identities with no hint flag. A retained controller suppresses repeats on restart and across effect reattachment. Failed storage logs once and suppresses repeats within the page.
 
@@ -18,7 +18,7 @@ Adjacent controller tests cover exact wall-time expiry, movement/token handling,
 
 All sizes passed fresh entry and board eligibility, exact message, nonfocusable status semantics, arena containment, no overflow, input beneath the hint, real movement dismissal, untouched four-second expiry, restart, reload, existing identity without a flag, blocked storage and offline play. Text is 18px with white foreground on an opaque dark background. Screenshots preserve the unobscured central robot. These are owner-approved factory Chrome measurements; no physical device is required.
 
-The desktop probe also fixes the gameplay seed to 1 and runs a fresh, unprotected arena without input or upgrade auto-selection. It verifies no bug before the initial 9.3-second delay, then records an actual idle death at **19.40 gameplay seconds**, three hits and an unchanged robot position. The speed and spawn rules are the production bundle's; the probe does not force a death or alter difficulty.
+At `1d13d82`, the desktop probe fixed the gameplay seed to 1 and ran a fresh, unprotected arena without input or upgrade auto-selection. It verified no bug before the initial 9.3-second delay and recorded an idle death at **19.40 gameplay seconds**. That result used the rejected speed surge and no longer describes current combat. The probe's idle phase will now reach a pending upgrade rather than its death assertion; its timeout remains bounded.
 
 ## Frame cost
 
@@ -31,9 +31,9 @@ Chrome for Testing 158.0.8127.36, 1280×720 at DPR 1, with no concurrent tuning 
 | Watching | 59.999 | 0.028 ms | 0.764 ms | 150 |
 | Dismissed | 59.999 | 0.024 ms | 0.779 ms | 150 |
 
-Both sixty-second samples exceed the 58 FPS floor. There were 4,173 pending checks during the watching phase (including warmup), then one removal check and no further observation after dismissal. Update cost remains below 0.03 ms mean in both samples; the F readout rounds individual costs to 0.01 ms. The probe uses timer polling, so only production game frames contribute to the measurement. The new speed interpolation adds at most three small comparisons/interpolations per fixed step, once for the entire swarm; it introduces no per-bug allocation or extra network work.
+Both sixty-second samples exceeded the 58 FPS floor. There were 4,173 pending checks during the watching phase (including warmup), then one removal check and no further observation after dismissal. Update cost remained below 0.03 ms mean in both samples; the F readout rounds individual costs to 0.01 ms. The probe uses timer polling, so only production game frames contribute to the measurement. The review correction removes speed knots and leaves this observer path unchanged; no additional frame work or allocation was added.
 
-Validation: the focused `bun run check src/web/game src/web/App.test.ts scripts/pacing.test.ts src/server/app.test.ts` passes TypeScript and **244 tests / 89,502 assertions**, covering all game tests, App integration, the pacing harness and API simulation/score saving. The unfiltered suite is left to project automation as required by this delivery; the selected tests open no TCP listeners. `bun run pacing` and `bun run pacing --broad` pass every gate, including `idle18to40`, with zero score failures. Their final reports are [default](steering-evidence/issue-40-final-default.txt) and [broad](steering-evidence/issue-40-final-broad.txt). `bun run build` succeeds. Chrome behavior/layout and the accepted performance probe both pass with no uncaught page errors.
+Current validation: `bun run check src/web/game src/web/App.test.ts scripts/pacing.test.ts src/server/app.test.ts` passes TypeScript and **242 tests**, with **four pacing failures**. The new seed regressions pass; the Session suite also passes with opening-speed interpolation bypassed. `bun run build` passes. Both pacing commands fail `idle18to40` and `idle60`, with no score failures. Current full reports are [default](steering-evidence/issue-40-review-default.txt) and [broad](steering-evidence/issue-40-review-broad.txt). The unfiltered suite remains with project automation. Chrome behavior/layout and performance were not rerun during this correction because the hint and observer are unchanged and balance is not ready.
 
 ## Reproduce
 
@@ -47,4 +47,4 @@ bun run pacing
 bun run pacing --broad
 ```
 
-Run performance sampling alone. The probes are developer tools excluded from production entry points; their browser dependency is not added to the project.
+Run performance sampling alone. The probes are developer tools excluded from production entry points; their browser dependency is not added to the project. The behavior probe's idle phase currently fails as described above; do not interpret its earlier successful result as validation of this correction.
