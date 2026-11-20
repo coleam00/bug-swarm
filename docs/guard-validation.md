@@ -2,6 +2,8 @@
 
 Issue #37 adds an 800 ms guard after death and a 350 ms guard when each upgrade choice opens. Session enforces monotonic deadlines, independently of published readiness or API completion. A single one-shot timer publishes readiness while subscribed; no deadline checks or React updates were added to the animation loop. Simulation, scoring and pacing rules are unchanged, so this change requires no new 150-bug frame-cost benchmark.
 
+Issue #38 supersedes the historical landscape-scrolling acceptance below: [landscape validation](landscape-validation.md) proves all ten rows fit without scrolling. The guard probe now expects this layout while retaining its input-guard checks; the earlier screenshots and measurements below document the pre-landscape layout.
+
 `bun run check` passed **311 tests**, including deterministic Session/engine/UI checks using injected time and manually advanced schedulers. These cover inclusive 800/350 ms boundaries, rejected inputs without side effects, immutable choices/results, held keys, pointer presses spanning a deadline, native activation suppression, automatic readiness, early/obsolete callbacks, cancellation, detach/reattach and unmount cleanup. `bun run pacing` passed the default 20-run matrix with **zero score failures**, unchanged evasive medians of **77.78 s portrait / 79.60 s landscape**, and all four gates passing. `bun run build` passed.
 
 After merging main at `776941c`, the delayed-registration regression also checks that replay is rejected at +799 ms and accepted at +800 ms while the old score is still waiting to save. The score-save clock and guard scheduler retain independent injection; production guard deadlines use the same monotonic clock as registration.
