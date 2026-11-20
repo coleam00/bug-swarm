@@ -76,7 +76,11 @@ try {
     await protect();
     // Sample the actual CSS animation before the guard expires.
     await openChoice();
-    const opacity = await page.locator(".choice-cards").evaluate((e: HTMLElement) => Number(getComputedStyle(e).opacity));
+    const { opacity, duration } = await page.locator(".choice-cards").evaluate((e: HTMLElement) => {
+      const style = getComputedStyle(e);
+      return { opacity: Number(style.opacity), duration: style.animationDuration };
+    });
+    assert.equal(duration, "0.35s", "Upgrade cards must fade for the full 350 ms guard");
     assert.ok(opacity < 1, `Expected an in-progress fade, got ${opacity}`);
     assert.equal(await page.locator("dialog button").first().getAttribute("aria-disabled"), "true");
     const frozen = await snapshot();
@@ -142,7 +146,7 @@ try {
     await page.getByRole("button", { name: "Play again" }).click(); await page.locator(".over").waitFor({ state: "detached" });
     assert.equal((await snapshot()).token, token + 2);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-    report[`${size.width}x${size.height}`] = { earlyOpacity: opacity, finalAnimation: animation, scroll, startsBefore, startsAfter: starts };
+    report[`${size.width}x${size.height}`] = { earlyOpacity: opacity, fadeDuration: duration, finalAnimation: animation, scroll, startsBefore, startsAfter: starts };
     assertions.push(`${size.width}x${size.height}: early held ${mobile ? "touch" : "Space/Enter"} releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed.`);
     await context.close();
   }

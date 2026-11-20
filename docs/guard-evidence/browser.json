@@ -1,6 +1,6 @@
 {
   "chrome": "156.0.8078.4",
-  "measuredAt": "2026-11-20T07:50:18.695Z",
+  "measuredAt": "2026-11-20T08:02:29.089Z",
   "assertions": [
     "390x844: early held touch releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed.",
     "844x390: early held touch releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed.",
@@ -8,6 +8,7 @@
   ],
   "390x844": {
     "earlyOpacity": 0,
+    "fadeDuration": "0.35s",
     "finalAnimation": {
       "opacity": "1",
       "count": 1
@@ -21,7 +22,8 @@
     "startsAfter": 2
   },
   "844x390": {
-    "earlyOpacity": 0.0953057,
+    "earlyOpacity": 0.0471486,
+    "fadeDuration": "0.35s",
     "finalAnimation": {
       "opacity": "1",
       "count": 1
@@ -35,7 +37,8 @@
     "startsAfter": 2
   },
   "1280x720": {
-    "earlyOpacity": 0.0955657,
+    "earlyOpacity": 0.0952171,
+    "fadeDuration": "0.35s",
     "finalAnimation": {
       "opacity": "1",
       "count": 1
