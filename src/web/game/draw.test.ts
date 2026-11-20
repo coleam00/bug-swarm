@@ -94,11 +94,11 @@ function visibleStroke(s: ReturnType<typeof scene>, paint: Paint, minimumAlpha =
   expect(paint.lineWidth).toBeGreaterThan(0);
 }
 function readableLabel(s: ReturnType<typeof scene>, label: Paint): void {
-  const glyph = s.fixture.source(label).paints.find((p) => p.op === "fillText" && p.args[0] === "+10")!;
+  const glyph = s.fixture.source(label).paints.find((p) => p.op === "fillText" && p.args[0] === "+")!;
   const pixels = Number(glyph.font.match(/([\d.]+)px/)![1]);
   const canvas = label.args[0] as HTMLCanvasElement;
   const cssHeight = pixels * Math.hypot(glyph.transform[2]!, glyph.transform[3]!) *
-    Number(label.args[4]) / canvas.height * Math.hypot(label.transform[2]!, label.transform[3]!);
+    Number(label.args[8]) / canvas.height * Math.hypot(label.transform[2]!, label.transform[3]!);
   // Half a CSS pixel allows backing-store rounding at fractional viewport scales.
   expect(cssHeight).toBeGreaterThanOrEqual(17.5);
   expect(glyph.font).toMatch(/\b(bold|bolder|[6-9]00)\b/);
@@ -106,7 +106,8 @@ function readableLabel(s: ReturnType<typeof scene>, label: Paint): void {
   expect(colour(glyph.fillStyle).alpha * glyph.globalAlpha * label.globalAlpha).toBeGreaterThan(0.5);
 }
 function imageCentre(paint: Paint): [number, number] {
-  const x = Number(paint.args[1]) + Number(paint.args[3]) / 2, y = Number(paint.args[2]) + Number(paint.args[4]) / 2;
+  const offset = paint.args.length === 9 ? 4 : 0;
+  const x = Number(paint.args[1 + offset]) + Number(paint.args[3 + offset]) / 2, y = Number(paint.args[2 + offset]) + Number(paint.args[4 + offset]) / 2;
   const [a, b, c, d, e, f] = paint.transform as [number, number, number, number, number, number];
   return [a * x + c * y + e, b * x + d * y + f];
 }
@@ -182,13 +183,14 @@ test.each([
   expect(grid.path.some((p) => p.op === "lineTo" && p.args[0] === arena.width)).toBe(true);
   expect(grid.path.some((p) => p.op === "lineTo" && p.args[1] === arena.height)).toBe(true);
   expect(paints.find((p) => p.op === "clip")!.path).toEqual([{ op: "rect", args: [0, 0, arena.width, arena.height] }]);
-  const label = paints.find((p) => p.op === "drawImage" && s.fixture.source(p).paints.some((source) => source.op === "fillText"))!;
+  const glyphs = paints.filter((p) => p.op === "drawImage" && s.fixture.source(p).paints.some((source) => source.op === "fillText"));
+  const label = glyphs.at(-1)!;
   readableLabel(s, label);
   const centre = imageCentre(label);
   expect(centre[0]).toBeGreaterThan(bounds[0]! + bounds[2]! * 0.8);
   expect(centre[1]).toBeGreaterThan(bounds[1]! + bounds[3]! * 0.8);
-  expect(centre[0] + Number(label.args[3]) * label.transform[0]! / 2).toBeLessThan(bounds[0]! + bounds[2]!);
-  expect(centre[1] + Number(label.args[4]) * label.transform[3]! / 2).toBeLessThan(bounds[1]! + bounds[3]!);
+  expect(centre[0] + Number(label.args[7]) * label.transform[0]! / 2).toBeLessThan(bounds[0]! + bounds[2]!);
+  expect(centre[1] + Number(label.args[8]) * label.transform[3]! / 2).toBeLessThan(bounds[1]! + bounds[3]!);
 });
 
 test("a new run's world shape replaces caches at the same canvas size", () => {
@@ -275,7 +277,7 @@ test("active trails, squash particles and +10 glyphs reach the canvas and disapp
     if (s.fx.particles.life[i]! <= 0) continue;
     expect(images.some((p) => glow(s, p) && Math.hypot(imageCentre(p)[0] - s.fx.particles.x[i]!, imageCentre(p)[1] - s.fx.particles.y[i]!) < 1e-6)).toBe(true);
   }
-  const label = images.find((p) => s.fixture.source(p).paints.some((source) => source.op === "fillText" && source.args[0] === "+10"));
+  const label = images.find((p) => s.fixture.source(p).paints.some((source) => source.op === "fillText" && source.args[0] === "+"));
   expect(label).toBeDefined(); expect(imageCentre(label!)[1]).toBeLessThan(100);
   readableLabel(s, label!);
   for (let timestamp = 100; timestamp <= 1000; timestamp += 50) s.fx.advance(timestamp);
@@ -300,9 +302,9 @@ test("a hit flashes the chassis white and translates the world while the clip an
   expect(recovered.find((p) => p.op === "drawImage" && Number(p.args[3]) >= SQUARE_ARENA.width)!.transform).toEqual([1, 0, 0, 1, 0, 0]);
 });
 
-test("review laser stretches both its bright streak and cached glow", () => {
+test.each(["robot", "drone"] as const)("review laser stretches both its bright streak and cached glow (%s)", source => {
   const s = scene();
-  s.state.shots = [{ x: 450, y: 200, vx: 300, vy: 0, life: 1 }];
+  s.state.shots = [{ x: 450, y: 200, vx: 300, vy: 0, life: 1, source }];
   const geometry = () => {
     const paints = s.render().filter(p => at(p, 450, 200));
     const stroke = paints.find(p => p.op === "stroke")!;
@@ -319,7 +321,7 @@ test("review laser stretches both its bright streak and cached glow", () => {
 
 test("shield bubble exists only with charges; two charges add a second outline", () => {
   const s = scene();
-  const outlines = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && hasShape(p, "arc"));
+  const outlines = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && p.path.some(c => c.op === "arc" && c.args[2]! >= 30));
   expect(outlines()).toHaveLength(0);
   for (const charges of [1, 2]) {
     s.state.shieldCharges = charges;
@@ -338,17 +340,87 @@ test("bomb ring expands across the arena, fades and expires", () => {
   const later = ring()!;
   visibleStroke(s, first); visibleStroke(s, later, 0.1);
   expect(later.path[0]!.args[2]!).toBeGreaterThan(first.path[0]!.args[2]!);
-  expect(later.globalAlpha).toBeLessThan(first.globalAlpha);
-  for (let t = 320; t <= 640; t += 80) s.fx.advance(t);
+  expect(later.globalAlpha).toBeGreaterThan(0.8); // stays bright through most expansion
+  for (let t = 320; t <= 560; t += 80) s.fx.advance(t);
+  expect(ring()!.globalAlpha).toBeLessThan(first.globalAlpha);
+  s.fx.advance(640); s.fx.advance(720);
   expect(ring()).toBeUndefined();
 });
 
-test("each drone has a small cached glow at its simulation orbit position", () => {
+test("each drone has a larger core and cached glow at its simulation orbit position", () => {
   const s = scene(); s.state.drones = [{ fireIn: 0 }, { fireIn: 0 }]; s.state.time = 2;
   const paints = s.render();
   for (let i = 0; i < 2; i++) {
     const p = { x: 0, y: 0 }; dronePosition(s.state, i, p);
-    expect(paints.some(paint => glow(s, paint) && Math.hypot(imageCentre(paint)[0] - p.x, imageCentre(paint)[1] - p.y) < 1e-6 && Number(paint.args[3]) < 60)).toBe(true);
-    expect(paints.some(paint => paint.op === "fill" && paint.path.some(c => c.op === "arc" && c.args[0] === p.x && c.args[1] === p.y))).toBe(true);
+    expect(paints.some(paint => glow(s, paint) && Math.hypot(imageCentre(paint)[0] - p.x, imageCentre(paint)[1] - p.y) < 1e-6 && Number(paint.args[3]) >= 44 && Number(paint.args[3]) < 60)).toBe(true);
+    const core = paints.find(paint => paint.op === "stroke" && paint.path.some(c => c.op === "arc" && c.args[0] === p.x && c.args[1] === p.y && c.args[2]! >= 7))!;
+    expect(core).toBeDefined(); visibleStroke(s, core);
+  }
+});
+
+test.each([false, true])("robot identity survives every foreground effect, hit and immunity (hit=%s)", hit => {
+  const s = scene(); s.state.bugs.push({ id: 1, kind: "base", ...s.state.robot });
+  s.fx.squash(300, 300); s.fx.bomb(300, 300, 850);
+  if (hit) s.fx.hit(); else s.state.invulnerableUntil = 10;
+  const paints = s.render();
+  const ring = paints.filter(p => p.op === "stroke" && at(p, 300 + s.fx.shake.x, 300 + s.fx.shake.y) && p.path.some(c => c.op === "arc" && c.args[2] === 22)).at(-1)!;
+  expect(ring).toBeDefined(); visibleStroke(s, ring, 0.9);
+  expect(contrast(ring.strokeStyle, floorColour(s))).toBeGreaterThan(8);
+  expect(ring.lineWidth).toBeGreaterThanOrEqual(3);
+  expect(paints.at(-1)).toBe(ring);
+  const chassis = paints.filter(p => p.op === "fill" && hasShape(p, "roundRect"));
+  expect(chassis).toHaveLength(hit ? 2 : 1);
+  const bodyIndex = paints.indexOf(chassis[0]!);
+  const textIndex = paints.map(p => p.op === "drawImage" && p.args.length === 9).lastIndexOf(true);
+  const bugIndex = paints.map(p => hasShape(p, "ellipse")).lastIndexOf(true);
+  expect(bodyIndex).toBeGreaterThan(textIndex); expect(bodyIndex).toBeGreaterThan(bugIndex);
+  const halo = paints.find(p => glow(s, p) && p.args[3] === 88)!;
+  expect(halo).toBeDefined(); expect(paints.indexOf(halo)).toBeGreaterThan(textIndex);
+  // Particle and vignette passes also precede text and identity.
+  const vignetteIndex = paints.map(p => p.op === "drawImage" && p.args[3] === 600).lastIndexOf(true);
+  expect(textIndex).toBeGreaterThan(vignetteIndex);
+  expect(vignetteIndex).toBeGreaterThan(paints.map(p => p.op === "drawImage" && p.args.length === 5 && p.args[3] === 18).lastIndexOf(true));
+});
+
+test("last-charge shield flash remains visible without a bubble, outside the identity ring", () => {
+  const s = scene(); s.fx.advance(0); s.fx.block();
+  const rim = () => s.render().filter(p => p.op === "stroke" && at(p, 300, 300) && p.path.some(c => c.op === "arc" && c.args[2]! >= 30));
+  const first = rim(); expect(first).toHaveLength(2); first.forEach(p => visibleStroke(s, p));
+  s.fx.advance(80); expect(rim()[0]!.path[0]!.args[2]!).toBeGreaterThan(first[0]!.path[0]!.args[2]!);
+  s.fx.advance(160); s.fx.advance(240); expect(rim()).toHaveLength(0);
+});
+
+test.each([false, true])("shot sources retain different visible colours with laser=%s", laser => {
+  const s = scene();
+  s.state.shots = ["robot", "drone"].map((source, i) => ({ source: source as "robot" | "drone", laser, x: 100 + i * 100, y: 200, vx: 300, vy: 0, life: 1 }));
+  const paints = s.render();
+  const robot = paints.filter(p => p.op === "stroke" && at(p, 100, 200));
+  const drone = paints.filter(p => p.op === "stroke" && at(p, 200, 200));
+  expect(robot).toHaveLength(2); expect(drone).toHaveLength(2);
+  for (let i = 0; i < 2; i++) {
+    visibleStroke(s, robot[i]!); visibleStroke(s, drone[i]!);
+    expect(robot[i]!.strokeStyle).not.toBe(drone[i]!.strokeStyle);
+    const rgbRobot = Bun.color(robot[i]!.strokeStyle as string, "[rgb]")!, rgbDrone = Bun.color(drone[i]!.strokeStyle as string, "[rgb]")!;
+    expect(rgbRobot[0] - rgbRobot[2]).toBeGreaterThan(20);
+    expect(rgbDrone[2] - rgbDrone[0]).toBeGreaterThan(20);
+  }
+});
+
+test.each([10, 30, 1500])("numeric atlas composes +%i in order, centered and clamped as a whole", total => {
+  for (const x of [0, 300, 600]) {
+    const s = scene(); for (let i = 0; i < total / 10; i++) s.fx.labels.pop(x, 100);
+    const paints = s.render().filter(p => p.op === "drawImage" && p.args.length === 9);
+    expect(paints).toHaveLength(String(total).length + 1);
+    const text = paints.map(p => {
+      const cell = Math.round(Number(p.args[1]) / Number(p.args[3]));
+      return s.fixture.source(p).paints.filter(q => q.op === "fillText")[cell]!.args[0];
+    }).join("");
+    expect(text).toBe(`+${total}`);
+    const left = Number(paints[0]!.args[5]), last = paints.at(-1)!, right = Number(last.args[5]) + Number(last.args[7]);
+    expect(left).toBeGreaterThanOrEqual(5); expect(right).toBeLessThanOrEqual(595);
+    expect(right - left).toBeCloseTo(paints.length * Number(last.args[7]));
+    if (x === 300) expect((left + right) / 2).toBeCloseTo(300);
+    paints.forEach(p => readableLabel(s, p));
+    expect(s.fixture.source(last).paints.filter(p => p.op === "fillText")).toHaveLength(11);
   }
 });

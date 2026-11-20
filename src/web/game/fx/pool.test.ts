@@ -84,14 +84,15 @@ test("live effects count occupied pool slots, expire and reset", () => {
   fx.reset(); expect(fx.liveCount).toBe(0);
 });
 
-test.each(["ring", "flash", "shake"] as const)("live effects count an active %s once until expiry", kind => {
+test.each(["ring", "flash", "shake", "shield"] as const)("live effects count an active %s once until expiry", kind => {
   const fx = new Effects();
   if (kind === "ring") fx.bomb(0, 0, 100);
   else if (kind === "flash") fx.flash = 0.1;
+  else if (kind === "shield") fx.block();
   else fx.shake.hit();
   expect(fx.liveCount).toBe(1);
   fx.advance(0);
-  for (let time = 62.5; time <= 562.5; time += 62.5) fx.advance(time);
+  for (let time = 62.5; time <= 750; time += 62.5) fx.advance(time);
   expect(fx.liveCount).toBe(0);
 });
 
@@ -104,6 +105,13 @@ test("hits and bombs replace their active effects rather than growing the count"
   fx.advance(125); expect(fx.liveCount).toBe(3);
   fx.advance(187.5); expect(fx.liveCount).toBe(2);
   fx.advance(250); expect(fx.liveCount).toBe(1);
-  for (let time = 312.5; time <= 625; time += 62.5) fx.advance(time);
+  for (let time = 312.5; time <= 750; time += 62.5) fx.advance(time);
   expect(fx.liveCount).toBe(0);
+});
+
+test("shield flash replaces one timer and is independent of damage feedback", () => {
+  const fx = new Effects(); fx.advance(0); fx.block(); expect(fx.liveCount).toBe(1);
+  fx.advance(80); fx.block(); expect(fx.liveCount).toBe(1); expect(fx.shieldFlash).toBeCloseTo(0.22);
+  fx.hit(); fx.bomb(1, 2, 300); expect(fx.liveCount).toBe(4);
+  fx.reset(); expect(fx.liveCount).toBe(0); expect(fx.shieldFlash).toBe(0);
 });

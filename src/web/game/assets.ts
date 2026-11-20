@@ -10,8 +10,10 @@ export class Assets {
   readonly core: HTMLCanvasElement;
   readonly shot: HTMLCanvasElement;
   readonly spark: HTMLCanvasElement;
+  readonly drone: HTMLCanvasElement;
+  readonly halo: HTMLCanvasElement;
   readonly label: HTMLCanvasElement;
-  readonly labelWidth: number;
+  readonly glyphWidth: number;
   readonly labelHeight: number;
 
   constructor(density: number, scale: number, arena: Arena, factory: CanvasFactory = makeCanvas) {
@@ -44,17 +46,23 @@ export class Assets {
       ctx.fillStyle = light; ctx.fillRect(0, 0, 64, 64); return canvas;
     };
     this.core = glow("#5bffe0"); this.shot = glow("#ffd36c"); this.spark = glow("#ff9a70");
+    this.drone = glow("#9bafff"); this.halo = glow("#7affe0");
     const fontSize = Math.max(22, 18 / scale);
-    this.labelWidth = fontSize * 2.5; this.labelHeight = fontSize * 1.5;
-    this.label = surface(this.labelWidth, this.labelHeight);
+    // Eleven fixed atlas cells, snapped to backing pixels to avoid source bleed.
+    this.glyphWidth = Math.ceil(fontSize * 0.8 * density) / density;
+    this.labelHeight = Math.ceil(fontSize * 1.5 * density) / density;
+    this.label = surface(this.glyphWidth * 11, this.labelHeight);
     const text = this.label.getContext("2d")!;
     text.font = `900 ${fontSize}px system-ui, sans-serif`; text.textAlign = "center"; text.textBaseline = "middle";
     text.lineWidth = 4; text.strokeStyle = "#102131";
-    text.strokeText("+10", this.labelWidth / 2, this.labelHeight / 2);
-    text.fillStyle = "#fff1b9"; text.fillText("+10", this.labelWidth / 2, this.labelHeight / 2);
+    text.fillStyle = "#fff1b9";
+    for (let i = 0; i < 11; i++) {
+      const glyph = i === 0 ? "+" : String(i - 1), x = (i + 0.5) * this.glyphWidth;
+      text.strokeText(glyph, x, this.labelHeight / 2); text.fillText(glyph, x, this.labelHeight / 2);
+    }
   }
   dispose(): void {
     // Release the browser backing stores on replacement/unmount.
-    this.floor.width = this.vignette.width = this.core.width = this.shot.width = this.spark.width = this.label.width = 0;
+    this.floor.width = this.vignette.width = this.core.width = this.shot.width = this.spark.width = this.label.width = this.drone.width = this.halo.width = 0;
   }
 }

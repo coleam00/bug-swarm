@@ -13,7 +13,7 @@ export interface KillObserver {
   beforeKills(bugs: readonly Readonly<Bug>[], squashes: number): void;
   afterKills(bugs: readonly Readonly<Bug>[], squashes: number): void;
 }
-export interface Shot extends Point { vx: number; vy: number; life: number; remaining?: number; laser?: boolean }
+export interface Shot extends Point { vx: number; vy: number; life: number; remaining?: number; laser?: boolean; source?: "robot" | "drone" }
 export interface Simulation {
   readonly arena: Arena;
   seed: number; nextId: number; time: number; seconds: number; score: number; squashes: number;
@@ -69,12 +69,12 @@ export function nearestBug(state: Simulation, origin: Point = state.robot): Bug 
   }
   return nearest;
 }
-function fire(state: Simulation, origin: Point): void {
+function fire(state: Simulation, origin: Point, source: "robot" | "drone"): void {
   const target = nearestBug(state, origin);
   if (!target) return;
   const sx = target.x - origin.x, sy = target.y - origin.y, length = Math.hypot(sx, sy) || 1;
   state.shots.push({ x: origin.x, y: origin.y, vx: sx / length * SHOT_SPEED, vy: sy / length * SHOT_SPEED, life: SHOT_LIFETIME,
-    remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0 });
+    remaining: 1 + state.upgrades.counts[REVIEW_LASER], laser: state.upgrades.counts[REVIEW_LASER] > 0, source });
 }
 function segmentDistanceSquared(x: number, y: number, nx: number, ny: number, point: Point): number {
   const dx = nx - x, dy = ny - y;
@@ -114,7 +114,7 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   state.fireIn -= dt;
   if (state.fireIn <= 1e-9) {
     state.fireIn += FIRE_INTERVAL * laserFireMultiplier(state.upgrades.counts[REVIEW_LASER]);
-    fire(state, state.robot);
+    fire(state, state.robot, "robot");
   }
   // Reuse the simulation-owned scratch point; no per-frame drone positions.
   for (let i = 0; i < state.drones.length; i++) {
@@ -122,7 +122,7 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
     drone.fireIn -= dt;
     if (drone.fireIn <= 1e-9) {
       drone.fireIn += FIRE_INTERVAL;
-      dronePosition(state, i, state.droneOrigin); fire(state, state.droneOrigin);
+      dronePosition(state, i, state.droneOrigin); fire(state, state.droneOrigin, "drone");
     }
   }
   observer?.beforeKills(state.bugs, state.squashes);

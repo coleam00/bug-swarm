@@ -56,10 +56,13 @@ test("bomb feedback uses bounded pools without losing scores, and reuses one exp
   for (let i = 0; i < 400; i++) s.bugs.push({ id: i, kind: "base", x: i, y: 10 });
   fx.advance(0); feedback.beforeStep(s); step(s, IDLE, 0.01, feedback); feedback.afterStep(s, 0.01);
   expect(s.squashes).toBe(400); expect(s.score).toBe(4000); expect(s.hits).toBe(0);
-  expect(fx.labels.count).toBe(fx.labels.capacity); expect(fx.particles.count).toBe(fx.particles.capacity);
-  expect(fx.ring.life).toBe(0.5); expect(fx.ring.x).toBe(s.robot.x);
+  expect(fx.labels.count).toBeLessThanOrEqual(fx.labels.capacity);
+  expect(fx.labels.count).toBeLessThan(300);
+  expect([...fx.labels.total].reduce((a, b) => a + b, 0)).toBe(3000);
+  expect(fx.particles.count).toBe(fx.particles.capacity);
+  expect(fx.ring.life).toBe(0.65); expect(fx.ring.x).toBe(s.robot.x);
   const ring = fx.ring;
-  for (let t = 50; t <= 600; t += 50) fx.advance(t);
+  for (let t = 50; t <= 750; t += 50) fx.advance(t);
   expect(fx.ring.life).toBe(0);
   fx.bomb(1, 2, 300); expect(fx.ring).toBe(ring); expect(fx.ring.x).toBe(1);
   fx.reset(); expect(fx.ring.life).toBe(0);
