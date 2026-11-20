@@ -42,7 +42,7 @@ export function App() {
       <p id="name-error" role="alert">{error}</p>
       <p>{identity ? "Welcome back! Choose your team once." : "Choose your team to play."} Every score helps. Your team is permanent.</p>
       <div className="team-choices">{TEAMS.map(team => <button key={team} type="button" style={{ background: TEAM_COLOURS[team] }} onClick={() => selectTeam(team)}>Join {TEAM_NAMES[team]}</button>)}</div>
-    </form><p>Drag to steer on touch. Use WASD, arrows or your mouse on desktop. Your robot fires for you. Three hits end a run.</p>
+    </form><p>Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop. Your robot fires for you. Three hits end a run.</p>
   </main>;
 }
 
@@ -62,7 +62,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
   }, [session, initialTouch]);
   return <main className="game">
     <header className="hud"><strong>Bug Swarm</strong><span>Score {hud.score}</span><span>{3 - hud.hits} hits left · {hud.seconds}s</span></header>
-    <div className="surface"><canvas ref={canvas} tabIndex={0} aria-label="Bug Swarm arena. Drag, use WASD or arrows, or move your mouse to steer." />
+    <div className="surface"><canvas ref={canvas} tabIndex={0} aria-label="Bug Swarm arena. Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop." />
       {view.choice && <ChoiceDialog key={`${view.token}/${view.choice.number}`} session={session} view={view}
         restoreFocus={() => canvas.current?.focus({ preventScroll: true })} />}
       {view.over && <section className="over" aria-label="Game over"

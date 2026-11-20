@@ -13,6 +13,8 @@ const readout = document.querySelector("pre")!;
 const renderer = new Renderer(ctx), fx = new Effects(), feedback = new Feedback(fx), loop = new FixedStepper(feedback);
 const state = createSimulation(73, arenaForViewport(innerWidth, innerHeight)), input = { x: 0, y: 0, target: null };
 const profile = new URLSearchParams(location.search).get("profile") ?? "normal";
+const joystick = new URLSearchParams(location.search).has("joystick");
+const stick = joystick ? { x: 100, y: 200, dx: 42, dy: -42 } : null;
 function acquire(id: typeof UPGRADE_IDS[number], count: number) {
   for (let i = 0; i < count; i++) {
     do { state.upgrades.offer = null; openChoice(state.upgrades); } while (!state.upgrades.offer!.includes(id));
@@ -77,7 +79,7 @@ function percentile(values: number[], fraction: number) {
 }
 function mean(values: number[]) { return values.reduce((sum, value) => sum + value, 0) / (values.length || 1); }
 function report() {
-  return { profile, late, gameplaySeconds: state.time, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
+  return { profile, joystick, late, gameplaySeconds: state.time, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
     meanFps: 1000 / mean(intervals), lowestRollingFps: Math.min(...rolling),
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),
@@ -104,7 +106,7 @@ function tick(timestamp: number) {
   const updated = performance.now();
   replenish();
   const replenished = performance.now();
-  renderer.draw(state, fx);
+  renderer.draw(state, fx, stick);
   const rendered = performance.now();
   if (elapsed >= warmup && sampleStart === null) { sampleStart = timestamp; rollingStart = timestamp; }
   else if (sampleStart !== null && previous !== null) {

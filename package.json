@@ -14,6 +14,7 @@
     "reset": "bun scripts/reset.ts"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "hono": "^4.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

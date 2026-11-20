@@ -13,6 +13,9 @@ import { UPGRADE_IDS } from "../shared/upgrades";
 let dir: string;
 let db: Database;
 
+// Bulk HTTP/SQLite cases include hundreds of disk commits; allow slower Windows CI storage.
+const BULK_START_TIMEOUT_MS = 30_000;
+
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "app-test-"));
   db = openDb(join(dir, "app.db"));
@@ -102,7 +105,7 @@ test("300 starts per peer, independent peers, window expiry and forwarded spoof 
   peer = "198.51.100.2"; expect((await app.request("/api/runs", post({ playerId: crypto.randomUUID(), name: "Robot", team: "tabs" as const }))).status).toBe(201);
   peer = "198.51.100.1"; time += START_WINDOW_MS;
   expect((await app.request("/api/runs", post({ playerId: crypto.randomUUID(), name: "Robot", team: "tabs" as const }))).status).toBe(201);
-});
+}, BULK_START_TIMEOUT_MS);
 
 test("proxy hops select from the right, resist forged prefixes and retain exact-peer trust at zero", () => {
   const peer = "10.0.0.8", proxy = "10.0.0.9", client = "198.51.100.1";
@@ -134,7 +137,7 @@ test("300 distinct clients behind one proxy can each start twice", async () => {
     }
   }
   expect(countEvents(db).run_started).toBe(600);
-});
+}, BULK_START_TIMEOUT_MS);
 
 test("40 starts per player across IPs and UUID casing, even with the IP load override; expiry and finish remain usable", async () => {
   let time = 1000, ip = "198.51.100.1";

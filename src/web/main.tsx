@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { loadView } from "./route";
+import "./page.css";
 
 void loadView(window.location.pathname).then(View => {
   createRoot(document.getElementById("root")!).render(

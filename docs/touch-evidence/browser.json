@@ -1,0 +1,352 @@
+{
+  "chrome": "156.0.8078.4",
+  "measuredAt": "2026-11-20T06:02:44.576Z",
+  "assertions": [
+    "Portrait and landscape entry hints fit; auto-fire and three-hit explanation retained.",
+    "390x844/DPR2: stationary touchdown, dead zone, half/full speed, second finger ignored, lift/no takeover, outside capture and direction changes.",
+    "844x390/DPR2: stationary touchdown, dead zone, half/full speed, second finger ignored, lift/no takeover, outside capture and direction changes.",
+    "Rotation cancels active touch while retaining the run arena.",
+    "Touch upgrade selection resumes stationary; game-over tap restarts and the next contact moves only on drag.",
+    "Desktop mouse targets, WASD priority and full-speed normalized arrow diagonals work."
+  ],
+  "pointerEvents": [
+    {
+      "type": "pointerdown",
+      "id": 2,
+      "pointerType": "touch",
+      "x": 106.5,
+      "y": 441.3999938964844
+    },
+    {
+      "type": "pointerup",
+      "id": 2,
+      "pointerType": "touch",
+      "x": 106.5,
+      "y": 441.3999938964844
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 2,
+      "pointerType": "touch",
+      "x": 106.5,
+      "y": 441.3999938964844
+    },
+    {
+      "type": "pointerdown",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 95,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 123,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointerdown",
+      "id": 4,
+      "pointerType": "touch",
+      "x": 240,
+      "y": 542
+    },
+    {
+      "type": "pointermove",
+      "id": 4,
+      "pointerType": "touch",
+      "x": 190,
+      "y": 542
+    },
+    {
+      "type": "pointerup",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 3,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 4,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 542
+    },
+    {
+      "type": "pointerup",
+      "id": 4,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 542
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 4,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 542
+    },
+    {
+      "type": "pointerdown",
+      "id": 5,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 5,
+      "pointerType": "touch",
+      "x": -20,
+      "y": 640.7999877929688
+    },
+    {
+      "type": "pointermove",
+      "id": 5,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 580.7999877929688
+    },
+    {
+      "type": "pointerup",
+      "id": 5,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 580.7999877929688
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 5,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 580.7999877929688
+    },
+    {
+      "type": "pointerdown",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 95,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 123,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointerdown",
+      "id": 7,
+      "pointerType": "touch",
+      "x": 240,
+      "y": 246.89999389648438
+    },
+    {
+      "type": "pointermove",
+      "id": 7,
+      "pointerType": "touch",
+      "x": 190,
+      "y": 246.89999389648438
+    },
+    {
+      "type": "pointerup",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 6,
+      "pointerType": "touch",
+      "x": 150,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 7,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 246.89999389648438
+    },
+    {
+      "type": "pointerup",
+      "id": 7,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 246.89999389648438
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 7,
+      "pointerType": "touch",
+      "x": 270,
+      "y": 246.89999389648438
+    },
+    {
+      "type": "pointerdown",
+      "id": 8,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 8,
+      "pointerType": "touch",
+      "x": -20,
+      "y": 286.67999267578125
+    },
+    {
+      "type": "pointermove",
+      "id": 8,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 226.67999267578125
+    },
+    {
+      "type": "pointerup",
+      "id": 8,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 226.67999267578125
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 8,
+      "pointerType": "touch",
+      "x": 90,
+      "y": 226.67999267578125
+    },
+    {
+      "type": "pointerdown",
+      "id": 9,
+      "pointerType": "touch",
+      "x": 100,
+      "y": 248
+    },
+    {
+      "type": "pointermove",
+      "id": 9,
+      "pointerType": "touch",
+      "x": 160,
+      "y": 248
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 9,
+      "pointerType": "touch",
+      "x": 160,
+      "y": 248
+    },
+    {
+      "type": "pointerup",
+      "id": 9,
+      "pointerType": "touch",
+      "x": 160,
+      "y": 248
+    },
+    {
+      "type": "pointerup",
+      "id": 10,
+      "pointerType": "touch",
+      "x": 195,
+      "y": 361.2799987792969
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 10,
+      "pointerType": "touch",
+      "x": 195,
+      "y": 361.2799987792969
+    },
+    {
+      "type": "pointerdown",
+      "id": 11,
+      "pointerType": "touch",
+      "x": 60,
+      "y": 108
+    },
+    {
+      "type": "pointerup",
+      "id": 11,
+      "pointerType": "touch",
+      "x": 60,
+      "y": 108
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 11,
+      "pointerType": "touch",
+      "x": 60,
+      "y": 108
+    },
+    {
+      "type": "pointerdown",
+      "id": 12,
+      "pointerType": "touch",
+      "x": 60,
+      "y": 108
+    },
+    {
+      "type": "pointermove",
+      "id": 12,
+      "pointerType": "touch",
+      "x": 120,
+      "y": 108
+    },
+    {
+      "type": "pointerup",
+      "id": 12,
+      "pointerType": "touch",
+      "x": 120,
+      "y": 108
+    },
+    {
+      "type": "lostpointercapture",
+      "id": 12,
+      "pointerType": "touch",
+      "x": 120,
+      "y": 108
+    }
+  ],
+  "viewport": "390x844 and 844x390 CSS px, DPR 2; desktop 1280x720 DPR 1",
+  "pageErrors": []
+}
