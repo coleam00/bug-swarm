@@ -7,6 +7,7 @@ import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, UPGRADE_IDS } from 
 import { openChoice } from "../src/web/game/upgrades";
 import { chooseUpgrade, createSimulation } from "../src/web/game/simulation";
 import { arenaForViewport } from "../src/web/game/arena";
+import { FrameAudit } from "./frame-audit";
 
 const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!;
 const readout = document.querySelector("pre")!;
@@ -30,9 +31,10 @@ if (["first", "double", "stress"].includes(profile)) {
 state.upgrades.nextChoiceAt = Infinity;
 const burst = new URLSearchParams(location.search).has("burst");
 const warmup = 10000, duration = 60000;
-const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [], rolling: number[] = [];
+const updates: number[] = [], draws: number[] = [], fixtures: number[] = [], intervals: number[] = [];
+const audit = new FrameAudit();
 let start: number | null = null, previous: number | null = null, sampleStart: number | null = null;
-let rollingStart = 0, rollingFrames = 0, lastShot = 0, lastHit = 0, lastBurst = 0, lastReadout = 0;
+let lastShot = 0, lastHit = 0, lastBurst = 0, lastReadout = 0;
 let peakParticles = 0, peakTrails = 0, peakLabels = 0, minBugs = Infinity, maxBugs = 0;
 let minFastBugs = Infinity, maxFastBugs = 0;
 let stopped = false;
@@ -75,7 +77,7 @@ function percentile(values: number[], fraction: number) {
 function mean(values: number[]) { return values.reduce((sum, value) => sum + value, 0) / (values.length || 1); }
 function report() {
   return { profile, mode: burst ? "burst" : "normal", sampleMs: intervals.reduce((a, b) => a + b, 0), frames: intervals.length,
-    meanFps: 1000 / mean(intervals), lowestRollingFps: Math.min(...rolling),
+    meanFps: 1000 / mean(intervals), lowestRollingFps: Math.min(...audit.windows.map(window => window.fps)), frameAudit: audit.report(),
     updateMeanMs: mean(updates), updateP95Ms: percentile(updates, 0.95),
     drawMeanMs: mean(draws), drawP95Ms: percentile(draws, 0.95),
     fixtureMeanMs: mean(fixtures), fixtureP95Ms: percentile(fixtures, 0.95),
@@ -103,7 +105,7 @@ function tick(timestamp: number) {
   const replenished = performance.now();
   renderer.draw(state, fx);
   const rendered = performance.now();
-  if (elapsed >= warmup && sampleStart === null) { sampleStart = timestamp; rollingStart = timestamp; }
+  if (elapsed >= warmup && sampleStart === null) sampleStart = timestamp;
   else if (sampleStart !== null && previous !== null) {
     intervals.push(timestamp - previous); updates.push(updated - prepared); draws.push(rendered - replenished);
     fixtures.push(prepared - begin + replenished - updated);
@@ -113,8 +115,6 @@ function tick(timestamp: number) {
     minFastBugs = Math.min(minFastBugs, fastBugs); maxFastBugs = Math.max(maxFastBugs, fastBugs);
     peakRings = Math.max(peakRings, fx.ring.life > 0 ? 1 : 0);
     peakParticles = Math.max(peakParticles, fx.particles.count); peakTrails = Math.max(peakTrails, fx.trails.count); peakLabels = Math.max(peakLabels, fx.labels.count);
-    rollingFrames++;
-    if (timestamp - rollingStart >= 1000) { rolling.push(rollingFrames * 1000 / (timestamp - rollingStart)); rollingFrames = 0; rollingStart = timestamp; }
   }
   previous = timestamp;
   if (elapsed - lastReadout >= 500) {
@@ -122,6 +122,7 @@ function tick(timestamp: number) {
       `150 bugs · ${burst ? "burst" : "normal"}\n${(1000 / mean(intervals)).toFixed(1)} FPS · ${Math.min(60, Math.floor((timestamp - sampleStart) / 1000))} / 60s\nupdate ${mean(updates).toFixed(2)} ms · draw ${mean(draws).toFixed(2)} ms\nparticles ${fx.particles.count}/1024 · labels ${fx.labels.count}/256`;
     lastReadout = elapsed;
   }
+  if (sampleStart !== null) audit.record(timestamp, begin, performance.now(), updated - prepared, rendered - replenished, prepared - begin + replenished - updated);
   if (sampleStart !== null && timestamp - sampleStart >= duration) {
     stopped = true; benchmark.result = report(); readout.textContent = JSON.stringify(benchmark.result, null, 2);
   } else frame = requestAnimationFrame(tick);
