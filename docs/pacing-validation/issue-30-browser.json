@@ -1,0 +1,227 @@
+{
+  "chrome": "159.0.8154.6",
+  "isolation": "Scratch home/profile, local dist files and fixture API replies through route interception; no listening server or database.",
+  "cases": [
+    {
+      "width": 390,
+      "height": 844,
+      "repeat": false,
+      "input": "touch",
+      "viewport": [
+        390,
+        844
+      ],
+      "overflow": false,
+      "cards": [
+        {
+          "text": "1Review laserShots hit up to 2 bugs; robot fires 4x faster",
+          "x": 42,
+          "y": 311.28125,
+          "width": 306,
+          "height": 103.71875,
+          "top": 311.28125,
+          "right": 348,
+          "bottom": 415,
+          "left": 42,
+          "textFits": true
+        },
+        {
+          "text": "2Test shieldRefill to block 1 hit",
+          "x": 42,
+          "y": 427,
+          "width": 306,
+          "height": 100,
+          "top": 427,
+          "right": 348,
+          "bottom": 527,
+          "left": 42,
+          "textFits": true
+        },
+        {
+          "text": "3Refactor bombClear bugs automatically; 30s recharge",
+          "x": 42,
+          "y": 539,
+          "width": 306,
+          "height": 103.71875,
+          "top": 539,
+          "right": 348,
+          "bottom": 642.71875,
+          "left": 42,
+          "textFits": true
+        }
+      ],
+      "selected": {
+        "picks": 1,
+        "cooldown": 0.375,
+        "focus": "CANVAS",
+        "choice": null
+      }
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "repeat": true,
+      "input": "touch",
+      "viewport": [
+        390,
+        844
+      ],
+      "overflow": false,
+      "cards": [
+        {
+          "text": "1Review laserShots hit up to 3 bugs",
+          "x": 42,
+          "y": 313.140625,
+          "width": 306,
+          "height": 100,
+          "top": 313.140625,
+          "right": 348,
+          "bottom": 413.140625,
+          "left": 42,
+          "textFits": true
+        },
+        {
+          "text": "2Test shieldRefill to block 1 hit",
+          "x": 42,
+          "y": 425.140625,
+          "width": 306,
+          "height": 100,
+          "top": 425.140625,
+          "right": 348,
+          "bottom": 525.140625,
+          "left": 42,
+          "textFits": true
+        },
+        {
+          "text": "3Refactor bombClear bugs automatically; 30s recharge",
+          "x": 42,
+          "y": 537.140625,
+          "width": 306,
+          "height": 103.71875,
+          "top": 537.140625,
+          "right": 348,
+          "bottom": 640.859375,
+          "left": 42,
+          "textFits": true
+        }
+      ],
+      "selected": {
+        "picks": 2,
+        "cooldown": 0.375,
+        "focus": "CANVAS",
+        "choice": null
+      }
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "repeat": false,
+      "input": "keyboard 1",
+      "viewport": [
+        1280,
+        800
+      ],
+      "overflow": false,
+      "cards": [
+        {
+          "text": "1Review laserShots hit up to 2 bugs; robot fires 4x faster",
+          "x": 211,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 489,
+          "bottom": 518,
+          "left": 211,
+          "textFits": true
+        },
+        {
+          "text": "2Test shieldRefill to block 1 hit",
+          "x": 501,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 779,
+          "bottom": 518,
+          "left": 501,
+          "textFits": true
+        },
+        {
+          "text": "3Refactor bombClear bugs automatically; 30s recharge",
+          "x": 791,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 1069,
+          "bottom": 518,
+          "left": 791,
+          "textFits": true
+        }
+      ],
+      "selected": {
+        "picks": 1,
+        "cooldown": 0.375,
+        "focus": "CANVAS",
+        "choice": null
+      }
+    },
+    {
+      "width": 1280,
+      "height": 800,
+      "repeat": true,
+      "input": "keyboard 1",
+      "viewport": [
+        1280,
+        800
+      ],
+      "overflow": false,
+      "cards": [
+        {
+          "text": "1Review laserShots hit up to 3 bugs",
+          "x": 211,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 489,
+          "bottom": 518,
+          "left": 211,
+          "textFits": true
+        },
+        {
+          "text": "2Test shieldRefill to block 1 hit",
+          "x": 501,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 779,
+          "bottom": 518,
+          "left": 501,
+          "textFits": true
+        },
+        {
+          "text": "3Refactor bombClear bugs automatically; 30s recharge",
+          "x": 791,
+          "y": 368,
+          "width": 278,
+          "height": 150,
+          "top": 368,
+          "right": 1069,
+          "bottom": 518,
+          "left": 791,
+          "textFits": true
+        }
+      ],
+      "selected": {
+        "picks": 2,
+        "cooldown": 0.375,
+        "focus": "CANVAS",
+        "choice": null
+      }
+    }
+  ],
+  "errors": []
+}

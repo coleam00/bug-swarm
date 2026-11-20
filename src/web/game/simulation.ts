@@ -1,13 +1,13 @@
-import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, BOMB_RECHARGE, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
+import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
-import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, type UpgradeId } from "../../shared/upgrades";
+import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, shieldCapacity, bombRecharge, laserFireMultiplier, type UpgradeId } from "../../shared/upgrades";
 import { createUpgrades, openChoice, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
 export interface Input { x: number; y: number; target: Point | null }
 export interface Bug extends Point { id: number; kind: BugKind }
-// Read-only checkpoints around scored bomb/projectile resolution, before contact removals.
+// Read-only checkpoints around scored bomb/projectile resolution, before contact damage.
 // Observers must not mutate the simulation or retain its array as a snapshot.
 export interface KillObserver {
   beforeKills(bugs: readonly Readonly<Bug>[], squashes: number): void;
@@ -33,10 +33,12 @@ export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Sim
 }
 export function chooseUpgrade(state: Simulation, choiceNumber: number, id: UpgradeId): boolean {
   if (state.dead || !selectUpgrade(state.upgrades, choiceNumber, id)) return false;
-  if (id === TEST_SHIELD) state.shieldCharges = state.upgrades.counts[TEST_SHIELD];
+  if (id === TEST_SHIELD) state.shieldCharges = shieldCapacity(state.upgrades.counts[TEST_SHIELD]);
   if (id === REFACTOR_BOMB) state.bombReadyAt = state.upgrades.counts[REFACTOR_BOMB] === 1
-    ? state.time : state.bombLastAt + BOMB_RECHARGE / state.upgrades.counts[REFACTOR_BOMB];
+    ? state.time : state.bombLastAt + bombRecharge(state.upgrades.counts[REFACTOR_BOMB]);
   if (id === CI_DRONE) state.drones.push({ fireIn: 0 });
+  if (id === REVIEW_LASER && state.upgrades.counts[REVIEW_LASER] === 1)
+    state.fireIn = Math.min(state.fireIn, FIRE_INTERVAL * laserFireMultiplier(1));
   return true;
 }
 // Both drawing and firing use this calculation; the caller reuses its output.
@@ -103,14 +105,15 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
     spawnBug(state, fast ? BUG_KINDS[1].id : BUG_KINDS[0].id);
     state.spawnIn += spawnInterval(at);
   }
+  const speedMultiplier = bugSpeedMultiplier(state.time);
   for (const bug of state.bugs) {
     const bx = state.robot.x - bug.x, by = state.robot.y - bug.y, length = Math.hypot(bx, by);
-    const amount = Math.min(BUG_DEFINITIONS[bug.kind].speed * dt, length);
+    const amount = Math.min(BUG_DEFINITIONS[bug.kind].speed * speedMultiplier * dt, length);
     if (length) { bug.x += bx / length * amount; bug.y += by / length * amount; }
   }
   state.fireIn -= dt;
   if (state.fireIn <= 1e-9) {
-    state.fireIn += FIRE_INTERVAL;
+    state.fireIn += FIRE_INTERVAL * laserFireMultiplier(state.upgrades.counts[REVIEW_LASER]);
     fire(state, state.robot);
   }
   // Reuse the simulation-owned scratch point; no per-frame drone positions.
@@ -125,7 +128,7 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   observer?.beforeKills(state.bugs, state.squashes);
   if (state.time + 1e-9 >= state.bombReadyAt && state.bugs.length > 0) {
     state.squashes += state.bugs.length; state.bugs.length = 0;
-    state.bombLastAt = state.time; state.bombReadyAt = state.time + BOMB_RECHARGE / state.upgrades.counts[REFACTOR_BOMB];
+    state.bombLastAt = state.time; state.bombReadyAt = state.time + bombRecharge(state.upgrades.counts[REFACTOR_BOMB]);
     state.bombDetonations++; state.bombOrigin.x = state.robot.x; state.bombOrigin.y = state.robot.y;
   }
   let kept = 0;
@@ -155,18 +158,17 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   }
   state.shots.length = kept;
   observer?.afterKills(state.bugs, state.squashes);
-  kept = 0;
+  // Contact costs protection/health, never a free enemy removal. Surviving
+  // attackers can hit again after immunity unless the player moves or kills them.
   for (const bug of state.bugs) {
-    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2) {
-      if (state.time >= state.invulnerableUntil) {
-        if (state.shieldCharges > 0) state.shieldCharges--;
-        else state.hits++;
-        state.invulnerableUntil = state.time + 1;
-        if (state.hits === 3) state.dead = true;
-      }
-    } else state.bugs[kept++] = bug;
+    if ((bug.x - state.robot.x) ** 2 + (bug.y - state.robot.y) ** 2 <= (BUG_DEFINITIONS[bug.kind].radius + ROBOT_RADIUS) ** 2 &&
+      state.time >= state.invulnerableUntil) {
+      if (state.shieldCharges > 0) state.shieldCharges--;
+      else state.hits++;
+      state.invulnerableUntil = state.time + 1;
+      if (state.hits === 3) state.dead = true;
+    }
   }
-  state.bugs.length = kept;
   state.seconds = Math.floor(state.time + 1e-9);
   state.score = state.squashes * POINTS_PER_SQUASH + state.seconds * POINTS_PER_SECOND;
   if (!state.dead && state.time + 1e-9 >= state.upgrades.nextChoiceAt) {

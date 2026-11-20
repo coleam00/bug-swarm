@@ -6,7 +6,7 @@ import { openChoice } from "./upgrades";
 import { Effects } from "./fx";
 import { Feedback } from "./fx/feedback";
 
-test.each([1, 2, 3])("bomb with %i picks clears automatically once, scores every victim, and recharges in game time", count => {
+test.each([[1, 30], [2, 22.5], [100, 15.15]])("bomb with %i picks recharges in %f gameplay seconds and scores every victim", (count, recharge) => {
   const s = createSimulation(1); s.spawnIn = s.fireIn = Infinity;
   for (let i = 0; i < count; i++) pick(s, REFACTOR_BOMB);
   const bugs = () => { s.bugs = [{ id: s.nextId++, kind: "base", ...s.robot }, { id: s.nextId++, kind: "fast", x: 10, y: 10 }]; };
@@ -15,7 +15,8 @@ test.each([1, 2, 3])("bomb with %i picks clears automatically once, scores every
   expect(s.bugs).toHaveLength(0); expect(s.squashes).toBe(2); expect(s.hits).toBe(0);
   expect(s.bombDetonations).toBe(1); expect(s.bombOrigin).toEqual(s.robot);
   const ready = s.bombReadyAt;
-  expect(ready - s.time).toBeCloseTo(30 / count);
+  expect(ready - s.time).toBeCloseTo(recharge!);
+  expect(ready - s.time).toBeGreaterThan(15);
   openChoice(s.upgrades); const frozen = structuredClone(s);
   step(s, IDLE, 1000); expect(s).toEqual(frozen);
   s.upgrades.offer = null; // isolate cooldown from the next acquisition
@@ -32,9 +33,21 @@ test("empty arena keeps bomb armed; a repeat pick recalculates from the previous
   s.bugs.push({ id: 1, kind: "base", x: 10, y: 10 }); step(s, IDLE, 0.01);
   const last = s.bombLastAt;
   s.time += 16; pick(s, REFACTOR_BOMB);
-  expect(s.bombReadyAt).toBe(last + 15);
+  expect(s.bombReadyAt).toBe(last + 22.5);
+  s.bugs.push({ id: 2, kind: "base", x: 10, y: 10 }); step(s, IDLE, 0.01);
+  expect(s.bombDetonations).toBe(1); // picking again grants no separate explosion
+  s.time = last + 22.49; s.bugs = [];
   s.bugs.push({ id: 2, kind: "base", ...s.robot }); step(s, IDLE, 0.01);
   expect(s.bombDetonations).toBe(2); expect(s.hits).toBe(0);
+});
+
+test("an unacquired bomb never clears bugs", () => {
+  const s = createSimulation(1); s.spawnIn = s.fireIn = s.invulnerableUntil = Infinity;
+  s.upgrades.nextChoiceAt = Infinity;
+  s.bugs.push({ id: 1, kind: "base", x: 0, y: 0 });
+  s.time = 31; step(s, IDLE, 0.01);
+  expect(s.bombDetonations).toBe(0); expect(s.squashes).toBe(0);
+  expect(s.bugs).toHaveLength(1);
 });
 
 test("bomb feedback uses bounded pools without losing scores, and reuses one expiring ring", () => {
