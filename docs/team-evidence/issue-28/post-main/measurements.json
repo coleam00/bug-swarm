@@ -1,0 +1,546 @@
+{
+  "chrome": "156.0.8078.4",
+  "viewport": "390x844 touch; 844x390 landscape",
+  "entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 24,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 189,
+        "bottom": 465.40625,
+        "left": 24
+      },
+      {
+        "text": "Join Spaces",
+        "x": 201,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 366,
+        "bottom": 465.40625,
+        "left": 201
+      }
+    ],
+    "boxes": {
+      ".final-score": null,
+      ".team-race": null,
+      ".build": null,
+      ".over h2": null
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "landscape-entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 166,
+        "y": 417.40625,
+        "width": 250,
+        "height": 48,
+        "top": 417.40625,
+        "right": 416,
+        "bottom": 465.40625,
+        "left": 166
+      },
+      {
+        "text": "Join Spaces",
+        "x": 428,
+        "y": 417.40625,
+        "width": 250,
+        "height": 48,
+        "top": 417.40625,
+        "right": 678,
+        "bottom": 465.40625,
+        "left": 428
+      }
+    ],
+    "boxes": {
+      ".final-score": null,
+      ".team-race": null,
+      ".build": null,
+      ".over h2": null
+    },
+    "overflow": false,
+    "width": 844,
+    "height": 390
+  },
+  "firstEntryMs": 1638,
+  "real-finish": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 316,
+        "width": 115.03125,
+        "height": 48,
+        "top": 316,
+        "right": 252.515625,
+        "bottom": 364,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 1",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": {
+        "text": "Tabs 1Spaces 0",
+        "x": 24,
+        "y": 164,
+        "width": 342,
+        "height": 44,
+        "top": 164,
+        "right": 366,
+        "bottom": 208,
+        "left": 24
+      },
+      ".build": {
+        "text": "No upgrades taken",
+        "x": 24,
+        "y": 372,
+        "width": 342,
+        "height": 27,
+        "top": 372,
+        "right": 366,
+        "bottom": 399,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 407,
+        "width": 342,
+        "height": 28,
+        "top": 407,
+        "right": 366,
+        "bottom": 435,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "hideVisibleMs": 2102,
+  "hidden-zero": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 348,
+        "width": 115.03125,
+        "height": 48,
+        "top": 348,
+        "right": 252.515625,
+        "bottom": 396,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 1",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": {
+        "text": "Tabs 0Spaces 0No team scores yet",
+        "x": 24,
+        "y": 164,
+        "width": 342,
+        "height": 76,
+        "top": 164,
+        "right": 366,
+        "bottom": 240,
+        "left": 24
+      },
+      ".build": {
+        "text": "No upgrades taken",
+        "x": 24,
+        "y": 404,
+        "width": 342,
+        "height": 27,
+        "top": 404,
+        "right": 366,
+        "bottom": 431,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 439,
+        "width": 342,
+        "height": 28,
+        "top": 439,
+        "right": 366,
+        "bottom": 467,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "loading-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 252.515625,
+        "bottom": 336,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 80",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": null,
+      ".build": {
+        "text": "Review laser ×1 · Test shield ×1 · Refactor bomb ×1 · CI drone ×1",
+        "x": 24,
+        "y": 344,
+        "width": 342,
+        "height": 54,
+        "top": 344,
+        "right": 366,
+        "bottom": 398,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 406,
+        "width": 342,
+        "height": 28,
+        "top": 406,
+        "right": 366,
+        "bottom": 434,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "populated-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 316,
+        "width": 115.03125,
+        "height": 48,
+        "top": 316,
+        "right": 252.515625,
+        "bottom": 364,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 80",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": {
+        "text": "Tabs 123Spaces 456",
+        "x": 24,
+        "y": 164,
+        "width": 342,
+        "height": 44,
+        "top": 164,
+        "right": 366,
+        "bottom": 208,
+        "left": 24
+      },
+      ".build": {
+        "text": "Review laser ×1 · Test shield ×1 · Refactor bomb ×1 · CI drone ×1",
+        "x": 24,
+        "y": 372,
+        "width": 342,
+        "height": 54,
+        "top": 372,
+        "right": 366,
+        "bottom": 426,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 434,
+        "width": 342,
+        "height": 28,
+        "top": 434,
+        "right": 366,
+        "bottom": 462,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "zero-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 348,
+        "width": 115.03125,
+        "height": 48,
+        "top": 348,
+        "right": 252.515625,
+        "bottom": 396,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 80",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": {
+        "text": "Tabs 0Spaces 0No team scores yet",
+        "x": 24,
+        "y": 164,
+        "width": 342,
+        "height": 76,
+        "top": 164,
+        "right": 366,
+        "bottom": 240,
+        "left": 24
+      },
+      ".build": {
+        "text": "Review laser ×1 · Test shield ×1 · Refactor bomb ×1 · CI drone ×1",
+        "x": 24,
+        "y": 404,
+        "width": 342,
+        "height": 54,
+        "top": 404,
+        "right": 366,
+        "bottom": 458,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 466,
+        "width": 342,
+        "height": 28,
+        "top": 466,
+        "right": 366,
+        "bottom": 494,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "failed-upgrades": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 137.484375,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 252.515625,
+        "bottom": 336,
+        "left": 137.484375
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 80",
+        "x": 24,
+        "y": 119,
+        "width": 342,
+        "height": 33,
+        "top": 119,
+        "right": 366,
+        "bottom": 152,
+        "left": 24
+      },
+      ".team-race": null,
+      ".build": {
+        "text": "Review laser ×1 · Test shield ×1 · Refactor bomb ×1 · CI drone ×1",
+        "x": 24,
+        "y": 344,
+        "width": 342,
+        "height": 54,
+        "top": 344,
+        "right": 366,
+        "bottom": 398,
+        "left": 24
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 24,
+        "y": 406,
+        "width": 342,
+        "height": 28,
+        "top": 406,
+        "right": 366,
+        "bottom": 434,
+        "left": 24
+      }
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "landscape-failed": {
+    "targets": [
+      {
+        "text": "Play again",
+        "x": 319.390625,
+        "y": 288,
+        "width": 115.03125,
+        "height": 48,
+        "top": 288,
+        "right": 434.421875,
+        "bottom": 336,
+        "left": 319.390625
+      }
+    ],
+    "boxes": {
+      ".final-score": {
+        "text": "Score 80",
+        "x": 319.390625,
+        "y": 119,
+        "width": 500.609375,
+        "height": 33,
+        "top": 119,
+        "right": 820,
+        "bottom": 152,
+        "left": 319.390625
+      },
+      ".team-race": null,
+      ".build": {
+        "text": "Review laser ×1 · Test shield ×1 · Refactor bomb ×1 · CI drone ×1",
+        "x": 319.390625,
+        "y": 344,
+        "width": 500.609375,
+        "height": 54,
+        "top": 344,
+        "right": 820,
+        "bottom": 398,
+        "left": 319.390625
+      },
+      ".over h2": {
+        "text": "Live top 10",
+        "x": 319.390625,
+        "y": 406,
+        "width": 500.609375,
+        "height": 28,
+        "top": 406,
+        "right": 820,
+        "bottom": 434,
+        "left": 319.390625
+      }
+    },
+    "overflow": false,
+    "width": 844,
+    "height": 390
+  },
+  "debug": {
+    "text": "60 FPS · 3 bugs · 5 effects · update 0.04 ms · draw 0.13 ms",
+    "x": 903.71875,
+    "y": 692,
+    "width": 364.28125,
+    "height": 20,
+    "top": 692,
+    "right": 1268,
+    "bottom": 712,
+    "left": 903.71875,
+    "viewport": [
+      1280,
+      720
+    ]
+  },
+  "legacy-entry": {
+    "targets": [
+      {
+        "text": "Join Tabs",
+        "x": 24,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 189,
+        "bottom": 465.40625,
+        "left": 24
+      },
+      {
+        "text": "Join Spaces",
+        "x": 201,
+        "y": 417.40625,
+        "width": 165,
+        "height": 48,
+        "top": 417.40625,
+        "right": 366,
+        "bottom": 465.40625,
+        "left": 201
+      }
+    ],
+    "boxes": {
+      ".final-score": null,
+      ".team-race": null,
+      ".build": null,
+      ".over h2": null
+    },
+    "overflow": false,
+    "width": 390,
+    "height": 844
+  },
+  "returnEntryMs": 54,
+  "offlineEntryMs": 47
+}

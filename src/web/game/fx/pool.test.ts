@@ -68,3 +68,42 @@ test("effects expire after a terminal hit, clamp suspended time and reset withou
   expect(fx.time).toBe(0); expect(fx.flash).toBe(0); expect(fx.labels.count).toBe(0);
   expect(fx.particles).toBe(particles); expect(fx.labels).toBe(labels);
 });
+
+test("live effects count occupied pool slots, expire and reset", () => {
+  const fx = new Effects();
+  expect(fx.liveCount).toBe(0);
+  for (let i = 0; i < 2; i++) fx.particles.emit(0, 0, 0, 0, 0.0625);
+  fx.trails.emit(0, 0, 0, 0, 0.125);
+  for (let i = 0; i < 3; i++) fx.labels.emit(0, 0, 0, 0, 0.25);
+  expect(fx.liveCount).toBe(6);
+  fx.advance(0); fx.advance(62.5); expect(fx.liveCount).toBe(4);
+  fx.advance(125); expect(fx.liveCount).toBe(3);
+  fx.advance(187.5); fx.advance(250); expect(fx.liveCount).toBe(0);
+  fx.particles.emit(0, 0, 0, 0, 10); fx.trails.emit(0, 0, 0, 0, 10); fx.labels.emit(0, 0, 0, 0, 10);
+  fx.hit(); fx.bomb(0, 0, 100); expect(fx.liveCount).toBe(6);
+  fx.reset(); expect(fx.liveCount).toBe(0);
+});
+
+test.each(["ring", "flash", "shake"] as const)("live effects count an active %s once until expiry", kind => {
+  const fx = new Effects();
+  if (kind === "ring") fx.bomb(0, 0, 100);
+  else if (kind === "flash") fx.flash = 0.1;
+  else fx.shake.hit();
+  expect(fx.liveCount).toBe(1);
+  fx.advance(0);
+  for (let time = 62.5; time <= 562.5; time += 62.5) fx.advance(time);
+  expect(fx.liveCount).toBe(0);
+});
+
+test("hits and bombs replace their active effects rather than growing the count", () => {
+  const fx = new Effects();
+  fx.hit(); expect(fx.liveCount).toBe(2);
+  fx.bomb(0, 0, 100); expect(fx.liveCount).toBe(3);
+  fx.advance(0); fx.advance(62.5);
+  fx.hit(); fx.bomb(10, 20, 200); expect(fx.liveCount).toBe(3);
+  fx.advance(125); expect(fx.liveCount).toBe(3);
+  fx.advance(187.5); expect(fx.liveCount).toBe(2);
+  fx.advance(250); expect(fx.liveCount).toBe(1);
+  for (let time = 312.5; time <= 625; time += 62.5) fx.advance(time);
+  expect(fx.liveCount).toBe(0);
+});

@@ -1,0 +1,1066 @@
+[
+  {
+    "trial": 1,
+    "chrome": "156.0.8078.4",
+    "pageErrors": [],
+    "apiCalls": [],
+    "result": {
+      "profile": "stress",
+      "mode": "normal",
+      "sampleMs": 60001.00000000001,
+      "frames": 3599,
+      "meanFps": 59.98233362777287,
+      "lowestRollingFps": 59.020263623843846,
+      "frameAudit": {
+        "maxCallbackMs": 3.299999952316284,
+        "maxIntervalMs": 33.30000000000291,
+        "windows": [
+          {
+            "endMs": 1016.6000000000004,
+            "durationMs": 1016.6000000000004,
+            "frames": 61,
+            "fps": 60.00393468424157,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.5000000238414941
+          },
+          {
+            "endMs": 2016.699999999999,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.600000023841858,
+            "maxDelayMs": 0.7000000476837158
+          },
+          {
+            "endMs": 3016.699999999999,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.5000000715263013
+          },
+          {
+            "endMs": 4016.699999999999,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.5,
+            "maxDelayMs": 0.6000000000003638
+          },
+          {
+            "endMs": 5016.699999999999,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.899999976158142,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 6016.799999999999,
+            "durationMs": 1000.1000000000004,
+            "frames": 60,
+            "fps": 59.99400059993999,
+            "maxCallbackMs": 2.5999999046325684,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 7016.800000000001,
+            "durationMs": 1000.0000000000018,
+            "frames": 60,
+            "fps": 59.99999999999989,
+            "maxCallbackMs": 1.7999999523162842,
+            "maxDelayMs": 0.6000000715248461
+          },
+          {
+            "endMs": 8016.800000000001,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 9016.9,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 1.8000000715255737,
+            "maxDelayMs": 0.5000000715263013
+          },
+          {
+            "endMs": 10016.9,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.8000000715255737,
+            "maxDelayMs": 1.000000023843313
+          },
+          {
+            "endMs": 11033.6,
+            "durationMs": 1016.7000000000007,
+            "frames": 61,
+            "fps": 59.99803285138188,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.7000000476837158
+          },
+          {
+            "endMs": 12033.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3,
+            "maxDelayMs": 2.200000047683716
+          },
+          {
+            "endMs": 13050.300000000001,
+            "durationMs": 1016.7000000000007,
+            "frames": 61,
+            "fps": 59.99803285138188,
+            "maxCallbackMs": 2.3000000715255737,
+            "maxDelayMs": 0.6000000238418579
+          },
+          {
+            "endMs": 14066.9,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 2.5999999046325684,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 15066.9,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 16066.999999999998,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 17067,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.600000023841858,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 18067,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.7000000000007276
+          },
+          {
+            "endMs": 19067,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.0999999046325684,
+            "maxDelayMs": 0.6000000715248461
+          },
+          {
+            "endMs": 20067,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.8000000715255737,
+            "maxDelayMs": 0.7000000000007276
+          },
+          {
+            "endMs": 21067.1,
+            "durationMs": 1000.1000000000022,
+            "frames": 60,
+            "fps": 59.99400059993987,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 22083.699999999997,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 1.9000000953674316,
+            "maxDelayMs": 0.5999999761588697
+          },
+          {
+            "endMs": 23083.700000000004,
+            "durationMs": 1000.0000000000036,
+            "frames": 60,
+            "fps": 59.99999999999978,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.5999999761588697
+          },
+          {
+            "endMs": 24083.700000000004,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.5,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 25083.800000000003,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 26083.800000000003,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.7999999523162842,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 27083.800000000003,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.0999999046325684,
+            "maxDelayMs": 0.6000000715284841
+          },
+          {
+            "endMs": 28083.800000000003,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.600000047685171
+          },
+          {
+            "endMs": 29083.800000000003,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 30084.5,
+            "durationMs": 1000.6999999999971,
+            "frames": 60,
+            "fps": 59.95802937943457,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.6000000238418579
+          },
+          {
+            "endMs": 31100.6,
+            "durationMs": 1016.0999999999985,
+            "frames": 61,
+            "fps": 60.03346127349679,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 32100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 33100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 34100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.600000023841858,
+            "maxDelayMs": 0.5999999999985448
+          },
+          {
+            "endMs": 35100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.299999952316284,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 36100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.7000000715270289
+          },
+          {
+            "endMs": 37100.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 38100.700000000004,
+            "durationMs": 1000.1000000000058,
+            "frames": 60,
+            "fps": 59.99400059993965,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.6999999999970896
+          },
+          {
+            "endMs": 39100.700000000004,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.5999999046325684,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 40100.8,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.7000000476837158
+          },
+          {
+            "endMs": 41117.3,
+            "durationMs": 1016.5,
+            "frames": 61,
+            "fps": 60.00983767830792,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.8000000476822606
+          },
+          {
+            "endMs": 42117.4,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 1.7999999523162842,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 43117.4,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.600000023841858,
+            "maxDelayMs": 0.7000000476837158
+          },
+          {
+            "endMs": 44117.5,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 45134.1,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 1.8000000715255737,
+            "maxDelayMs": 0.4000000000014552
+          },
+          {
+            "endMs": 46134.1,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.7000000476837158,
+            "maxDelayMs": 0.6000000715284841
+          },
+          {
+            "endMs": 47134.200000000004,
+            "durationMs": 1000.1000000000058,
+            "frames": 60,
+            "fps": 59.99400059993965,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5999999999985448
+          },
+          {
+            "endMs": 48150.9,
+            "durationMs": 1016.6999999999971,
+            "frames": 61,
+            "fps": 59.99803285138209,
+            "maxCallbackMs": 1.5,
+            "maxDelayMs": 0.5999999761552317
+          },
+          {
+            "endMs": 49167.6,
+            "durationMs": 1016.6999999999971,
+            "frames": 61,
+            "fps": 59.99803285138209,
+            "maxCallbackMs": 2.1999999284744263,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 50184.3,
+            "durationMs": 1016.7000000000044,
+            "frames": 61,
+            "fps": 59.998032851381666,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 51200.9,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 2.5999999046325684,
+            "maxDelayMs": 0.9000000238447683
+          },
+          {
+            "endMs": 52200.9,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.399999976158142,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 53201,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 54217.700000000004,
+            "durationMs": 1016.7000000000044,
+            "frames": 61,
+            "fps": 59.998032851381666,
+            "maxCallbackMs": 2.6999999284744263,
+            "maxDelayMs": 1.0999999999985448
+          },
+          {
+            "endMs": 55234.3,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 2.899999976158142,
+            "maxDelayMs": 0.600000047685171
+          },
+          {
+            "endMs": 56251.00000000001,
+            "durationMs": 1016.7000000000044,
+            "frames": 61,
+            "fps": 59.998032851381666,
+            "maxCallbackMs": 1.7000000476837158,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 57251.1,
+            "durationMs": 1000.0999999999913,
+            "frames": 60,
+            "fps": 59.99400059994053,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.6999999761610525
+          },
+          {
+            "endMs": 58267.700000000004,
+            "durationMs": 1016.6000000000058,
+            "frames": 60,
+            "fps": 59.020263623843846,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.6999999761610525
+          },
+          {
+            "endMs": 59267.700000000004,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.1999999284744263,
+            "maxDelayMs": 0.5999999761552317
+          }
+        ],
+        "gaps": [
+          {
+            "atMs": 57401.00000000001,
+            "intervalMs": 33.30000000000291,
+            "previousCallbackMs": 0.9000000953674316,
+            "betweenCallbacksMs": 32.39999997615814,
+            "callbackDelayMs": 0.10000004767789505,
+            "callbackMs": 0.7999999523162842,
+            "updateMs": 0.19999992847442627,
+            "drawMs": 0.6000000238418579,
+            "fixtureMs": 0
+          }
+        ]
+      },
+      "updateMeanMs": 0.0946096129204108,
+      "updateP95Ms": 0.20000004768371582,
+      "drawMeanMs": 0.86926924145596,
+      "drawP95Ms": 1.5,
+      "fixtureMeanMs": 0.002667407851710721,
+      "fixtureP95Ms": 0,
+      "blocks": 67,
+      "detonations": 10,
+      "laserKills": 3309,
+      "droneShots": 630,
+      "peakRings": 1,
+      "peakParticles": 1024,
+      "peakTrails": 6,
+      "peakLabels": 201,
+      "minBugs": 150,
+      "maxBugs": 150,
+      "minFastBugs": 20,
+      "maxFastBugs": 44,
+      "worldWidth": 800,
+      "worldHeight": 450,
+      "viewport": [
+        1280,
+        720
+      ],
+      "dpr": 1,
+      "renderDpr": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    },
+    "upgrades": {
+      "review-laser": 4,
+      "test-shield": 4,
+      "refactor-bomb": 4,
+      "ci-drone": 9
+    }
+  },
+  {
+    "trial": 2,
+    "chrome": "156.0.8078.4",
+    "pageErrors": [],
+    "apiCalls": [],
+    "result": {
+      "profile": "stress",
+      "mode": "burst",
+      "sampleMs": 60001.1,
+      "frames": 3600,
+      "meanFps": 59.9989000201663,
+      "lowestRollingFps": 59.98800239952005,
+      "frameAudit": {
+        "maxCallbackMs": 4.800000071525574,
+        "maxIntervalMs": 17.200000000004366,
+        "windows": [
+          {
+            "endMs": 1000.0999999999985,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.1999999284744263,
+            "maxDelayMs": 0.5000000476829882
+          },
+          {
+            "endMs": 2000.0999999999985,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.4000000476844434
+          },
+          {
+            "endMs": 3000.0999999999985,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.40000007152593753
+          },
+          {
+            "endMs": 4000.0999999999985,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.3000000476840796
+          },
+          {
+            "endMs": 5000.0999999999985,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 6000.299999999999,
+            "durationMs": 1000.2000000000007,
+            "frames": 60,
+            "fps": 59.98800239952005,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 7016.799999999999,
+            "durationMs": 1016.5,
+            "frames": 61,
+            "fps": 60.00983767830792,
+            "maxCallbackMs": 3,
+            "maxDelayMs": 0.4000000238411303
+          },
+          {
+            "endMs": 8016.799999999999,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.100000023841858,
+            "maxDelayMs": 0.4000000000014552
+          },
+          {
+            "endMs": 9016.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.9000000953674316,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 10016.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.700000047683716,
+            "maxDelayMs": 0.4000000000014552
+          },
+          {
+            "endMs": 11016.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.30000004768226063
+          },
+          {
+            "endMs": 12016.899999999998,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.4000000953674316,
+            "maxDelayMs": 0.5
+          },
+          {
+            "endMs": 13016.899999999998,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.5999999046325684,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 14016.899999999998,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.1999999284744263,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 15017,
+            "durationMs": 1000.1000000000022,
+            "frames": 60,
+            "fps": 59.99400059993987,
+            "maxCallbackMs": 2.600000023841858,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 16017,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.100000023841858,
+            "maxDelayMs": 0.4000000476844434
+          },
+          {
+            "endMs": 17033.6,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 18033.6,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.8000000715255737,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 19033.7,
+            "durationMs": 1000.1000000000022,
+            "frames": 60,
+            "fps": 59.99400059993987,
+            "maxCallbackMs": 2.700000047683716,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 20033.7,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.700000047683716,
+            "maxDelayMs": 0.5000000238433131
+          },
+          {
+            "endMs": 21033.7,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.899999976158142,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 22033.7,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.4000000238411303
+          },
+          {
+            "endMs": 23033.7,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.700000047683716,
+            "maxDelayMs": 0.4000000476844434
+          },
+          {
+            "endMs": 24033.8,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 25033.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.1999999284744263,
+            "maxDelayMs": 0.3999999761581421
+          },
+          {
+            "endMs": 26033.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.0999999046325684,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 27033.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.4000000953674316,
+            "maxDelayMs": 0.3000000000029104
+          },
+          {
+            "endMs": 28033.8,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.5,
+            "maxDelayMs": 0.4000000238447683
+          },
+          {
+            "endMs": 29033.899999999998,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 30033.899999999998,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.299999952316284,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 31033.999999999996,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 3.8000000715255737,
+            "maxDelayMs": 0.5000000476866262
+          },
+          {
+            "endMs": 32033.999999999996,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.3000000715255737,
+            "maxDelayMs": 0.5
+          },
+          {
+            "endMs": 33050.600000000006,
+            "durationMs": 1016.6000000000058,
+            "frames": 61,
+            "fps": 60.003934684241244,
+            "maxCallbackMs": 2.899999976158142,
+            "maxDelayMs": 0.3000000238389475
+          },
+          {
+            "endMs": 34050.600000000006,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 4.800000071525574,
+            "maxDelayMs": 0.4000000238447683
+          },
+          {
+            "endMs": 35050.7,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 3.8000000715255737,
+            "maxDelayMs": 0.4000000238447683
+          },
+          {
+            "endMs": 36050.7,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.1999999284744263,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 37050.8,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 3,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 38067.3,
+            "durationMs": 1016.5,
+            "frames": 61,
+            "fps": 60.00983767830792,
+            "maxCallbackMs": 3.6999999284744263,
+            "maxDelayMs": 0.7000000715270289
+          },
+          {
+            "endMs": 39067.399999999994,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.6999999284744263,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 40067.399999999994,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.9000000953674316,
+            "maxDelayMs": 0.20000007152702892
+          },
+          {
+            "endMs": 41067.399999999994,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 42067.5,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2,
+            "maxDelayMs": 0.5000000715226633
+          },
+          {
+            "endMs": 43067.5,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 3.4000000953674316,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 44084.100000000006,
+            "durationMs": 1016.6000000000058,
+            "frames": 61,
+            "fps": 60.003934684241244,
+            "maxCallbackMs": 2.100000023841858,
+            "maxDelayMs": 0.6999999999970896
+          },
+          {
+            "endMs": 45084.100000000006,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 46084.100000000006,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.3999999761581421
+          },
+          {
+            "endMs": 47084.2,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.299999952316284,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 48084.2,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.4000000953674316,
+            "maxDelayMs": 0.40000004768080544
+          },
+          {
+            "endMs": 49084.3,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 3.799999952316284,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 50084.3,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.399999976158142,
+            "maxDelayMs": 0.6000000238418579
+          },
+          {
+            "endMs": 51084.3,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.200000047683716,
+            "maxDelayMs": 0.20000007152702892
+          },
+          {
+            "endMs": 52084.3,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 2.3000000715255737,
+            "maxDelayMs": 0.4000000000014552
+          },
+          {
+            "endMs": 53084.3,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.7999999523162842,
+            "maxDelayMs": 0.40000007152411854
+          },
+          {
+            "endMs": 54084.3,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 1.899999976158142,
+            "maxDelayMs": 0.4000000238447683
+          },
+          {
+            "endMs": 55084.399999999994,
+            "durationMs": 1000.0999999999985,
+            "frames": 60,
+            "fps": 59.994000599940094,
+            "maxCallbackMs": 2.3000000715255737,
+            "maxDelayMs": 0.30000007152557373
+          },
+          {
+            "endMs": 56101,
+            "durationMs": 1016.5999999999985,
+            "frames": 61,
+            "fps": 60.00393468424168,
+            "maxCallbackMs": 2.6999999284744263,
+            "maxDelayMs": 0.5000000476866262
+          },
+          {
+            "endMs": 57101,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 4.399999976158142,
+            "maxDelayMs": 0.6000000715284841
+          },
+          {
+            "endMs": 58101.100000000006,
+            "durationMs": 1000.1000000000058,
+            "frames": 60,
+            "fps": 59.99400059993965,
+            "maxCallbackMs": 3.399999976158142,
+            "maxDelayMs": 0.6999999999970896
+          },
+          {
+            "endMs": 59101.100000000006,
+            "durationMs": 1000,
+            "frames": 60,
+            "fps": 60,
+            "maxCallbackMs": 4.199999928474426,
+            "maxDelayMs": 0.600000047677895
+          }
+        ],
+        "gaps": []
+      },
+      "updateMeanMs": 0.09144444432523516,
+      "updateP95Ms": 0.20000004768371582,
+      "drawMeanMs": 1.1321666674481499,
+      "drawP95Ms": 1.9000000953674316,
+      "fixtureMeanMs": 0.004472222228844961,
+      "fixtureP95Ms": 0,
+      "blocks": 67,
+      "detonations": 10,
+      "laserKills": 3425,
+      "droneShots": 639,
+      "peakRings": 1,
+      "peakParticles": 1024,
+      "peakTrails": 6,
+      "peakLabels": 256,
+      "minBugs": 150,
+      "maxBugs": 150,
+      "minFastBugs": 24,
+      "maxFastBugs": 42,
+      "worldWidth": 800,
+      "worldHeight": 450,
+      "viewport": [
+        1280,
+        720
+      ],
+      "dpr": 1,
+      "renderDpr": 1,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36"
+    },
+    "upgrades": {
+      "review-laser": 4,
+      "test-shield": 4,
+      "refactor-bomb": 4,
+      "ci-drone": 9
+    }
+  }
+]

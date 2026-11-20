@@ -118,3 +118,61 @@ In a disposable copy, 15 broken variants were rejected: missing modal opening, d
 
 
 The subsequent shield review exposed a missed case in that audit: stroke-colour alpha alone did not guard a zero canvas globalAlpha. The existing shield test now applies visibleStroke to every outline with one and two charges, checking effective opacity, floor contrast and positive line width. In a disposable copy, nine broken variants failed (all-shield, single-charge, double-charge and second-outline transparency; transparent/camouflaged shield colours; invisible laser, bomb and drones). Three harmless shield controls passed: a different bright palette, HSL colour and 0.8 global opacity. The latest bun run check passes 135 tests with 13,326 assertions, and bun run build retains the same production bundle. Browser/FPS measurements were not repeated for this test-only correction.
+
+## Phase 2 finish (issue #28, 2026-11-19)
+
+The owner's night ruling accepts the quiet-machine measurements below and closes the intermittent-dip investigation. The [final integration record](#owner-resolution-and-main-integration-2026-11-19) distinguishes this accepted pre-merge evidence from checks on the merged main tuning.
+
+F now includes the current bug population and live effects alongside FPS and update/draw timings. Effects are occupied particle, trail and label slots, plus one each for an active bomb ring, hit flash and shake. Projectiles, drones and shield outlines are excluded. The getter uses existing pool counts without scans, allocation or a second counter; it is read only at the existing one-second refresh while F is enabled. There is no added per-frame work. Focused tests cover exact populations, independent transients, replacement, expiry/reset, changing debug populations, repeat suppression, disabling, choice-modal input and restart cleanup.
+
+Fresh post-change measurements used headless Chrome **156.0.8078.4**, Windows 11 Home **10.0.26200**, AMD Ryzen 9 7950X3D desktop. Viewport **1280×720**, device/render DPR **1**, logical world **800×450**. The existing `?profile=stress` and `?profile=stress&burst` ran sequentially, each with **10 seconds warmup + 60 seconds sample**, after checks/build completed. No concurrent checks or browser workloads ran. Vite alone bound to 127.0.0.1:5191 with strictPort; Chrome used scratch home/profile directories. Both browser and our Vite process stopped after measurement.
+
+| Profile | Mean FPS | Lowest rolling FPS | Sample (ms) / intervals | Bugs min–max | Fast bugs min–max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| stress | 59.999 | 59.994 | 60001.0 / 3600 | 150–150 | 22–44 |
+| stress + burst | 59.999 | 59.994 | 60000.9 / 3600 | 150–150 | 24–42 |
+
+| Profile | Update mean / p95 (ms) | Draw mean / p95 (ms) | Fixture mean / p95 (ms) | Peak particles / trails / labels / rings |
+| --- | ---: | ---: | ---: | ---: |
+| stress | 0.093 / 0.200 | 0.849 / 1.400 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 |
+| stress + burst | 0.092 / 0.200 | 1.203 / 2.100 | 0.005 / 0.000 | 1024 / 6 / 256 / 1 |
+
+Both profiles acquired four laser/shield/bomb picks and nine drones. Activity counters (warmup plus sample) were respectively **68 / 69 shield blocks**, **10 / 10 bomb detonations**, **3364 / 3334 upgraded projectile kills**, and **630 / 639 drone shots**. Pool peaks and bug bounds cover the sample only. Both mean and lowest rolling FPS exceed 58; no effects simplification was needed. [Raw reports](upgrade-validation/issue-28-benchmark.json) retain full precision and all counters. No page errors or API requests occurred; this developer-only fixture has no submission path, and the production build contains no benchmark entry or `lookBenchmark` hook.
+
+`bun run check` passed **184 tests, 13,915 assertions**, with TypeScript clean; `bun run build` passed. The built application also passed the [fresh phone-layout and keyboard F probe](team-validation.md#phase-2-finish-issue-28-2026-11-19). The [1280×720 screenshot](team-evidence/issue-28/debug-desktop.png) shows the complete readout within the viewport, and a second F press restored the hint. These factory Chrome measurements satisfy the issue's owner ruling; the operator's own browser check remains required before merge.
+
+### Historical review follow-up (2026-11-19, before the night ruling)
+
+Review reported an initial Chrome 156 normal-stress rolling minimum of **56.994 FPS**, followed by **59.988** when repeated without concurrent review commands; its burst run reached **59.994**. Product review's Chrome 153 normal run also reached **59.988**, but its additional 300-synthetic-squashes/second saturation runs reached **54.10** and **53.99** (means **59.43** and **59.62**). Those below-floor observations remain on record; the initial passing measurements above do not invalidate them.
+
+To check recurrence under the documented measurement conditions, a preselected sequence of **three normal stress trials and one burst trial** ran on the same factory machine and **Chrome 156.0.8078.4** as the initial review, with fresh scratch home/profile/data. All four reports are retained, with no retries or discarded samples. Each used the unchanged benchmark, 1280×720, DPR 1, 10-second warmup and 60-second sample. Checks/build finished first; no project checks, browser probes or review commands ran alongside these trials. Only the benchmark runner and its Vite/Chrome processes ran for this validation, and all were closed afterward.
+
+| Trial | Mean FPS | Lowest rolling FPS | Sample ms / intervals | Bugs min–max | Fast bugs min–max |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| normal 1 | 59.982 | 59.000 | 60001.1 / 3599 | 150–150 | 26–42 |
+| normal 2 | 59.999 | 59.986 | 60001.1 / 3600 | 150–150 | 25–43 |
+| normal 3 | 59.982 | 59.020 | 60001.0 / 3599 | 150–150 | 23–43 |
+| burst | 59.899 | 58.000 | 60001.0 / 3594 | 150–150 | 25–42 |
+
+| Trial | Update mean / p95 ms | Draw mean / p95 ms | Fixture mean / p95 ms | Peak particles / trails / labels / rings | Blocks / bombs / upgraded kills / drone shots |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| normal 1 | 0.108 / 0.200 | 1.223 / 2.200 | 0.003 / 0.000 | 1024 / 6 / 200 / 1 | 69 / 10 / 3383 / 630 |
+| normal 2 | 0.114 / 0.200 | 1.241 / 2.100 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 | 67 / 10 / 3384 / 639 |
+| normal 3 | 0.111 / 0.200 | 1.142 / 2.100 | 0.003 / 0.000 | 1024 / 6 / 204 / 1 | 67 / 10 / 3378 / 639 |
+| burst | 0.119 / 0.200 | 1.591 / 3.000 | 0.006 / 0.000 | 1024 / 6 / 256 / 1 | 67 / 10 / 3384 / 639 |
+
+Every trial used four laser/shield/bomb picks and nine drones, with no page errors or API requests. Activity counters include warmup; population bounds and peaks cover sampling only. [All follow-up raw reports](upgrade-validation/issue-28-followup-benchmark.json) retain full precision. The below-58 normal dip did **not recur in three isolated normal samples**; the burst trial also met the unchanged **≥58** floor, at exactly 58 in its lowest window. Render/update p95 costs remained well below the 16.67 ms frame budget. Concurrent machine scheduling is a plausible explanation for the review dip, consistent with its own isolated repeat, but no trace establishes its cause and these finite samples cannot guarantee absence of future scheduling stalls. No renderer or emission change was justified by this reproduction. The older Chrome 153 saturation results are not claimed to have passed. The operator's browser check remains required before merge.
+
+The choice-screen test now advances both the sampling-initialization tick and a full additional second before checking that F stayed suppressed. Enabling F during a choice is rejected by that assertion. Nearby numeric assertions allow equivalent label placement/punctuation; effect composition remains in pool tests and immediate disable clearing remains in the existing F frame-rate test. The simplified wiring test still rejects missing bug counts, wrong effect counts, repeated-key toggles and effects surviving restart. `bun run check` passes **184 tests, 13,913 assertions**; `bun run build` passes with the same application assets. Production code and game-over layout are unchanged by this repair, so the existing phone evidence still applies.
+
+### Archived dip investigation (2026-11-19)
+
+Before the owner's final ruling, product review reported **59.949 mean / 57.000 lowest rolling FPS**, followed by passing burst and normal trials. The branch temporarily instrumented the developer benchmark with per-window and frame-gap details. Eleven profiling captures and two instrumented benchmark samples did not reproduce that failing window. These observations remain archived in the [investigation report](upgrade-validation/issue-28-investigation.json), [callback ledgers](upgrade-validation/issue-28-profiling-ledgers.json.gz) and [diagnostic reports](upgrade-validation/issue-28-diagnostic-benchmark.json). No-draw controls were diagnostic only; none is acceptance evidence. The investigation was unresolved at that point; its former request for a profiling window is superseded by the ruling below.
+
+### Owner resolution and main integration (2026-11-19)
+
+The [issue #28 night ruling](https://github.com/coleam00/bug-swarm/issues/28) settles frame-rate acceptance: the documented quiet-machine `?profile=stress` run at **59.999 mean / 59.994 lowest rolling FPS**, with 150 bugs and every upgrade over a 60-second sample, is the accepted evidence. The owner attributes the intermittent dip during busy factory/browser work to machine contention and directs that it not be investigated further. The earlier reports remain historical evidence; no additional profiling window or physical device is required.
+
+Merged `main` at **d62f174**, including #23 balance and #31 pacing, before final validation. `config.ts`, `simulation.ts`, `src/shared/upgrades.ts` and the developer benchmark match that main revision exactly, including its late-pursuit fixture and shield-capacity helper. Removed the temporary frame-gap recorder and its tests now that the investigation is closed. Production changes for this item remain the F bug/live-effect counts; race-first layout and all main gameplay tuning are preserved.
+
+Post-merge `bun run check` passed **206 tests / 86,524 assertions**, with TypeScript clean; `bun run build` passed. The accepted FPS reports above predate the main merge and are retained under the explicit owner ruling, rather than presented as new measurements of the merged tuning. No new stress/profile run was requested or performed. The operator's browser check remains required before merge.

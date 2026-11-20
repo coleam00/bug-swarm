@@ -85,6 +85,37 @@ test("F reports the active frame rate without counting time before the loop moun
     h.event(h.win, "keydown", { key: "f", repeat: false }); expect(h.readouts.at(-1)).toBe("");
   } finally { h.cleanup(); }
 });
+
+test("F reports changing bug/effect readings, ignores repeats and resets effects on restart", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+  const reading = (text: string | undefined, label: string, value: number) =>
+    expect(text).toMatch(new RegExp(`\\b(?:${value}[\\s:=()]+${label}|${label}[\\s:=()]+${value})\\b`, "i"));
+  try {
+    const s = h.session.current!.simulation; s.spawnIn = s.fireIn = Infinity;
+    h.tick(0); h.tick(1000); expect(h.readouts).toHaveLength(0);
+    const fx = draw.mock.calls.at(-1)![1];
+    s.bugs.push({ id: 1, kind: "base", x: 10, y: 10 }, { id: 2, kind: "fast", x: 590, y: 590 });
+    fx.labels.emit(0, 0, 0, 0, 10);
+    h.event(h.win, "keydown", { key: "f", repeat: false });
+    h.event(h.win, "keydown", { key: "f", repeat: true });
+    h.tick(2000);
+    expect(h.readouts).toHaveLength(1);
+    expect(h.readouts[0]).toMatch(/\bFPS\b/);
+    reading(h.readouts[0], "bugs", s.bugs.length); reading(h.readouts[0], "effects", fx.liveCount);
+    s.bugs.pop(); fx.labels.emit(0, 0, 0, 0, 10);
+    h.tick(3000);
+    expect(h.readouts).toHaveLength(2);
+    reading(h.readouts[1], "bugs", s.bugs.length); reading(h.readouts[1], "effects", fx.liveCount);
+    h.session.start(); h.tick(4000);
+    h.session.current!.simulation.spawnIn = h.session.current!.simulation.fireIn = Infinity;
+    h.tick(5000);
+    reading(h.readouts.at(-1), "bugs", 0); reading(h.readouts.at(-1), "effects", 0);
+    h.event(h.win, "keydown", { key: "f", repeat: false });
+    const count = h.readouts.length;
+    h.event(h.win, "keydown", { key: "f", repeat: true }); h.tick(6000); h.tick(7000);
+    expect(h.readouts).toHaveLength(count);
+  } finally { h.cleanup(); draw.mockRestore(); }
+});
 test("held keys cannot restart at death; a fresh key or touch immediately starts a clean run", () => {
   const h = harness();
   try {
@@ -160,7 +191,10 @@ test("choice releases steering/capture, freezes visuals, requires fresh numeric 
     h.event(h.win, "keydown", { key: "1", repeat: false });
     h.tick(17); expect(h.session.view.choice).not.toBeNull(); expect(h.captures.size).toBe(0);
     const frozen = structuredClone(s), fx = draw.mock.calls.at(-1)![1], visualTime = fx.time;
-    h.tick(300000); expect(s).toEqual(frozen); expect(fx.time).toBe(visualTime);
+    h.event(h.win, "keydown", { key: "f", repeat: false });
+    // Choice entry resets sampling; the first tick seeds it, the second completes it.
+    h.tick(300000); h.tick(301000); expect(s).toEqual(frozen); expect(fx.time).toBe(visualTime);
+    expect(h.readouts).toHaveLength(0);
     h.event(h.win, "keydown", { key: "1", repeat: true }); expect(h.session.view.choice).not.toBeNull();
     h.event(h.win, "keydown", { key: "1", repeat: false }); expect(h.session.view.choice).not.toBeNull();
     h.event(h.win, "keyup", { key: "1" });
