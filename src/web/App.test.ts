@@ -177,11 +177,27 @@ try {
   const build = text(tree.root.findByProps({ className: "build" }));
   for (const id of UPGRADE_IDS) assert.ok(build.includes(UPGRADE_NAMES[id]), "Build must name every acquired upgrade");
   assert.deepEqual(build.match(/[0-9]+/g).map(Number).sort(), [1, 2, 3, 4]);
+  // Best belongs to the summary for every server state, alongside replay.
+  const bestSummary = () => tree.root.findByProps({ className: "over-summary" }).findAllByType("p").find(node => text(node).startsWith("Best:"));
+  assert.ok(text(bestSummary()).includes("No saved runs yet"), "Best belongs in the summary");
+  const readBest = api.best;
+  api.best = async () => ({ best: 4321 });
+  await act(async () => { await session.refreshBest(session.current); });
+  assert.ok(text(bestSummary()).includes("4321"), "Best must show the server value in the summary");
+  api.best = async () => { throw new Error("offline"); };
+  await act(async () => { await session.refreshBest(session.current); });
+  assert.ok(text(bestSummary()).includes("Unavailable"));
+  let resolveBest;
+  api.best = () => new Promise(resolve => { resolveBest = resolve; });
   const race = () => tree.root.findByProps({ view: session.view });
   assert.ok(race().findAllByType("p").some(node => text(node).trim()), "An empty race needs feedback");
   let resolveTeams;
   api.teams = () => new Promise(resolve => { resolveTeams = resolve; });
   await act(async () => { session.start(); session.end(); });
+  assert.ok(text(bestSummary()).includes("Loading"));
+  await act(async () => { resolveBest({ best: null }); });
+  assert.ok(text(bestSummary()).includes("No saved runs yet"));
+  api.best = readBest;
   assert.ok(text(race().findByProps({ role: "status" })).trim(), "Loading needs feedback");
   assert.equal(race().findAllByProps({ className: "team-labels" }).length, 0, "Loading cannot invent totals");
   await act(async () => { resolveTeams({ tabs: 30, spaces: 10 }); });

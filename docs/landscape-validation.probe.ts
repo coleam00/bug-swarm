@@ -19,7 +19,7 @@ const db = openDb(join(data, "app.db")), app = createApp(db);
 const evidence = resolve(process.env.EVIDENCE ?? "docs/landscape-evidence");
 mkdirSync(evidence, { recursive: true });
 const browser = await chromium.launch({ ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: "chrome" }), headless: true, env });
-const results: any = { chrome: browser.version(), cases: [], smoke: {} };
+const results: any = { chrome: browser.version(), cases: [], boards: [], smoke: {} };
 const errors: Error[] = [];
 type Insets = { top: number; right: number; bottom: number; left: number };
 const none: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
@@ -54,7 +54,7 @@ async function action(page: any, operation: string) {
   }, operation);
 }
 
-async function setup(width: number, height: number, touch: boolean, insets = none, real = false) {
+async function setup(width: number, height: number, touch: boolean, insets = none, real = false, pathname = "/") {
   const context = await browser.newContext({ viewport: { width, height }, hasTouch: touch, isMobile: touch });
   let mode = "populated", starts = 0;
   const held: (() => void)[] = [];
@@ -77,7 +77,7 @@ async function setup(width: number, height: number, touch: boolean, insets = non
       return route.fulfill({ json });
     }
     if (path.startsWith("/favicon")) return route.fulfill({ status: 204, body: "" });
-    const file = path === "/" ? "index.html" : path.slice(1);
+    const file = ["/", "/board", "/board/"].includes(path) ? "index.html" : path.slice(1);
     assert.ok(file === "index.html" || readdirSync("dist/assets").some(name => file === `assets/${name}`));
     return route.fulfill({ body: readFileSync(join("dist", file)), contentType: file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html" });
   });
@@ -85,13 +85,13 @@ async function setup(width: number, height: number, touch: boolean, insets = non
   page.on("pageerror", (error: Error) => errors.push(error));
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets });
-  await page.goto("https://swarm.test/");
-  await page.locator(".game[data-phase=playing]").waitFor();
+  await page.goto(`https://swarm.test${pathname}`);
+  await page.locator(pathname === "/" ? ".game[data-phase=playing]" : ".stream-board").waitFor();
   return { page, context, cdp, starts: () => starts, mode: (next: string) => { mode = next; },
     close: async () => { held.splice(0).forEach(resolve => resolve()); await context.close(); } };
 }
 
-async function measure(page: any, name: string, touch: boolean, insets = none, screenshot = true) {
+async function measure(page: any, name: string, touch: boolean, insets = none, screenshot = true, state = "populated") {
   // No locator actions that could scroll before measurement and screenshot.
   const m = await page.evaluate(() => {
     const rect = (element: Element) => ({ text: element.textContent, ...element.getBoundingClientRect().toJSON(), scrollWidth: element.scrollWidth, clientWidth: element.clientWidth, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight });
@@ -115,6 +115,11 @@ async function measure(page: any, name: string, touch: boolean, insets = none, s
   const short = m.height <= 500 && m.width >= 600;
   if (m.phase === "over") {
     assert.equal(await page.locator(".over").evaluate((el: HTMLElement) => el.scrollTop), 0, "Initial results must not auto-scroll");
+    const expected = ["empty", "loading", "failed"].includes(state) ? [] : leaders;
+    assert.equal(await page.locator(".over li").count(), expected.length, `${name}: fixture leaderboard rows`);
+    assert.deepEqual(await page.locator(".leader-row span").allTextContents(), expected.map(row => row.name));
+    assert.deepEqual(await page.locator(".leader-row strong").allTextContents(), expected.map(row => String(row.score)));
+    for (const id of UPGRADE_IDS) assert.ok(m.board.text.includes(UPGRADE_NAMES[id]), `${name}: acquired upgrade`);
     if (short) {
       for (const panel of [m.over, m.summary, m.board]) {
         fits(panel); assert.ok(panel.scrollHeight <= panel.clientHeight + 1 && panel.scrollWidth <= panel.clientWidth + 1, `${name}: panel overflow`);
@@ -122,13 +127,6 @@ async function measure(page: any, name: string, touch: boolean, insets = none, s
       assert.ok(m.summary.right < m.board.left, `${name}: two columns`);
       assert.equal(m.hud.height, 0); assert.equal(m.footer.height, 0);
       for (const item of m.content) { fits(item); assert.ok(item.scrollWidth <= item.clientWidth + 1, `${name}: clipped text`); }
-      const rows = await page.locator(".over li").count();
-      if (rows) {
-        assert.equal(rows, 10);
-        assert.deepEqual(await page.locator(".leader-row span").allTextContents(), leaders.map(row => row.name));
-        assert.deepEqual(await page.locator(".leader-row strong").allTextContents(), leaders.map(row => String(row.score)));
-        for (const id of UPGRADE_IDS) assert.ok(m.board.text.includes(UPGRADE_NAMES[id]));
-      }
     }
   } else {
     fits(m.hud); fits(m.canvas);
@@ -144,6 +142,31 @@ async function measure(page: any, name: string, touch: boolean, insets = none, s
   return m;
 }
 
+async function measureBoard(page: any, name: string, insets: Insets) {
+  await page.locator(".board-leaders li").nth(9).waitFor();
+  const m = await page.evaluate(() => {
+    const board = document.querySelector(".stream-board")!, style = getComputedStyle(board);
+    const content = [...document.querySelectorAll(".board-header h1, .board-header p, .board-team h2, .board-team strong, .board-leaders h2, .board-rank, .board-name > span:last-child, .board-score, .board-footer p, .board-status")]
+      .map(el => ({ text: el.textContent, ...el.getBoundingClientRect().toJSON() }));
+    return { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth,
+      boardHeight: board.getBoundingClientRect().height, padding: ["top", "right", "bottom", "left"].map(side => parseFloat(style.getPropertyValue(`padding-${side}`))), content };
+  });
+  await page.screenshot({ path: join(evidence, `${name}.png`) });
+  results.boards.push({ name, insets, ...m });
+  assert.ok(m.scrollWidth <= m.width + 1, `${name}: horizontal overflow`);
+  assert.equal(await page.locator(".board-leaders li").count(), leaders.length);
+  assert.deepEqual(await page.locator(".board-name > span:last-child").allTextContents(), leaders.map(row => row.name));
+  for (const r of m.content) {
+    assert.ok(r.left >= insets.left - 1 && r.right <= m.width - insets.right + 1, `${name}: outside horizontal safe bounds: ${JSON.stringify(r)}`);
+    assert.ok(r.top >= insets.top - 1 && r.bottom <= m.boardHeight - insets.bottom + 1, `${name}: outside vertical safe content: ${JSON.stringify(r)}`);
+  }
+  // The board scrolls vertically; its last content must also clear the home
+  // indicator at the bottom of the document, without clipping any rows.
+  await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+  const footer = await page.locator(".board-footer").boundingBox();
+  assert.ok(footer && footer.y + footer.height <= m.height - insets.bottom + 1, `${name}: footer bottom inset`);
+}
+
 async function finish(fixture: any, state: string) {
   fixture.mode(state); await action(fixture.page, "start");
   await fixture.page.waitForTimeout(40); // allow start registration before ending
@@ -155,6 +178,16 @@ async function finish(fixture: any, state: string) {
 }
 
 try {
+  for (const pathname of ["/board", "/board/"]) for (const [width, height, insets] of [
+    [844, 390, { top: 0, right: 44, bottom: 21, left: 44 }],
+    [740, 360, { top: 0, right: 12, bottom: 21, left: 44 }],
+    [390, 844, { top: 44, right: 0, bottom: 34, left: 0 }],
+    [1280, 720, { top: 0, right: 44, bottom: 21, left: 44 }],
+  ] as const) {
+    const f = await setup(width, height, true, insets, false, pathname);
+    try { await measureBoard(f.page, `board-${width}x${height}${pathname.endsWith("/") ? "-slash" : ""}`, insets); }
+    finally { await f.close(); }
+  }
   for (const [width, height] of [[844, 390], [740, 360], [390, 844], [360, 640], [1280, 720]]) {
     const touch = width < 1000, fixture = await setup(width!, height!, touch);
     try {
@@ -173,7 +206,7 @@ try {
       await measure(fixture.page, `${width}x${height}-over`, touch);
       if (height! <= 500) for (const state of ["zero", "empty", "loading", "failed", "rate-limited"]) {
         await finish(fixture, state);
-        await measure(fixture.page, `${width}x${height}-${state}`, touch, none, width === 740);
+        await measure(fixture.page, `${width}x${height}-${state}`, touch, none, width === 740, state);
       }
     } finally { await fixture.close(); }
   }
@@ -206,7 +239,7 @@ try {
       await measure(f.page, `${prefix}-choice`, true, insets);
       await f.page.keyboard.press("1");
       await finish(f, "zero");
-      await measure(f.page, `${prefix}-over`, true, insets);
+      await measure(f.page, `${prefix}-over`, true, insets, true, "zero");
     } finally { await f.close(); }
   }
   // Rotation during play and modal choice, real touch steering, single replay.
@@ -246,5 +279,6 @@ try {
   assert.equal(errors.length, 0, "No uncaught browser errors");
   results.uncaughtErrors = errors.length;
   await Bun.write(join(evidence, "measurements.json"), JSON.stringify(results, null, 2) + "\n");
-  console.log(`Chrome ${results.chrome}: ${results.cases.length} layout cases passed; real save, rotation, steering and single replay passed.`);
+  await Bun.write(join(evidence, "board-measurements.json"), JSON.stringify({ chrome: results.chrome, cases: results.boards }, null, 2) + "\n");
+  console.log(`Chrome ${results.chrome}: ${results.cases.length} game and ${results.boards.length} board layout cases passed; real save, rotation, steering and single replay passed.`);
 } finally { await browser.close(); db.close(); }
