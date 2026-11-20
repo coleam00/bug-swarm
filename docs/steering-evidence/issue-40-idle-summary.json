@@ -1,0 +1,74 @@
+{
+  "default": {
+    "cases": 20,
+    "idle": {
+      "min": 20,
+      "max": 20,
+      "deaths": 0,
+      "choices": 10,
+      "acquired": 0
+    },
+    "evasiveMedian": 79.01666666666615,
+    "shapeMedians": {
+      "390x844": 80.71666666666663,
+      "1280x800": 76.44999999999906
+    },
+    "priorityMedians": {
+      "test-shield,ci-drone,refactor-bomb,review-laser": 76.88333333333237,
+      "ci-drone,refactor-bomb,test-shield,review-laser": 75.34166666666636,
+      "refactor-bomb,ci-drone,review-laser,test-shield": 71.85833333333267,
+      "review-laser,test-shield,ci-drone,refactor-bomb": 99.79166666666612,
+      "ci-drone,review-laser,refactor-bomb,test-shield": 122.58333333333366
+    },
+    "longest": 130.43333333333482,
+    "cutoffs": 0,
+    "scoreFailures": 0,
+    "reviewCandidates": 1,
+    "gates": {
+      "idle18to40": true,
+      "idle60": true,
+      "evasiveMedian60to180": true,
+      "allDead240": true,
+      "scoresPlausible": true
+    }
+  },
+  "broad": {
+    "cases": 2000,
+    "idle": {
+      "min": 18.900000000000208,
+      "max": 20,
+      "deaths": 35,
+      "choices": 965,
+      "acquired": 0
+    },
+    "evasiveMedian": 77.02499999999904,
+    "shapeMedians": {
+      "390x844": 77.34166666666567,
+      "1280x800": 77.00833333333236
+    },
+    "priorityMedians": {
+      "test-shield,ci-drone,refactor-bomb,review-laser": 72.72499999999928,
+      "ci-drone,refactor-bomb,test-shield,review-laser": 77.75833333333233,
+      "refactor-bomb,ci-drone,review-laser,test-shield": 71.96666666666599,
+      "review-laser,test-shield,ci-drone,refactor-bomb": 112.29166666666598,
+      "ci-drone,review-laser,refactor-bomb,test-shield": 80.61666666666663
+    },
+    "longest": 164.41666666667018,
+    "cutoffs": 0,
+    "scoreFailures": 0,
+    "reviewCandidates": 74,
+    "gates": {
+      "completeGroups": true,
+      "idle18to40": true,
+      "evasiveMedian75to110": true,
+      "evasiveMedian55:test-shield,ci-drone,refactor-bomb,review-laser": true,
+      "evasiveMedian55:ci-drone,refactor-bomb,test-shield,review-laser": true,
+      "evasiveMedian55:refactor-bomb,ci-drone,review-laser,test-shield": true,
+      "evasiveMedian55:review-laser,test-shield,ci-drone,refactor-bomb": true,
+      "evasiveMedian55:ci-drone,review-laser,refactor-bomb,test-shield": true,
+      "idle60": true,
+      "allDead240": true,
+      "scoresPlausible": true
+    }
+  }
+}

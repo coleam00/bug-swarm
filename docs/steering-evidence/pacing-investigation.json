@@ -1,0 +1,238 @@
+[
+  {
+    "name": "gentle",
+    "broad": false,
+    "knots": [
+      {
+        "time": 0,
+        "interval": 0.95
+      },
+      {
+        "time": 15,
+        "interval": 0.9
+      },
+      {
+        "time": 20,
+        "interval": 0.2
+      },
+      {
+        "time": 22,
+        "interval": 0.2
+      },
+      {
+        "time": 23,
+        "interval": 10
+      },
+      {
+        "time": 45,
+        "interval": 10
+      },
+      {
+        "time": 60,
+        "interval": 0.3
+      },
+      {
+        "time": 120,
+        "interval": 0.2
+      },
+      {
+        "time": 180,
+        "interval": 0.18
+      }
+    ],
+    "file": "gentle-default.txt",
+    "gates": {
+      "idle60": false,
+      "evasiveMedian60to180": true,
+      "allDead240": true,
+      "scoresPlausible": true,
+      "idle20to30": false
+    },
+    "idleMin": 32.2999999999993,
+    "idleMax": 128.98333333333366,
+    "evasiveMedian": 79.06666666666615,
+    "longest": 128.98333333333366,
+    "scoreFailures": 0,
+    "idleOutliers": 10
+  },
+  {
+    "name": "gentle",
+    "broad": true,
+    "knots": [
+      {
+        "time": 0,
+        "interval": 0.95
+      },
+      {
+        "time": 15,
+        "interval": 0.9
+      },
+      {
+        "time": 20,
+        "interval": 0.2
+      },
+      {
+        "time": 22,
+        "interval": 0.2
+      },
+      {
+        "time": 23,
+        "interval": 10
+      },
+      {
+        "time": 45,
+        "interval": 10
+      },
+      {
+        "time": 60,
+        "interval": 0.3
+      },
+      {
+        "time": 120,
+        "interval": 0.2
+      },
+      {
+        "time": 180,
+        "interval": 0.18
+      }
+    ],
+    "file": "gentle-broad.txt",
+    "gates": {
+      "completeGroups": true,
+      "evasiveMedian75to110": true,
+      "evasiveMedian55:test-shield,ci-drone,refactor-bomb,review-laser": true,
+      "evasiveMedian55:ci-drone,refactor-bomb,test-shield,review-laser": true,
+      "evasiveMedian55:refactor-bomb,ci-drone,review-laser,test-shield": true,
+      "evasiveMedian55:review-laser,test-shield,ci-drone,refactor-bomb": true,
+      "evasiveMedian55:ci-drone,review-laser,refactor-bomb,test-shield": true,
+      "idle60": false,
+      "allDead240": true,
+      "scoresPlausible": true,
+      "idle20to30": false
+    },
+    "idleMin": 18.4666666666669,
+    "idleMax": 104.91666666666639,
+    "evasiveMedian": 76.04999999999909,
+    "longest": 153.00000000001035,
+    "scoreFailures": 0,
+    "idleOutliers": 359
+  },
+  {
+    "name": "pressure",
+    "broad": false,
+    "knots": [
+      {
+        "time": 0,
+        "interval": 2
+      },
+      {
+        "time": 15,
+        "interval": 2
+      },
+      {
+        "time": 20,
+        "interval": 0.02
+      },
+      {
+        "time": 22,
+        "interval": 0.02
+      },
+      {
+        "time": 23,
+        "interval": 10
+      },
+      {
+        "time": 45,
+        "interval": 10
+      },
+      {
+        "time": 60,
+        "interval": 0.3
+      },
+      {
+        "time": 120,
+        "interval": 0.2
+      },
+      {
+        "time": 180,
+        "interval": 0.18
+      }
+    ],
+    "file": "pressure-default.txt",
+    "gates": {
+      "idle60": true,
+      "evasiveMedian60to180": false,
+      "allDead240": true,
+      "scoresPlausible": true,
+      "idle20to30": false
+    },
+    "idleMin": 27.366666666666248,
+    "idleMax": 30.649999999999395,
+    "evasiveMedian": 34.674999999999166,
+    "longest": 103.13333333333316,
+    "scoreFailures": 0,
+    "idleOutliers": 2
+  },
+  {
+    "name": "pressure",
+    "broad": true,
+    "knots": [
+      {
+        "time": 0,
+        "interval": 2
+      },
+      {
+        "time": 15,
+        "interval": 2
+      },
+      {
+        "time": 20,
+        "interval": 0.02
+      },
+      {
+        "time": 22,
+        "interval": 0.02
+      },
+      {
+        "time": 23,
+        "interval": 10
+      },
+      {
+        "time": 45,
+        "interval": 10
+      },
+      {
+        "time": 60,
+        "interval": 0.3
+      },
+      {
+        "time": 120,
+        "interval": 0.2
+      },
+      {
+        "time": 180,
+        "interval": 0.18
+      }
+    ],
+    "file": "pressure-broad.txt",
+    "gates": {
+      "completeGroups": true,
+      "evasiveMedian75to110": false,
+      "evasiveMedian55:test-shield,ci-drone,refactor-bomb,review-laser": false,
+      "evasiveMedian55:ci-drone,refactor-bomb,test-shield,review-laser": false,
+      "evasiveMedian55:refactor-bomb,ci-drone,review-laser,test-shield": false,
+      "evasiveMedian55:review-laser,test-shield,ci-drone,refactor-bomb": true,
+      "evasiveMedian55:ci-drone,review-laser,refactor-bomb,test-shield": false,
+      "idle60": true,
+      "allDead240": true,
+      "scoresPlausible": true,
+      "idle20to30": false
+    },
+    "idleMin": 27.266666666666254,
+    "idleMax": 31.616666666666006,
+    "evasiveMedian": 34.43333333333251,
+    "longest": 140.40000000000032,
+    "scoreFailures": 0,
+    "idleOutliers": 31
+  }
+]

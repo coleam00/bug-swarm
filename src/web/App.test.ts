@@ -28,7 +28,7 @@ api.finish = async () => ({ saved: true, held: false });
 api.teams = async () => ({ tabs: 0, spaces: 0 });
 api.standing = async () => ({ rank: null, total: 0, next: null });
 api.best = async () => ({ best: null }); api.leaders = async () => [];
-let session;
+let session, movement;
 mock.module(${moduleUrl("game/session.ts")}, () => ({ CHOICE_GUARD_MS: 350, Session: class extends Session {
   constructor(...args) {
     super(...args, { now: () => clock, sleep: async ms => { wait(ms); } },
@@ -36,11 +36,14 @@ mock.module(${moduleUrl("game/session.ts")}, () => ({ CHOICE_GUARD_MS: 350, Sess
     session = this;
   }
 } }));
-mock.module(${moduleUrl("game/engine.ts")}, () => ({ mountGame: () => () => {} }));
+mock.module(${moduleUrl("game/engine.ts")}, () => ({ mountGame: (_canvas, _session, _hud, _debug, observer) => {
+  movement = observer; return () => { movement = undefined; };
+} }));
 
 // Execute both timeout and interval callbacks, so an accidental auto-pick
 // cannot hide behind an unexecuted timer. Gameplay still uses simulation time.
 let clock = 0, nextTimer = 0;
+performance.now = () => clock;
 const timers = new Map();
 function schedule(callback, delay, repeat, args) {
   const id = ++nextTimer, ms = Math.max(1, Number(delay) || 0);
@@ -62,11 +65,15 @@ function wait(ms) {
   clock = until;
 }
 const identity = { playerId: crypto.randomUUID(), name: "Robot", team: "tabs" };
-let stored = JSON.stringify(identity), storageFails = false;
-globalThis.localStorage = { getItem: () => stored, setItem: (_key, value) => {
-  if (storageFails) throw new Error("disabled"); stored = value;
+const values = new Map([["bug-swarm-player", JSON.stringify(identity)]]);
+const saved = { get identity() { return values.get("bug-swarm-player") ?? null; }, set identity(value) { if (value === null) values.delete("bug-swarm-player"); else values.set("bug-swarm-player", value); } };
+let storageFails = false;
+globalThis.localStorage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => {
+  if (storageFails) throw new Error("disabled"); values.set(key, value);
 } };
-globalThis.window = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844 });
+const touch = ["true", "entry"].includes(process.env.HINT_TOUCH);
+globalThis.window = Object.assign(new EventTarget(), { innerWidth: 390, innerHeight: 844,
+  ...(process.env.HINT_TOUCH === "fallback" ? {} : { matchMedia: () => ({ matches: process.env.HINT_TOUCH === "true" }) }) });
 globalThis.document = Object.assign(new EventTarget(), { activeElement: null });
 const focusable = () => ({ focus() { document.activeElement = this; } });
 const canvas = focusable(), dialogs = [];
@@ -82,34 +89,14 @@ const { App } = await import(${moduleUrl("App.tsx")});
 let tree;
 const text = node => typeof node === "object" ? node.children.map(text).join(" ") : String(node);
 try {
-  // New moderation rules invalidate saved identities and require a fresh UUID.
-  for (const name of ["fuuuck", "admin"]) {
-    stored = JSON.stringify({ ...identity, name }); session = undefined;
-    const previous = stored;
-    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
-    assert.equal(session, undefined);
-    const input = tree.root.findByType("input");
-    assert.ok(!input.props.readOnly);
-    act(() => { input.props.onChange({ target: { value: name } }); });
-    act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
-    assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
-    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "That name is reserved");
-    assert.equal(session, undefined); assert.equal(stored, previous);
-    act(() => { input.props.onChange({ target: { value: "Scunthorpe" } }); });
-    await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
-    assert.ok(session.current);
-    assert.equal(session.identity.name, "Scunthorpe");
-    assert.notEqual(session.identity.playerId, identity.playerId);
-    assert.equal(JSON.parse(stored).playerId, session.identity.playerId);
-    act(() => { tree.unmount(); }); tree = undefined;
-  }
   // New and legacy identities use the same one-tap entry, without network waits.
   for (const legacy of [false, true]) {
     for (const team of ["tabs", "spaces"]) {
-      stored = legacy ? JSON.stringify({ playerId: identity.playerId, name: identity.name }) : null;
+      saved.identity = legacy ? JSON.stringify({ playerId: identity.playerId, name: identity.name }) : null;
       session = undefined;
       await act(async () => { tree = create(createElement(App), { createNodeMock }); });
       assert.equal(session, undefined, "Entry must await a team");
+      assert.equal(values.has("bug-swarm-steering-hint-seen"), legacy || team === "spaces");
       const input = tree.root.findByType("input");
       for (const [name, colour] of [["Tabs", "#ff9f43"], ["Spaces", "#2ed3c6"]]) {
         const button = tree.root.findAllByType("button").find(button => text(button).includes(name));
@@ -126,32 +113,71 @@ try {
       assert.equal(session, undefined, "Submitting without a team must stay on entry");
       const start = api.start;
       api.start = async () => { throw new Error("offline"); };
+      if (process.env.HINT_TOUCH === "entry") act(() => { tree.root.findByType("form").props.onPointerDown({ pointerType: "touch" }); });
       await act(async () => { tree.root.findAllByType("button")[team === "tabs" ? 0 : 1].props.onClick(); });
       assert.ok(session.current, "Offline entry must start immediately");
-      const selected = JSON.parse(stored);
+      const hints = tree.root.findAllByProps({ className: "steering-hint" });
+      if (!legacy && team === "tabs") {
+        assert.equal(hints.length, 1);
+        if (touch) assert.equal(text(hints[0]), "Drag anywhere to move");
+        else assert.ok(text(hints[0]).trim());
+        assert.equal(hints[0].parent.props.className, "surface");
+        assert.equal(hints[0].props.role, "status"); assert.equal(hints[0].props.tabIndex, undefined);
+        assert.equal(values.get("bug-swarm-steering-hint-seen"), "1");
+        if (touch) act(() => { movement.moved(session.view.token); });
+        else {
+          act(() => { wait(3999); }); assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 1);
+          act(() => { wait(1); });
+        }
+        assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 0);
+      } else assert.equal(hints.length, 0);
+      const selected = JSON.parse(saved.identity);
       assert.equal(selected.team, team);
       assert.equal(selected.name, legacy ? identity.name : "New Robot");
       if (legacy) assert.equal(selected.playerId, identity.playerId);
       await act(async () => { session.end(); });
       assert.equal(session.view.save, "failed");
       act(() => { wait(800); session.start(); });
+      assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 0, "Restart must not rearm");
       assert.equal(tree.root.findAllByType("input").length, 0);
       act(() => { tree.unmount(); }); tree = undefined;
       api.start = start;
       await act(async () => { tree = create(createElement(App), { createNodeMock }); });
       assert.equal(tree.root.findAllByType("input").length, 0, "Reload must keep team");
       assert.equal(session.identity.playerId, selected.playerId);
+      assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 0, "Reload must not rearm");
       act(() => { tree.unmount(); }); tree = undefined;
     }
   }
-  stored = null; storageFails = true;
+  // New moderation rules invalidate saved identities and require a fresh UUID.
+  for (const name of ["fuuuck", "admin"]) {
+    saved.identity = JSON.stringify({ ...identity, name }); session = undefined;
+    const previous = saved.identity;
+    await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    assert.equal(session, undefined);
+    const input = tree.root.findByType("input");
+    assert.ok(!input.props.readOnly);
+    act(() => { input.props.onChange({ target: { value: name } }); });
+    act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
+    assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
+    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "That name is reserved");
+    assert.equal(session, undefined); assert.equal(saved.identity, previous);
+    act(() => { input.props.onChange({ target: { value: "Scunthorpe" } }); });
+    await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
+    assert.ok(session.current);
+    assert.equal(session.identity.name, "Scunthorpe");
+    assert.notEqual(session.identity.playerId, identity.playerId);
+    assert.equal(JSON.parse(saved.identity).playerId, session.identity.playerId);
+    act(() => { tree.unmount(); }); tree = undefined;
+  }
+  saved.identity = null; storageFails = true;
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
   act(() => { tree.root.findByType("input").props.onChange({ target: { value: "Robot" } }); });
   await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
-  assert.equal(session.identity.team, "tabs"); assert.equal(stored, null);
+  assert.equal(session.identity.team, "tabs"); assert.equal(saved.identity, null);
   act(() => { wait(800); session.start(); }); assert.equal(tree.root.findAllByType("input").length, 0);
   act(() => { tree.unmount(); }); tree = undefined;
-  storageFails = false; stored = JSON.stringify(identity);
+  storageFails = false; saved.identity = JSON.stringify(identity);
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
   assert.ok(session?.current, "App did not start its real Session");
   const phase = () => tree.root.findByProps({ className: "game" }).props["data-phase"];
@@ -408,14 +434,14 @@ try {
   };
   let firstTab;
   try {
-    stored = JSON.stringify({ playerId, name });
+    saved.identity = JSON.stringify({ playerId, name });
     await act(async () => { firstTab = create(createElement(App), { createNodeMock }); tree = create(createElement(App), { createNodeMock }); });
     await act(async () => { firstTab.root.findAllByType("button")[0].props.onClick(); });
     await act(async () => { tree.root.findAllByType("button")[1].props.onClick(); });
     assert.deepEqual(statuses, [201, 409, 201], "A conflicting choice must retry with the stored team");
     const authoritative = { playerId, name, team: "tabs" };
     assert.deepEqual(session.identity, authoritative);
-    assert.deepEqual(JSON.parse(stored), authoritative);
+    assert.deepEqual(JSON.parse(saved.identity), authoritative);
     session.current.simulation.seconds = session.current.simulation.score = 1;
     serverTime += 1000;
     await act(async () => { session.end(); });
@@ -423,20 +449,20 @@ try {
     assert.deepEqual(await realApi.teams(), { tabs: 1, spaces: 0 });
     act(() => { firstTab.unmount(); tree.unmount(); }); firstTab = tree = undefined;
 
-    stored = JSON.stringify({ ...authoritative, team: "spaces" }); offline = true;
+    saved.identity = JSON.stringify({ ...authoritative, team: "spaces" }); offline = true;
     await act(async () => { tree = create(createElement(App), { createNodeMock }); });
     assert.ok(session.current, "A conflicted identity still plays offline");
     assert.equal(tree.root.findAllByType("input").length, 0, "Recovery must not ask for another selection");
     offline = false;
     await act(async () => { wait(800); session.start(); });
     assert.deepEqual(session.identity, authoritative);
-    assert.deepEqual(JSON.parse(stored), authoritative);
+    assert.deepEqual(JSON.parse(saved.identity), authoritative);
     act(() => { tree.unmount(); }); tree = undefined;
 
-    stored = JSON.stringify({ ...authoritative, team: "spaces" });
+    saved.identity = JSON.stringify({ ...authoritative, team: "spaces" });
     await act(async () => { tree = create(createElement(App), { createNodeMock }); });
     assert.deepEqual(session.identity, authoritative, "Online reload must recover an already-conflicted identity");
-    assert.deepEqual(JSON.parse(stored), authoritative);
+    assert.deepEqual(JSON.parse(saved.identity), authoritative);
     session.current.simulation.seconds = session.current.simulation.score = 1;
     serverTime += 1000;
     await act(async () => { session.end(); });
@@ -453,12 +479,14 @@ assert.equal(timers.size, 0, "Unmount must clear outstanding UI timers");
 assert.ok(logged.length > 0, "Expected failures must be logged");
 `;
   try {
-    const child = Bun.spawnSync([process.execPath, "--eval", probe], {
-      cwd: scratch, env: { ...process.env, HOME: home, USERPROFILE: home,
-        APPDATA: join(home, "AppData", "Roaming"), LOCALAPPDATA: join(home, "AppData", "Local"),
-        XDG_CONFIG_HOME: join(home, ".config"), XDG_CACHE_HOME: join(home, ".cache"), DATA_DIR: join(scratch, "data") },
-      stdout: "pipe", stderr: "pipe", timeout: 10_000,
-    });
-    expect(child.exitCode, child.stderr.toString()).toBe(0);
+    for (const touch of ["false", "true", "entry", "fallback"]) {
+      const child = Bun.spawnSync([process.execPath, "--eval", probe], {
+        cwd: scratch, env: { ...process.env, HOME: home, USERPROFILE: home,
+          APPDATA: join(home, "AppData", "Roaming"), LOCALAPPDATA: join(home, "AppData", "Local"),
+          XDG_CONFIG_HOME: join(home, ".config"), XDG_CACHE_HOME: join(home, ".cache"), DATA_DIR: join(scratch, "data"), HINT_TOUCH: touch },
+        stdout: "pipe", stderr: "pipe", timeout: 10_000,
+      });
+      expect(child.exitCode, child.stderr.toString()).toBe(0);
+    }
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 }, 15_000);

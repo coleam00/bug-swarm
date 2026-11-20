@@ -81,10 +81,19 @@ test.each([
   try {
     const run = session.start(true)!, s = run.simulation;
     expect(s.time).toBe(0); expect(run.runId).toBeUndefined();
-    while (!s.dead) { step(s, IDLE, 1 / 60); await advanceTo(Math.ceil(s.time * 1000)); }
+    // Registration timing is independent of random opening balance and choices.
+    // One controlled squash, then a persistent contact near a whole second.
+    s.spawnIn = s.fireIn = s.upgrades.nextChoiceAt = Infinity;
+    s.bugs.push({ id: s.nextId++, kind: "base", x: s.robot.x + 100, y: s.robot.y });
+    s.shots.push({ x: s.robot.x + 100, y: s.robot.y, vx: 0, vy: 0, life: 1 });
+    for (let tick = 0; tick < 15 * 60 && !s.dead; tick++) {
+      if (tick === 11 * 60) s.bugs.push({ id: s.nextId++, kind: "base", ...s.robot });
+      step(s, IDLE, 1 / 60); await advanceTo(Math.ceil(s.time * 1000));
+    }
+    expect(s.dead, "Controlled contact must end the fixture within its step budget").toBe(true);
+    expect(s.squashes).toBeGreaterThan(0);
     await advanceTo(now + scenario.pause);
     const expected = { playerId: identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: true, upgrades: [] };
-    expect(expected).toMatchObject({ score: 93, squashes: 8, seconds: 13 });
     session.end(); session.end(); await flush();
     if (scenario.restart) {
       await advanceTo(now + RESTART_GUARD_MS - 1);

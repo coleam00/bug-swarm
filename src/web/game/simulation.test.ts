@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { BUG_KINDS, ROBOT_RADIUS, ROBOT_SPEED, STEP, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier } from "./config";
+import { BUG_KINDS, ROBOT_RADIUS, ROBOT_SPEED, STEP, FAST_BUG_EVERY, FIRST_SPAWN_DELAY, spawnInterval, bugSpeedMultiplier } from "./config";
 import { createSimulation as createLiveSimulation, IDLE, nearestBug, spawnBug, step } from "./simulation";
 // Isolate individual combat rules; upgraded pacing lives in scripts/pacing.test.ts.
 const createSimulation: typeof createLiveSimulation = (...args) => {
@@ -35,7 +35,7 @@ test("bugs chase the robot", () => {
   expect(s.bugs[0]!.x).toBeGreaterThan(0); expect(s.bugs[0]!.y).toBeLessThan(300);
 });
 
-test("opening relief leads into growing late pressure and keeps countdown overshoot", () => {
+test("opening grace reconnects to the existing schedule and keeps countdown overshoot", () => {
   const a = createSimulation(1), b = createSimulation(1);
   a.invulnerableUntil = b.invulnerableUntil = Infinity;
   for (let i = 0; i < 30 / STEP; i++) step(a, IDLE, STEP);
@@ -46,8 +46,6 @@ test("opening relief leads into growing late pressure and keeps countdown oversh
   for (let i = 0; i < 60 / 0.25; i++) step(b, IDLE, 0.25);
   expect(b.nextId).toBe(a.nextId); expect(b.eligibleSpawns).toBe(a.eligibleSpawns);
   expect(b.seed).toBe(a.seed); expect(b.spawnIn).toBeCloseTo(a.spawnIn, 8);
-  expect(spawnInterval(0)).toBe(0.2);
-  expect(spawnInterval(15)).toBeCloseTo(3.05);
   expect(spawnInterval(20)).toBe(4); expect(spawnInterval(30)).toBe(4);
   expect(spawnInterval(45)).toBeCloseTo(2.15);
   // The easing ends at the original late knots and exponential tail.
@@ -73,6 +71,41 @@ test("opening relief leads into growing late pressure and keeps countdown oversh
   }
   expect(windows[3]!).toBeGreaterThan(windows[2]!); // 180–240 vs 120–180
   expect(windows[4]!).toBeGreaterThan(windows[3]!); // 240–300 vs 180–240
+});
+
+test("the first spawn respects its configured boundary and carries the countdown forward", () => {
+  const s = createSimulation(1); s.invulnerableUntil = s.fireIn = Infinity;
+  expect(s.spawnIn).toBe(FIRST_SPAWN_DELAY);
+  step(s, IDLE, FIRST_SPAWN_DELAY - STEP);
+  expect(s.nextId).toBe(1);
+  step(s, IDLE, STEP / 2); expect(s.nextId).toBe(1);
+  step(s, IDLE, STEP / 2); expect(s.nextId).toBe(2);
+  expect(s.spawnIn).toBeCloseTo(spawnInterval(FIRST_SPAWN_DELAY), 10);
+  while (s.time < 15 - 1e-7) step(s, IDLE, Math.min(STEP, 15 - s.time));
+  // The old 0.2-to-4-second opening scheduled 15 bugs by this boundary.
+  expect(s.nextId - 1).toBeLessThan(15);
+});
+
+test("opening pursuit rises from about 60% to normal speed without an overshoot", () => {
+  expect(bugSpeedMultiplier(0)).toBeGreaterThanOrEqual(.55);
+  expect(bugSpeedMultiplier(0)).toBeLessThanOrEqual(.65);
+  expect(bugSpeedMultiplier(16)).toBe(1);
+  let previous = 0;
+  for (let tick = 0; tick <= 45 / STEP; tick++) {
+    const speed = bugSpeedMultiplier(tick * STEP);
+    expect(speed).toBeGreaterThanOrEqual(previous - 1e-7);
+    expect(speed).toBeLessThanOrEqual(1);
+    previous = speed;
+  }
+  for (const time of [0, 7.5, 15, 17.5, 19.99]) {
+    const s = createSimulation(1); s.time = time; s.spawnIn = s.fireIn = Infinity;
+    s.bugs.push({ id: 1, kind: BASE.id, x: 10, y: s.robot.y });
+    step(s, IDLE, STEP);
+    expect(s.bugs[0]!.x - 10).toBeCloseTo(BASE.speed * bugSpeedMultiplier(time + STEP) * STEP, 10);
+  }
+  for (const time of [20, 20.01, 30, 45, 60, 90, 120, 180, 240, 600]) {
+    expect(bugSpeedMultiplier(time)).toBe(1 + Math.max(0, time - 45) / 45 + (Math.max(0, time - 90) / 45) ** 2);
+  }
 });
 
 test("scheduled spawns stay inside the cumulative six-per-second score allowance", () => {

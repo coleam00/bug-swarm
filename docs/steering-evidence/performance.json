@@ -1,0 +1,37 @@
+{
+  "chrome": "158.0.8127.36",
+  "at": "2026-11-20T11:31:39.658Z",
+  "assertions": [
+    "Actual mountGame path at 1280x720: 150 mixed bugs, 60s watching and 60s dismissed, >=58 FPS"
+  ],
+  "measurements": [
+    {
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "done": true,
+      "phases": [
+        {
+          "name": "watching",
+          "fps": 59.99890002016629,
+          "updateMeanMs": 0.025932203389830523,
+          "drawMeanMs": 0.7884745762711868,
+          "minBugs": 150,
+          "maxBugs": 150
+        },
+        {
+          "name": "dismissed",
+          "fps": 59.99900001666637,
+          "updateMeanMs": 0.028813559322033916,
+          "drawMeanMs": 0.843728813559322,
+          "minBugs": 150,
+          "maxBugs": 150
+        }
+      ],
+      "pendingChecks": 4174,
+      "dismissedChecks": 1
+    }
+  ],
+  "errors": []
+}

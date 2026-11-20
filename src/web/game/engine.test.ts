@@ -1,13 +1,13 @@
 import { expect, spyOn, test } from "bun:test";
 import { Renderer } from "./draw";
-import { mountGame } from "./engine";
+import { mountGame, type MovementObserver } from "./engine";
 import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
 import { FakeTiming } from "./timing.test-support";
 import { canvasFixture } from "./canvas-fixture.test-support";
 import { arenaForViewport } from "./arena";
 import { ROBOT_SPEED } from "./config";
 
-function harness(screenShaped = false) {
+function harness(screenShaped = false, movement?: MovementObserver) {
   const names = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;
   const previous = names.map((key) => Object.getOwnPropertyDescriptor(globalThis, key));
   const fixture = canvasFixture();
@@ -35,7 +35,7 @@ function harness(screenShaped = false) {
     { now: time.now, sleep: async ms => { time.advance(ms); } }, time);
   session.start();
   const readouts: string[] = [];
-  const unmount = mountGame(canvas as unknown as HTMLCanvasElement, session, () => {}, (text) => readouts.push(text));
+  const unmount = mountGame(canvas as unknown as HTMLCanvasElement, session, () => {}, (text) => readouts.push(text), movement);
   function event(target: EventTarget, type: string, props: Record<string, unknown>) {
     const value = Object.assign(new Event(type, { cancelable: true }), props); target.dispatchEvent(value); return value;
   }
@@ -48,6 +48,52 @@ function harness(screenShaped = false) {
       names.forEach((key, i) => { const descriptor = previous[i]; if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
     } };
 }
+
+test.each(["w", "ArrowRight", "mouse", "touch"])("%s displacement notifies the onboarding observer exactly once", control => {
+  const moved: number[] = [];
+  let checks = 0;
+  const h = harness(false, { pending: () => { checks++; return true; }, moved: token => moved.push(token) });
+  try {
+    h.tick(0);
+    if (control === "mouse") h.event(h.canvas, "pointermove", { pointerId: 1, pointerType: "mouse", clientX: 390, clientY: 370 });
+    else if (control === "touch") {
+      h.event(h.canvas, "pointerdown", { pointerId: 1, pointerType: "touch", button: 0, clientX: 200, clientY: 370 });
+      h.event(h.canvas, "pointermove", { pointerId: 1, pointerType: "touch", clientX: 250, clientY: 370 });
+    } else h.event(h.win, "keydown", { key: control, repeat: false });
+    // Input alone, before an active simulation step, never dismisses.
+    expect(moved).toEqual([]); h.tick(17);
+    expect(moved).toEqual([h.session.view.token]);
+    const atDismissal = checks;
+    h.tick(34); h.tick(51); h.session.start(); h.tick(68); h.tick(85);
+    expect(moved).toHaveLength(1); expect(checks).toBe(atDismissal);
+  } finally { h.cleanup(); }
+});
+
+test("stationary targets, unrelated keys, touch-down, dead zone, ignored fingers, resize and paused frames preserve the hint", () => {
+  const moved: number[] = [];
+  const h = harness(false, { pending: () => true, moved: token => moved.push(token) });
+  try {
+    h.tick(0);
+    h.event(h.win, "keydown", { key: "q", repeat: false }); h.tick(17);
+    h.event(h.canvas, "pointermove", { pointerId: 1, pointerType: "mouse", clientX: 205, clientY: 370 }); h.tick(34);
+    h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 200, clientY: 370 }); h.tick(51);
+    h.event(h.canvas, "pointermove", { pointerId: 2, pointerType: "touch", clientX: 202, clientY: 370 }); h.tick(68);
+    h.event(h.canvas, "pointermove", { pointerId: 3, pointerType: "touch", clientX: 300, clientY: 370 }); h.tick(85);
+    h.resize(844, 280); h.tick(102); h.tick(119);
+    h.doc.hidden = true; h.event(h.doc, "visibilitychange", {});
+    h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(136);
+    expect(moved).toEqual([]);
+  } finally { h.cleanup(); }
+});
+
+test("an expired or replaced hint removes movement observation before stepping", () => {
+  let checks = 0;
+  const h = harness(false, { pending: () => { checks++; return false; }, moved: () => { throw Error("expired hint"); } });
+  try {
+    h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(17); h.tick(34);
+    expect(checks).toBe(1); expect(h.session.current!.simulation.robot.x).toBeGreaterThan(300);
+  } finally { h.cleanup(); }
+});
 
 test("rotation rescales the current run; keyboard and touch restarts sample the screen even with a shrunken game-over canvas", () => {
   const h = harness(true);

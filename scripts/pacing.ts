@@ -2,7 +2,7 @@ import { arenaForViewport } from "../src/web/game/arena";
 import { STEP } from "../src/web/game/config";
 import { chooseUpgrade, createSimulation, IDLE, step, type Input, type Simulation } from "../src/web/game/simulation";
 import { acquiredUpgrades } from "../src/web/game/upgrades";
-import { CI_DRONE as D, REFACTOR_BOMB as B, REVIEW_LASER as L, TEST_SHIELD as S, type UpgradeId } from "../src/shared/upgrades";
+import { CHOICE_INTERVAL, CI_DRONE as D, REFACTOR_BOMB as B, REVIEW_LASER as L, TEST_SHIELD as S, type UpgradeId } from "../src/shared/upgrades";
 import { needsReview, parseFinish, plausible } from "../src/server/rules";
 
 export const SCENARIOS = [
@@ -16,8 +16,8 @@ export interface Scenario {
   seed: number; priority: readonly UpgradeId[]; mode: Mode; viewport: readonly [number, number];
 }
 export type ChoicePolicy = (offer: readonly UpgradeId[], pick: number) => UpgradeId;
-export function selectCard(mode: Mode, offer: readonly UpgradeId[], priority: readonly UpgradeId[]): UpgradeId {
-  const id = mode === "idle" ? offer[0] : priority.find(id => offer.includes(id));
+export function selectCard(offer: readonly UpgradeId[], priority: readonly UpgradeId[]): UpgradeId {
+  const id = priority.find(id => offer.includes(id));
   if (!id) throw new Error("No preferred card in offer");
   return id;
 }
@@ -37,15 +37,21 @@ export function evasiveInput(state: Readonly<Simulation>): Input {
 export function runScenario(scenario: Scenario, horizon = 600, policy?: ChoicePolicy) {
   if (!Number.isFinite(horizon) || horizon <= 0) throw new Error("Horizon must be finite and positive");
   const state = createSimulation(scenario.seed, arenaForViewport(...scenario.viewport));
-  const choose = policy ?? ((offer) => selectCard(scenario.mode, offer, scenario.priority));
+  const choose = policy ?? ((offer) => selectCard(offer, scenario.priority));
   while (!state.dead && state.time < horizon - 1e-9) {
-    if (state.upgrades.offer) { resolveChoice(state, choose); continue; }
+    if (state.upgrades.offer) {
+      // A player providing no input also leaves the first upgrade choice paused.
+      if (scenario.mode === "idle") break;
+      resolveChoice(state, choose); continue;
+    }
     step(state, scenario.mode === "idle" ? IDLE : evasiveInput(state), Math.min(STEP, horizon - state.time));
   }
   const build = acquiredUpgrades(state.upgrades);
+  const outcome: "death" | "choice" | "cutoff" = state.dead ? "death" :
+    scenario.mode === "idle" && state.upgrades.offer && state.upgrades.choiceNumber === 1 ? "choice" : "cutoff";
   const finish = parseFinish({ playerId: "00000000-0000-4000-8000-000000000021", score: state.score,
     squashes: state.squashes, seconds: state.seconds, touch: false, upgrades: build });
-  return { ...scenario, elapsed: state.time, dead: state.dead, score: state.score, squashes: state.squashes,
+  return { ...scenario, elapsed: state.time, dead: state.dead, outcome, score: state.score, squashes: state.squashes,
     seconds: state.seconds, build, spawned: state.nextId - 1,
     // Server clocks use integer milliseconds; round completion up to avoid float drift at whole seconds.
     validScore: finish !== null && plausible(finish, 0, Math.ceil(state.time * 1000)) && state.squashes <= state.nextId - 1 };
@@ -58,6 +64,20 @@ export function runMatrix(seeds: readonly number[] = SCENARIOS.map(s => s.seed),
 export const BROAD_SEEDS = Array.from({ length: 100 }, (_, seed) => seed);
 export const PRIORITIES = SCENARIOS.map(s => s.priority);
 const TOLERANCE = 1e-7;
+function atFirstChoice(row: Result): boolean {
+  return row.mode === "idle" && row.outcome === "choice" && !row.dead && row.build.length === 0 &&
+    Math.abs(row.elapsed - CHOICE_INTERVAL) <= TOLERANCE;
+}
+function diedBy(row: Result, ceiling: number): boolean {
+  return row.outcome === "death" && row.dead && row.elapsed <= ceiling + TOLERANCE;
+}
+// The legacy ceiling gates also accept idle's legitimate paused endpoint.
+const endedBy = (row: Result, ceiling: number) => diedBy(row, ceiling) || atFirstChoice(row);
+function idle18to40(rows: readonly Result[]): boolean {
+  const idle = rows.filter(r => r.mode === "idle");
+  return VIEWPORTS.every(v => idle.some(r => sameViewport(r.viewport, v))) &&
+    idle.every(r => r.build.length === 0 && (atFirstChoice(r) || (diedBy(r, 40) && r.elapsed >= 18 - TOLERANCE)));
+}
 const sameViewport = (a: Scenario["viewport"], b: Scenario["viewport"]) => a[0] === b[0] && a[1] === b[1];
 export const priorityKey = (priority: readonly UpgradeId[]) => priority.join(",");
 export function broadScenarios(seeds: readonly number[] = BROAD_SEEDS): Scenario[] {
@@ -66,7 +86,7 @@ export function broadScenarios(seeds: readonly number[] = BROAD_SEEDS): Scenario
 }
 export function runBroadMatrix(seeds: readonly number[] = BROAD_SEEDS, run = runScenario): Result[] {
   return broadScenarios(seeds).map(s => run(s, 600,
-    offer => selectCard("evasive", offer, s.priority)));
+    s.mode === "evasive" ? offer => selectCard(offer, s.priority) : undefined));
 }
 export function under60(rows: readonly Result[]) {
   const evasive = rows.filter(r => r.mode === "evasive");
@@ -83,14 +103,15 @@ export function broadTargets(rows: readonly Result[]): Record<string, boolean> {
   const evasive = rows.filter(r => r.mode === "evasive");
   const m = median(evasive.map(r => r.elapsed));
   return { completeGroups,
+    idle18to40: completeGroups && idle18to40(rows),
     evasiveMedian75to110: completeGroups && m >= 75 - TOLERANCE && m <= 110 + TOLERANCE,
     ...Object.fromEntries(PRIORITIES.map(priority => {
       const group = evasive.filter(r => priorityKey(r.priority) === priorityKey(priority));
       return [`evasiveMedian55:${priorityKey(priority)}`, completeGroups &&
         median(group.map(r => r.elapsed)) >= 55 - TOLERANCE];
     })),
-    idle60: completeGroups && rows.filter(r => r.mode === "idle").every(r => r.dead && r.elapsed <= 60 + TOLERANCE),
-    allDead240: completeGroups && rows.every(r => r.dead && r.elapsed <= 240 + TOLERANCE),
+    idle60: completeGroups && rows.filter(r => r.mode === "idle").every(r => endedBy(r, 60)),
+    allDead240: completeGroups && rows.every(r => endedBy(r, 240)),
     scoresPlausible: completeGroups && rows.every(r => r.validScore) };
 }
 export function median(values: readonly number[]): number {
@@ -99,22 +120,22 @@ export function median(values: readonly number[]): number {
 }
 export function summarize(rows: readonly Result[]) {
   return { median: median(rows.map(r => r.elapsed)), longest: Math.max(...rows.map(r => r.elapsed)),
-    cutoffs: rows.filter(r => !r.dead).length };
+    choices: rows.filter(atFirstChoice).length, cutoffs: rows.filter(r => r.outcome === "cutoff").length };
 }
 export function targets(rows: readonly Result[]) {
-  const within = (row: Result, ceiling: number) => row.dead && row.elapsed <= ceiling + 1e-7;
   const idle = rows.filter(r => r.mode === "idle"), evasive = rows.filter(r => r.mode === "evasive");
   const medianInRange = (group: readonly Result[]) => {
     const m = median(group.map(r => r.elapsed)); return m >= 60 - 1e-7 && m <= 180 + 1e-7;
   };
-  return { idle60: idle.length > 0 && idle.every(r => within(r, 60)),
+  return { idle18to40: idle18to40(rows), idle60: idle.length > 0 && idle.every(r => endedBy(r, 60)),
     evasiveMedian60to180: medianInRange(evasive) && VIEWPORTS.every(v =>
       medianInRange(evasive.filter(r => r.viewport[0] === v[0] && r.viewport[1] === v[1]))),
-    allDead240: rows.length > 0 && rows.every(r => within(r, 240)),
+    allDead240: rows.length > 0 && rows.every(r => endedBy(r, 240)),
     scoresPlausible: rows.length > 0 && rows.every(r => r.validScore) };
 }
 export function printReport(rows: readonly Result[], broad = false): void {
-  for (const r of rows) console.log(`${r.mode} ${r.viewport.join("x")} seed=${r.seed} priority=${r.mode === "idle" && !broad ? "first-card" : r.priority.join(",")} seconds=${r.dead ? "" : ">="}${r.elapsed.toFixed(2)} ${r.dead ? "death" : "CUTOFF"} score=${r.score} build=${JSON.stringify(r.build)}`);
+  console.log("Idle: no movement or upgrades; accept death at 18–40s or the first paused choice. Evasive: death by 240s required.");
+  for (const r of rows) console.log(`${r.mode} ${r.viewport.join("x")} seed=${r.seed} priority=${r.mode === "idle" ? "none" : r.priority.join(",")} seconds=${r.outcome === "cutoff" ? ">=" : ""}${r.elapsed.toFixed(2)} ${r.outcome === "death" ? "death" : r.outcome === "choice" ? "CHOICE" : "CUTOFF"} score=${r.score} build=${JSON.stringify(r.build)}`);
   for (const mode of ["idle", "evasive"] as const) {
     for (const viewport of VIEWPORTS) printSummary(`${mode} ${viewport.join("x")}`, rows.filter(r => r.mode === mode && sameViewport(r.viewport, viewport)));
     printSummary(`${mode} overall`, rows.filter(r => r.mode === mode));
@@ -136,7 +157,7 @@ export function printReport(rows: readonly Result[], broad = false): void {
 }
 function printSummary(label: string, rows: readonly Result[]): void {
   const s = summarize(rows);
-  console.log(`${label}: count=${rows.length} median=${s.cutoffs >= Math.ceil(rows.length / 2) ? ">=" : ""}${s.median.toFixed(2)}s longest=${s.cutoffs ? ">=" : ""}${s.longest.toFixed(2)}s cutoffs=${s.cutoffs}`);
+  console.log(`${label}: count=${rows.length} median=${s.cutoffs >= Math.ceil(rows.length / 2) ? ">=" : ""}${s.median.toFixed(2)}s longest=${s.cutoffs ? ">=" : ""}${s.longest.toFixed(2)}s choices=${s.choices} cutoffs=${s.cutoffs}`);
 }
 export function pacingCommand(args: readonly string[], run = runScenario,
   report = printReport): number {

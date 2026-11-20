@@ -1,4 +1,4 @@
-import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, spawnInterval, bugSpeedMultiplier, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
+import { ROBOT_RADIUS, ROBOT_SPEED, BUG_KINDS, BUG_DEFINITIONS, FAST_BUG_EVERY, FIRST_SPAWN_DELAY, spawnInterval, bugSpeedMultiplier, FIRE_INTERVAL, SHOT_SPEED, SHOT_LIFETIME, DRONE_ORBIT_RADIUS, DRONE_ANGULAR_SPEED, type BugKind } from "./config";
 import { SQUARE_ARENA, type Arena } from "./arena";
 import { POINTS_PER_SECOND, POINTS_PER_SQUASH } from "../../server/rules";
 import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, shieldCapacity, bombRecharge, laserFireMultiplier, type UpgradeId } from "../../shared/upgrades";
@@ -31,7 +31,7 @@ export interface Simulation {
 export const IDLE: Input = { x: 0, y: 0, target: null };
 export function createSimulation(seed: number, arena: Arena = SQUARE_ARENA): Simulation {
   return { arena: Object.freeze({ ...arena }), seed: seed >>> 0, nextId: 1, time: 0, seconds: 0, score: 0, squashes: 0, hits: 0,
-    dead: false, invulnerableUntil: 0, spawnIn: spawnInterval(0), fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
+    dead: false, invulnerableUntil: 0, spawnIn: FIRST_SPAWN_DELAY, fireIn: FIRE_INTERVAL, eligibleSpawns: 0,
     robot: { x: arena.width / 2, y: arena.height / 2 }, bugs: [], shots: [], upgrades: createUpgrades(seed), shieldCharges: 0,
     bombReadyAt: Infinity, bombLastAt: -Infinity, bombDetonations: 0, bombOrigin: { x: 0, y: 0 }, drones: [], droneOrigin: { x: 0, y: 0 } };
 }
