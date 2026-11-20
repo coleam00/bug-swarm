@@ -73,25 +73,27 @@ try {
         const session = (window as any).reviewSession, run = session.current;
         // Synthetic forgery fixture, explicitly not a measured gameplay result.
         run.registeredAt = performance.now() - 300000;
-        Object.assign(run.simulation, { dead: true, score: 13800, seconds: 300, squashes: 1350 });
+        Object.assign(run.simulation, { dead: true, score: 7000, seconds: 300, squashes: 670 });
         session.end(); return run.runId;
       });
       await page.getByText("Under review", { exact: true }).waitFor();
       await page.getByRole("button", { name: "Play again" }).waitFor({ state: "visible" });
-      assert.equal(await page.locator(".final-score").textContent(), "Score 13800");
-      await page.getByText("Best: 13800", { exact: true }).waitFor();
+      assert.equal(await page.locator(".final-score").textContent(), "Score 7,000");
+      await page.getByText("Best: 7,000", { exact: true }).waitFor();
       await board.goto("http://localhost/board");
       await board.locator(".board-leaders li").nth(9).waitFor();
       assert.equal(await page.locator(".over ol li").count(), 10);
       assert.ok(!(await board.locator(".board-leaders").textContent()).includes("Review Robot"));
       assert.ok(!(await page.locator(".over ol").textContent()).includes("Review Robot"));
       assert.equal(getRun(db, runId)?.held, 1);
+      await page.getByText("Not ranked", { exact: true }).waitFor();
+      assert.equal(await page.locator('.team-labels').getByText("0", { exact: true }).count(), 1);
       const command = (script: string, args: string[] = []) => {
         const child = Bun.spawnSync([process.execPath, `scripts/${script}.ts`, ...args], { env: { ...env, DATA_DIR: data }, stdout: "pipe", stderr: "pipe" });
         assert.equal(child.exitCode, 0, child.stderr.toString()); return child.stdout.toString().trim();
       };
       const review = command("review"); assert.ok(review.includes(runId));
-      assert.ok(review.includes('"Review Robot"\t13800\t300\t1350'));
+      assert.ok(review.includes('"Review Robot"\t7000\t300\t670'));
       const layout = await page.evaluate(() => ({ viewport: innerWidth, body: document.body.scrollWidth,
         status: [...document.querySelectorAll('[role="status"]')].map(el => el.textContent) }));
       assert.equal(layout.body, size.width);
@@ -100,8 +102,9 @@ try {
       const began = performance.now(), approval = command("approve", [runId]);
       await Promise.all([page.locator(".over ol li").filter({ hasText: "Review Robot" }).waitFor(),
         board.locator(".board-leaders li").filter({ hasText: "Review Robot" }).waitFor()]);
-      await Promise.all([page.locator(".team-labels").getByText("13800", { exact: true }).waitFor(),
-        board.locator('.board-team strong[aria-label="13,800 points"]').waitFor()]);
+      await Promise.all([page.locator(".team-labels").getByText("7,000", { exact: true }).waitFor(),
+        board.locator('.board-team strong[aria-label="7,000 points"]').waitFor()]);
+      await page.getByText("Your best is #1 of 11", { exact: true }).waitFor();
       const releaseMs = performance.now() - began; assert.ok(releaseMs <= 5000, `Release took ${releaseMs} ms`);
       assert.equal(getRun(db, runId)?.held, 0);
       assert.ok((await page.locator(".over ol li").first().textContent()).includes("Review Robot"));
@@ -109,7 +112,14 @@ try {
       assert.deepEqual(await board.locator(".board-rank").allTextContents(), ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
       await board.screenshot({ path: join(evidence, `approved-board-${size.width}.png`) });
       await page.screenshot({ path: join(evidence, `approved-game-${size.width}.png`) });
-      measurements.push({ size, fixture: "synthetic 13,800 points / 300 seconds / 1,350 squashes", finishes, review, approval, releaseMs, layout });
+      const standing = await page.locator(".personal-standing").textContent();
+      const replay = await page.getByRole("button", { name: "Play again" }).boundingBox();
+      assert.ok(replay && replay.width >= 44 && replay.height >= 44);
+      assert.equal(await page.evaluate(() => document.body.scrollWidth), size.width);
+      await page.getByRole("button", { name: "Play again" }).click();
+      await page.waitForFunction(() => !(window as any).reviewSession.view.over);
+      assert.equal(await page.locator(".over").count(), 0);
+      measurements.push({ standing, replay, replayStarted: true, size, fixture: "synthetic 7,000 points / 300 seconds / 670 squashes", finishes, review, approval, releaseMs, layout });
     } finally { await context.close(); db.close(); }
   }
   assert.deepEqual(errors, []);

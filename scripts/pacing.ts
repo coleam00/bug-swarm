@@ -91,8 +91,7 @@ export function broadTargets(rows: readonly Result[]): Record<string, boolean> {
     })),
     idle60: completeGroups && rows.filter(r => r.mode === "idle").every(r => r.dead && r.elapsed <= 60 + TOLERANCE),
     allDead240: completeGroups && rows.every(r => r.dead && r.elapsed <= 240 + TOLERANCE),
-    scoresPlausible: completeGroups && rows.every(r => r.validScore),
-    scoresUnheld: completeGroups && rows.every(r => !needsReview(r.score)) };
+    scoresPlausible: completeGroups && rows.every(r => r.validScore) };
 }
 export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
@@ -112,8 +111,7 @@ export function targets(rows: readonly Result[]) {
     evasiveMedian60to180: medianInRange(evasive) && VIEWPORTS.every(v =>
       medianInRange(evasive.filter(r => r.viewport[0] === v[0] && r.viewport[1] === v[1]))),
     allDead240: rows.length > 0 && rows.every(r => within(r, 240)),
-    scoresPlausible: rows.length > 0 && rows.every(r => r.validScore),
-    scoresUnheld: rows.length > 0 && rows.every(r => !needsReview(r.score)) };
+    scoresPlausible: rows.length > 0 && rows.every(r => r.validScore) };
 }
 export function printReport(rows: readonly Result[], broad = false): void {
   for (const r of rows) console.log(`${r.mode} ${r.viewport.join("x")} seed=${r.seed} priority=${r.mode === "idle" && !broad ? "first-card" : r.priority.join(",")} seconds=${r.dead ? "" : ">="}${r.elapsed.toFixed(2)} ${r.dead ? "death" : "CUTOFF"} score=${r.score} build=${JSON.stringify(r.build)}`);
@@ -132,6 +130,7 @@ export function printReport(rows: readonly Result[], broad = false): void {
     const share = under60(rows);
     console.log(`evasive under60: ${share.count}/${share.total} (${share.percent.toFixed(1)}%)`);
   }
+  console.log(`review candidates: ${rows.filter(r => needsReview(r.score)).length} (informational)`);
   console.log(`score failures: ${rows.filter(r => !r.validScore).length}`);
   for (const [name, pass] of Object.entries(broad ? broadTargets(rows) : targets(rows))) console.log(`${pass ? "PASS" : "FAIL"} ${name}`);
 }

@@ -27,6 +27,7 @@ test("external approval expires both caches at one second and reaches real board
   const api: GameApi = {
     start: body => request("/api/runs", body, fetcher),
     finish: (id, body) => request(`/api/runs/${id}/finish`, body, fetcher),
+    standing: id => request(`/api/players/${id}/standing`, undefined, fetcher),
     best: id => request(`/api/players/${id}/best`, undefined, fetcher),
     leaders: () => request("/api/leaderboard", undefined, fetcher), teams: () => request("/api/teams", undefined, fetcher),
   };
@@ -54,14 +55,20 @@ test("external approval expires both caches at one second and reaches real board
     expect(session.view.leaders).toHaveLength(10); expect(session.view.leaders.some(row => row.playerId === session.identity.playerId)).toBe(false);
     expect(session.view.teamTotals).toEqual({ tabs: 955, spaces: 0 });
     expect(board.getSnapshot().leaders.data?.map(row => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(await api.standing(session.identity.playerId)).toEqual({ rank: null, total: 10, next: null });
+    expect(session.view.standing).toEqual({ rank: null, total: 10, next: null });
     approveRun(owner, run.runId!); approveRun(owner, hidden.runId);
     await clock.tick(999); await settle();
     expect((await api.leaders())[0]?.name).toBe("Robot 0"); expect(await api.teams()).toEqual({ tabs: 955, spaces: 0 });
+    expect(await api.standing(session.identity.playerId)).toEqual({ rank: null, total: 10, next: null });
     await clock.tick(1); await settle();
     expect((await api.leaders())[0]?.name).toBe("Review Robot"); expect(await api.teams()).toEqual({ tabs: 955, spaces: 13800 });
+    expect(await api.standing(session.identity.playerId)).toEqual({ rank: 1, total: 11, next: null });
+    expect(await api.standing(hiddenPlayer)).toEqual({ rank: null, total: 11, next: null });
     await clock.tick(1000); await settle();
     expect(session.view.leaders[0]?.playerId).toBe(session.identity.playerId);
     expect(session.view.teamTotals).toEqual({ tabs: 955, spaces: 13800 });
+    expect(session.view.standing).toEqual({ rank: 1, total: 11, next: null });
     const snapshot = board.getSnapshot();
     expect(snapshot.leaders.data?.[0]?.name).toBe("Review Robot");
     expect(snapshot.leaders.data?.map(row => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);

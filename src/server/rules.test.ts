@@ -5,9 +5,9 @@ import { UPGRADE_IDS } from "../shared/upgrades";
 import { BLOCKED_WORDS } from "./blocked-words";
 const finish = { playerId: crypto.randomUUID(), score: 62, squashes: 6, seconds: 2, touch: true };
 
-test("only scores strictly above the measured review ceiling are held", () => {
-  expect(REVIEW_SCORE).toBe(7224);
-  expect([7223, 7224, 7225].map(needsReview)).toEqual([false, false, true]);
+test("only scores strictly above the owner review threshold are held", () => {
+  expect(REVIEW_SCORE).toBe(3000);
+  expect([2999, 3000, 3001].map(needsReview)).toEqual([false, false, true]);
 });
 
 test("finish normalizes legacy and reordered builds and validates pick capacity", () => {

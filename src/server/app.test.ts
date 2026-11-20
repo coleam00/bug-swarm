@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Finish } from "../shared/api";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
 import { approveRun, countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
@@ -41,14 +42,19 @@ test("events are counted by type, with zeros for types not seen", async () => {
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-test.each([223, 224, 225, 300])("plausible %i-second finish is saved with its hold state; retries follow approval", async seconds => {
+test.each([
+  { score: 2999, squashes: 290, seconds: 99, held: false },
+  { score: 3000, squashes: 290, seconds: 100, held: false },
+  { score: 3001, squashes: 290, seconds: 101, held: true },
+  { score: 7000, squashes: 670, seconds: 300, held: true },
+  { score: 13800, squashes: 1350, seconds: 300, held: true },
+])("plausible $score-point finish is saved with held=$held; retries follow approval", async ({ score, squashes, seconds, held }) => {
   let time = 0;
   const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
   const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" }))).json() as { runId: string };
-  const squashes = seconds === 300 ? 1350 : 700, score = 10 * squashes + seconds, held = score > 7224;
   time = seconds * 1000;
   const result = { playerId, score, squashes, seconds, touch: true };
-  const send = (body = result) => app.request(`/api/runs/${runId}/finish`, post(body));
+  const send = (body: Finish = result) => app.request(`/api/runs/${runId}/finish`, post(body));
   // A high but impossible submission is still refused and leaves no finish or hold.
   expect((await send({ ...result, score: 13810, squashes: 1351, seconds: 300 })).status).toBe(400);
   expect(getRun(db, runId)?.ended_at_ms).toBeNull(); expect(getRun(db, runId)?.held).toBe(0);
@@ -60,10 +66,82 @@ test.each([223, 224, 225, 300])("plausible %i-second finish is saved with its ho
   expect(await (await app.request("/api/leaderboard")).json()).toEqual(held ? [] : [{ playerId, name: "Robot", score }]);
   expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: held ? 0 : score, spaces: 0 });
   expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: score });
+  expect(await (await app.request(`/api/players/${playerId}/standing`)).json()).toEqual({ rank: held ? null : 1, total: held ? 0 : 1, next: null });
   approveRun(db, runId);
   expect(await (await send()).json()).toEqual({ saved: true, held: false });
   expect((await send({ ...result, touch: false })).status).toBe(409);
   expect(countEvents(db).run_ended).toBe(1);
+});
+
+test("personal standings rank eligible bests, target ties, and change population after moderation", async () => {
+  let time = 1000;
+  const app = createApp(db, { now: () => time });
+  const ids = Array.from({ length: 14 }, () => crypto.randomUUID());
+  const add = (id: string, name: string, score: number, at: number) => {
+    const result = startRun(db, id, name, 0, "tabs");
+    if ("error" in result) throw new Error(result.error);
+    finishRun(db, result.runId, { playerId: id, score, seconds: score, squashes: 0, touch: false }, at);
+  };
+  ids.forEach((id, i) => add(id, i < 2 ? "Same Name" : `Robot${i}`, i === 13 ? 0 : 100 - i, i));
+  add(ids[0]!, "Same Name", 100, 999); // Repeating a best retains its first achievement.
+  add(ids[1]!, "Same Name", 100, 1);
+  // A held best neither replaces an earlier eligible best nor inflates targets.
+  add(ids[1]!, "Same Name", 7000, 0);
+  const heldOnly = crypto.randomUUID(); add(heldOnly, "Held Robot", 7000, 0);
+  const excluded = ["admin", "fuuuck", "Hidden Robot"].map(name => {
+    const id = crypto.randomUUID(); add(id, name, 1000, 0); return id;
+  });
+  hideName(db, "Hidden Robot", 0);
+  const unfinished = crypto.randomUUID(); startRun(db, unfinished, "Unfinished", 0, "tabs");
+  const read = async (id: string) => {
+    const response = await app.request(`/api/players/${id}/standing`);
+    expect(response.status).toBe(200); expect(response.headers.get("Cache-Control")).toBe("no-store");
+    return response.json();
+  };
+  expect((await app.request("/api/players/bad/standing")).status).toBe(400);
+  expect(await read(ids[0]!)).toEqual({ rank: 1, total: 14, next: null });
+  expect(await read(ids[1]!)).toEqual({ rank: 2, total: 14, next: { rank: 1, pointsToBeat: 1 } });
+  expect(await read(ids[9]!)).toEqual({ rank: 10, total: 14, next: { rank: 9, pointsToBeat: 2 } });
+  expect(await read(ids[10]!)).toEqual({ rank: 11, total: 14, next: { rank: 10, pointsToBeat: 2 } });
+  expect(await read(ids[13]!)).toEqual({ rank: 14, total: 14, next: { rank: 13, pointsToBeat: 89 } });
+  for (const id of [...excluded, heldOnly, unfinished, crypto.randomUUID()]) {
+    expect(await read(id)).toEqual({ rank: null, total: 14, next: null });
+  }
+  hideName(db, "Same Name", time);
+  time += 999;
+  expect(await read(ids[10]!)).toEqual({ rank: 11, total: 14, next: { rank: 10, pointsToBeat: 2 } });
+  time++;
+  expect(await read(ids[10]!)).toEqual({ rank: 9, total: 12, next: { rank: 8, pointsToBeat: 2 } });
+  expect(await read(ids[0]!)).toEqual({ rank: null, total: 12, next: null });
+  expect(await (await app.request(`/api/players/${ids[0]}/best`)).json()).toEqual({ best: 100 });
+  hideName(db, "Robot9", time);
+  time--;
+  expect(await read(ids[10]!)).toEqual({ rank: 8, total: 11, next: { rank: 7, pointsToBeat: 3 } });
+});
+
+test("500 distinct standing reads share one ranking scan with the leaderboard; finishes invalidate it", async () => {
+  let time = 1000;
+  const app = createApp(db, { now: () => time });
+  const ids = Array.from({ length: 500 }, () => crypto.randomUUID());
+  db.transaction(() => ids.forEach((id, i) => {
+    const result = startRun(db, id, `Robot${i}`, 0, "tabs");
+    if ("error" in result) throw new Error(result.error);
+    finishRun(db, result.runId, { playerId: id, score: 0, seconds: 0, squashes: 0, touch: false }, 0);
+  }))();
+  const query = spyOn(db, "query");
+  const scans = () => query.mock.calls.filter(([sql]) => sql.includes("WITH bests AS")).length;
+  try {
+    for (const id of ids) expect((await app.request(`/api/players/${id}/standing`)).status).toBe(200);
+    expect((await app.request("/api/leaderboard")).status).toBe(200);
+    for (let i = 0; i < 20; i++) await app.request(`/api/players/${crypto.randomUUID()}/standing`);
+    expect(scans()).toBe(1);
+    time += 999; await app.request(`/api/players/${ids[0]}/standing`); expect(scans()).toBe(1);
+    time++; await app.request("/api/leaderboard"); expect(scans()).toBe(2);
+    time--; await app.request(`/api/players/${ids[0]}/standing`); expect(scans()).toBe(3);
+    const { runId } = await (await app.request("/api/runs", post({ playerId: ids[0], name: "Robot0", team: "tabs" }))).json() as { runId: string };
+    expect((await app.request(`/api/runs/${runId}/finish`, post({ playerId: ids[0], score: 0, seconds: 0, squashes: 0, touch: false }))).status).toBe(200);
+    await app.request(`/api/players/${ids[0]}/standing`); expect(scans()).toBe(4);
+  } finally { query.mockRestore(); }
 });
 
 test("new and existing identities cannot start with blocked or reserved names or write any rows", async () => {
@@ -334,7 +412,9 @@ test("committed finish stays successful if subsequent ranking reads fail", async
   expect((await app.request("/api/leaderboard")).status).toBe(503);
   expect((await app.request("/api/teams")).status).toBe(503);
   expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
-  expect(countEvents(db).run_ended).toBe(1); expect(failures).toHaveLength(2);
+  expect((await app.request(`/api/players/${playerId}/standing`)).status).toBe(503);
+  expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
+  expect(countEvents(db).run_ended).toBe(1); expect(failures).toHaveLength(3);
 });
 
 test("seeded choice-driven finishes remain plausible in all arena shapes, with and without wall-clock pauses", async () => {

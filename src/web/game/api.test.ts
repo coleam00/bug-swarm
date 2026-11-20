@@ -46,6 +46,7 @@ test("exported client starts, finishes and reads scores against the in-process s
     expect(getRun(db, runId)?.ended_at_ms).toBe(now);
     expect(JSON.parse(getRun(db, runId)!.upgrades)).toEqual(upgrades);
     expect(await api.leaders()).toEqual([{ playerId: identity.playerId, name: identity.name, score: 60 }]);
+    expect(await api.standing(identity.playerId)).toEqual({ rank: 1, total: 1, next: null });
     expect(await api.best(identity.playerId)).toEqual({ best: 60 });
     expect(await api.teams()).toEqual({ tabs: 60, spaces: 0 });
   } finally { globalThis.fetch = originalFetch; db.close(); }

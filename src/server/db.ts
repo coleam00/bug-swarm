@@ -125,7 +125,7 @@ export function personalBest(db: Database, playerId: string): number | null {
   return (db.query("SELECT MAX(score) AS best FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL")
     .get(playerId) as { best: number | null }).best;
 }
-export function leaderboard(db: Database): Leader[] {
+export function rankedPlayers(db: Database): Leader[] {
   const rows = db.query(`WITH bests AS (
       SELECT player_id, MAX(score) AS score FROM runs WHERE ended_at_ms IS NOT NULL AND held = 0 GROUP BY player_id
     ) SELECT p.id AS playerId, p.name, b.score, MIN(r.ended_at_ms) AS achieved
@@ -133,8 +133,11 @@ export function leaderboard(db: Database): Leader[] {
     JOIN runs r ON r.player_id = b.player_id AND r.score = b.score AND r.ended_at_ms IS NOT NULL AND r.held = 0
     WHERE NOT EXISTS (SELECT 1 FROM hidden_names h WHERE h.name_key = p.name_key)
     GROUP BY p.id ORDER BY b.score DESC, achieved ASC, p.id ASC`).all() as Leader[];
-  return rows.filter((row) => !validateName(row.name).error).slice(0, 10)
+  return rows.filter((row) => !validateName(row.name).error)
     .map(({ playerId, name, score }) => ({ playerId, name, score }));
+}
+export function leaderboard(db: Database): Leader[] {
+  return rankedPlayers(db).slice(0, 10);
 }
 export function hideName(db: Database, name: string, now: number): void {
   db.query("INSERT OR IGNORE INTO hidden_names(name_key, hidden_at_ms) VALUES (?, ?)").run(nameKey(name), now);

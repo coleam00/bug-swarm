@@ -127,7 +127,9 @@ try {
     assert.equal(await page.locator(".restart").isVisible(), true);
     await page.waitForFunction(() => document.querySelectorAll(".over li").length === 10);
     const scroll = await page.locator(".over").evaluate((e: HTMLElement) => { e.scrollTop = e.scrollHeight; return { top: e.scrollTop, height: e.clientHeight, content: e.scrollHeight }; });
-    if (size.height === 390) assert.ok(scroll.top > 0);
+    if (size.height === 390) {
+      assert.equal(scroll.top, 0); assert.equal(scroll.height, scroll.content, "Short landscape results now fit without scrolling (issue #38)");
+    }
     await page.screenshot({ path: join(evidence, `over-${size.width}.png`) });
     await page.locator(".over").evaluate((e: HTMLElement) => { e.scrollTop = 0; });
     if (mobile) await page.locator(".final-score").tap(); else await page.getByRole("button", { name: "Play again" }).focus().then(() => page.keyboard.press("Space"));

@@ -3,7 +3,7 @@ import { createApp } from "../src/server/app";
 import { countEvents, openDb } from "../src/server/db";
 import { isId, validateName } from "../src/server/rules";
 import { TEAMS } from "../src/shared/teams";
-import { formatSummary, makeFinish, makePlayer, parseArgs, percentiles, runLoad, summarize, type Runtime, type Sample } from "./load";
+import { formatSummary, makeFinish, makePlayer, parseArgs, percentiles, runLoad, summarize, valid, type Runtime, type Sample } from "./load";
 
 test("load arguments: defaults, separator, origin normalization and help", () => {
   expect(parseArgs(["--url", "https://example.test/"])).toEqual({ url: "https://example.test", players: 500, seconds: 60 });
@@ -49,7 +49,7 @@ test("summary uses nearest ranks across raw samples, includes failures and stric
 });
 
 test("report includes all attempted requests, failure counts and each route's latency data", () => {
-  const routes = ["POST /api/runs", "POST /api/runs/:runId/finish", "GET /api/players/:playerId/best", "GET /api/leaderboard", "GET /api/teams"];
+  const routes = ["POST /api/runs", "POST /api/runs/:runId/finish", "GET /api/players/:playerId/best", "GET /api/players/:playerId/standing", "GET /api/leaderboard", "GET /api/teams"];
   const samples: Sample[] = routes.flatMap((route, index) => Array.from({ length: 100 }, (_, i) => ({
     route, ms: (i + 1) * (index + 1), status: i === 99 ? 429 : 200, failure: i === 99 ? "HTTP 429" : undefined,
   })));
@@ -57,8 +57,8 @@ test("report includes all attempted requests, failure counts and each route's la
     ...summarize(samples), requestedPlayers: 1, acceptedStarts: 1, acceptedFinishes: 1,
     schedulingMs: 1000, drainMs: 0, errors: [], missingReads: [], passed: false,
   });
-  expect(Number(report.match(/\brequests\b\D+(\d+)/i)?.[1])).toBe(500);
-  expect(report).toMatch(/"HTTP 429"\s*:\s*5\b/);
+  expect(Number(report.match(/\brequests\b\D+(\d+)/i)?.[1])).toBe(600);
+  expect(report).toMatch(/"HTTP 429"\s*:\s*6\b/);
   routes.forEach((route, index) => {
     const lines = report.split("\n").filter(line => line.startsWith(`${route}:`));
     expect(lines).toHaveLength(1);
@@ -126,6 +126,9 @@ test("workload uses valid identities, plausible scores, death/save reads, 2s pol
   expect(calls.filter(call => call.url.endsWith("/finish")).map(call => JSON.parse(String(call.init.body))))
     .toEqual(ids.map((identity, index) => makeFinish(identity.playerId, index, 4000)));
   expect(calls.filter(call => call.url.endsWith("/best"))).toHaveLength(6);
+  const standings = calls.filter(call => call.url.endsWith("/standing"));
+  expect(standings.filter(call => call.at === 4000)).toHaveLength(6);
+  for (const at of [6000, 8000, 10000]) expect(standings.filter(call => call.at === at)).toHaveLength(3);
   const leaders = calls.filter(call => call.url.endsWith("/leaderboard"));
   for (const at of [0, 5000, 10000]) expect(leaders.filter(call => call.at === at).length).toBeGreaterThanOrEqual(1);
   expect(leaders.filter(call => call.at === 4000)).toHaveLength(6);
@@ -136,14 +139,14 @@ test("workload uses valid identities, plausible scores, death/save reads, 2s pol
 });
 
 test.each([
-  { slow: 1, fraction: .95, passed: true },
-  { slow: 2, fraction: .90, passed: false },
-  { slow: 20, fraction: 0, passed: false },
-])("successful responses meet capacity only at or above 95 percent fast ($slow slow of 20)", async ({ slow, fraction, passed }) => {
-  // One player over twelve virtual seconds makes exactly twenty requests.
+  { slow: 1, fraction: .96, passed: true },
+  { slow: 2, fraction: .92, passed: false },
+  { slow: 25, fraction: 0, passed: false },
+])("successful responses meet capacity only at or above 95 percent fast ($slow slow of 25)", async ({ slow, fraction, passed }) => {
+  // One player over twelve virtual seconds makes exactly twenty-five requests.
   // Delays preserve successful statuses, valid payloads and all required reads.
   const { result } = await virtualRun(1, 12, undefined, undefined, index => index < slow ? 250 : 0);
-  expect(result.requests).toBe(20);
+  expect(result.requests).toBe(25);
   expect(result.acceptedStarts).toBe(1);
   expect(result.acceptedFinishes).toBe(1);
   expect(result.failures).toEqual({});
@@ -206,4 +209,28 @@ test("five-second deadline covers response body and drains requests past the sch
   expect(result.drainMs).toBe(2000);
   expect(result.passed).toBe(false);
   expect(calls.filter(call => call.url.endsWith("/api/runs"))).toHaveLength(1);
+});
+
+test("standing workload validation checks nulls, integer bounds, targets and positive gaps", () => {
+  const route = "GET /api/players/:playerId/standing";
+  for (const value of [
+    { rank: null, total: 0, next: null }, { rank: 1, total: 500, next: null },
+    { rank: 500, total: 500, next: { rank: 499, pointsToBeat: 1 } },
+  ]) expect(valid(route, value)).toBe(true);
+  for (const value of [
+    {}, { rank: null, total: -1, next: null }, { rank: null, total: 1, next: {} },
+    { rank: 0, total: 1, next: null }, { rank: 2, total: 1, next: null },
+    { rank: 1.5, total: 2, next: null }, { rank: 2, total: 2, next: null },
+    { rank: 2, total: 2, next: { rank: 2, pointsToBeat: 1 } },
+    { rank: 2, total: 2, next: { rank: 1, pointsToBeat: 0 } },
+    { rank: 2, total: 2, next: { rank: 1, pointsToBeat: 1.5 } },
+  ]) expect(valid(route, value)).toBe(false);
+});
+
+test("a malformed standing cannot pass capacity or count as a successful read", async () => {
+  const { result } = await virtualRun(1, 3, (response, url) => url.endsWith("/standing") ? Response.json({ rank: 2, total: 1, next: null }) : response);
+  expect(result.passed).toBe(false);
+  expect(result.failures["invalid-response"]).toBeGreaterThan(0);
+  expect(result.missingReads).toEqual(["GET /api/players/:playerId/standing"]);
+  expect(result.acceptedFinishes).toBe(1);
 });

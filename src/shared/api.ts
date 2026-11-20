@@ -7,3 +7,8 @@ export interface Leader { playerId: string; name: string; score: number }
 export interface RunStarted { runId: string }
 export interface Saved { saved: true; held: boolean }
 export interface Best { best: number | null }
+export interface Standing {
+  rank: number | null;
+  total: number;
+  next: { rank: number; pointsToBeat: number } | null;
+}

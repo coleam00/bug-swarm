@@ -76,14 +76,22 @@ export const sleep: Runtime["sleep"] = (ms, signal) => new Promise(resolve => {
 });
 
 const START = "POST /api/runs", FINISH = "POST /api/runs/:runId/finish";
+const STANDING = "GET /api/players/:playerId/standing";
 const BEST = "GET /api/players/:playerId/best", LEADERS = "GET /api/leaderboard", TEAMS_ROUTE = "GET /api/teams";
 const object = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v);
 const score = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0;
-function valid(route: string, v: unknown): boolean {
+export function valid(route: string, v: unknown): boolean {
   if (route === LEADERS) return Array.isArray(v) && v.length <= 10 && v.every(row => object(row) && isId(row.playerId) && !validateName(row.name).error && score(row.score));
   if (!object(v)) return false;
   if (route === START) return isId(v.runId);
   if (route === FINISH) return v.saved === true;
+  if (route === STANDING) {
+    if (!score(v.total)) return false;
+    if (v.rank === null) return v.next === null;
+    if (!score(v.rank) || Number(v.rank) < 1 || Number(v.rank) > Number(v.total)) return false;
+    if (v.rank === 1) return v.next === null;
+    return object(v.next) && v.next.rank === Number(v.rank) - 1 && score(v.next.pointsToBeat) && Number(v.next.pointsToBeat) > 0;
+  }
   if (route === BEST) return v.best === null || score(v.best);
   return TEAMS.every(team => score(v[team]));
 }
@@ -142,7 +150,8 @@ export async function runLoad(options: LoadOptions, runtime: Runtime = { now: ()
     const received = runtime.now();
     await waitUntil(received + Math.min((5 + index % 11) * 1000, options.seconds * 1000 / 3));
     if (!active()) return;
-    const reads = () => Promise.all([request(BEST, `/api/players/${identity.playerId}/best`), boards()]);
+    const standing = () => request(STANDING, `/api/players/${identity.playerId}/standing`);
+    const reads = () => Promise.all([request(BEST, `/api/players/${identity.playerId}/best`), standing(), boards()]);
     const deathAt = runtime.now();
     const finish = request(FINISH, `/api/runs/${start.runId}/finish`, makeFinish(identity.playerId, index, deathAt - received));
     const initialReads = reads();
@@ -154,7 +163,7 @@ export async function runLoad(options: LoadOptions, runtime: Runtime = { now: ()
       const pending: Promise<unknown>[] = [];
       for (let at = deathAt + 2000; active(); at += 2000) {
         await waitUntil(at);
-        if (active()) pending.push(boards());
+        if (active()) pending.push(Promise.all([standing(), boards()]));
       }
       await Promise.all(pending);
     })();
@@ -182,7 +191,7 @@ export async function runLoad(options: LoadOptions, runtime: Runtime = { now: ()
     signal?.removeEventListener("abort", interrupt);
   }
   const summary = summarize(samples);
-  const missingReads = [BEST, LEADERS, TEAMS_ROUTE].filter(route => !samples.some(s => s.route === route && !s.failure));
+  const missingReads = [BEST, STANDING, LEADERS, TEAMS_ROUTE].filter(route => !samples.some(s => s.route === route && !s.failure));
   const passed = !signal?.aborted && !errors.length && !Object.keys(summary.failures).length && acceptedStarts === options.players && acceptedFinishes === options.players && !missingReads.length && summary.successfulUnder200 >= .95;
   return { ...summary, requestedPlayers: options.players, acceptedStarts, acceptedFinishes, schedulingMs, drainMs: runtime.now() - started - schedulingMs, errors, missingReads, passed };
 }

@@ -17,7 +17,7 @@ The [raw rectangles and timings](team-evidence/measurements.json) accompany the 
 | Populated totals, all four upgrades | Play again | 115×48 px | 364 px |
 | Save, best, leaderboard and totals failures, all four upgrades | Play again | 115×48 px | 336 px |
 
-Play again is fully visible in every portrait case and remains operable in landscape. The upgrade summary and top 10 scroll below it in the short landscape panel. Labels remain visible outside a zero-width segment. The React integration separately checks 75/25 and 0/100 proportions, loading, unavailable and empty states, one-tap restart without duplicate starts, and scroll protection.
+These are historical measurements. Issue #38 supersedes the short-landscape scrolling acceptance: [landscape validation](landscape-validation.md) now proves the summary, upgrades and all ten rows fit together at 844×390 and 740×360. Portrait retains the stacked, scrollable flow. Labels remain visible outside a zero-width segment. The React integration separately checks 75/25 and 0/100 proportions, loading, unavailable and empty states, one-tap restart without duplicate starts, and scroll protection.
 
 Screenshots: [first entry](team-evidence/entry.png), [legacy entry](team-evidence/legacy-entry.png), [landscape entry](team-evidence/landscape-entry.png), [accepted finish](team-evidence/real-finish.png), [empty race after hide](team-evidence/hidden-zero.png), [loading](team-evidence/loading-upgrades.png), [populated race](team-evidence/populated-upgrades.png), [all failures](team-evidence/failed-upgrades.png), [landscape failures](team-evidence/landscape-failed.png).
 

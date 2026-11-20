@@ -1,4 +1,4 @@
-import type { Finish, Identity, Leader, TeamTotals } from "../../shared/api";
+import type { Finish, Identity, Leader, Standing, TeamTotals } from "../../shared/api";
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { createSimulation, chooseUpgrade, type Simulation } from "./simulation";
 import { acquiredUpgrades } from "./upgrades";
@@ -27,6 +27,7 @@ export interface SessionView {
   restartReady: boolean; choiceReady: boolean;
   token: number; over: boolean; score: number; save: "pending" | "saved" | "held" | "failed" | "rate-limited";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
+  standing: Standing | null; standingStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
   teamTotals: TeamTotals | null; teamsStatus: "loading" | "ready" | "failed";
   choice: Readonly<{ number: number; offer: readonly UpgradeId[] }> | null;
@@ -47,6 +48,8 @@ export class Session {
   private leadersApplied = 0;
   private teamsSequence = 0;
   private teamsApplied = 0;
+  private standingSequence = 0;
+  private standingApplied = 0;
   constructor(public identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error,
     private arena: () => Arena = () => SQUARE_ARENA,
@@ -55,7 +58,7 @@ export class Session {
     private timing: SessionTiming = { ...defaultTiming, now: () => this.clock.now() }) {}
 
   private emptyView(token: number): SessionView {
-    return { token, restartReady: false, choiceReady: false, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
+    return { token, restartReady: false, choiceReady: false, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", standing: null, standingStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -66,7 +69,7 @@ export class Session {
   private syncPoll() {
     if (this.poll) { clearInterval(this.poll); this.poll = undefined; }
     if (this.listeners.size && this.view.over) this.poll = setInterval(() => {
-      void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!);
+      void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!); void this.refreshStanding(this.current!);
     }, 2000);
   }
   private clearGuardTimer() {
@@ -155,7 +158,7 @@ export class Session {
     this.guard = { token: run.token, choice: null, deadline: this.timing.now() + RESTART_GUARD_MS };
     this.view = { ...this.view, over: true, restartReady: false, choiceReady: false, score: s.score, choice: null, upgrades };
     this.syncGuard(); this.emit(); this.syncPoll();
-    void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
+    void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run); void this.refreshStanding(run);
     void this.save(run);
   }
   private async save(run: LocalRun) {
@@ -169,7 +172,7 @@ export class Session {
       const saved = await this.api.finish(id, run.result!);
       if (this.current !== run) return;
       this.view = { ...this.view, save: saved.held ? "held" : "saved" }; this.emit();
-      void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
+      void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run); void this.refreshStanding(run);
     } catch (error) {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);
       if (this.current !== run) return;
@@ -204,6 +207,20 @@ export class Session {
       if (this.current !== run || sequence < this.leadersApplied || !this.view.over) return;
       this.leadersApplied = sequence;
       this.view = { ...this.view, leaders: [], leadersStatus: "failed" }; this.emit();
+    }
+  }
+  async refreshStanding(run: LocalRun): Promise<void> {
+    const sequence = ++this.standingSequence;
+    try {
+      const standing = await this.api.standing(this.identity.playerId);
+      if (this.current !== run || sequence < this.standingApplied || !this.view.over) return;
+      this.standingApplied = sequence;
+      this.view = { ...this.view, standing, standingStatus: "ready" }; this.emit();
+    } catch (error) {
+      this.log(`Standing read failed [${run.runId ?? run.token}]`, error);
+      if (this.current !== run || sequence < this.standingApplied || !this.view.over) return;
+      this.standingApplied = sequence;
+      this.view = { ...this.view, standing: null, standingStatus: "failed" }; this.emit();
     }
   }
   async refreshTeams(run: LocalRun): Promise<void> {

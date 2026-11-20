@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { approveRun, countEvents, finishRun, getRun, hideName, leaderboard, listHeldRuns, openDb, personalBest, startRun, teamTotals } from "./db";
+import { approveRun, countEvents, finishRun, getRun, hideName, leaderboard, listHeldRuns, openDb, personalBest, rankedPlayers, startRun, teamTotals } from "./db";
 
 test("actual legacy schema migrates additively and survives repeated reopen", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-db-")), path = join(dir, "app.db");
@@ -51,8 +51,11 @@ test("best per player, first-best finish and id tie order, filtering before ten"
     expect(leaderboard(db).map((v) => v.playerId)).toEqual(["c", "b"]);
     expect(personalBest(db, "a")).toBe(100);
     for (let i = 0; i < 14; i++) score(`p${i}`, `Robot${i}`, 99 - i, 10);
+    score("zero", "Zero", 0, 0);
+    startRun(db, "unfinished", "Unfinished", 0, "tabs");
     // Legacy entries that no longer pass the current list never reach public output.
     score("bad", "shit", 1000, 0);
+    expect(rankedPlayers(db).map(row => row.playerId)).toEqual(["c", "b", ...Array.from({ length: 14 }, (_, i) => `p${i}`), "zero"]);
     expect(leaderboard(db)).toEqual([
       { playerId: "c", name: "Gamma", score: 100 }, { playerId: "b", name: "Beta", score: 100 },
       ...Array.from({ length: 8 }, (_, i) => ({ playerId: `p${i}`, name: `Robot${i}`, score: 99 - i })),
@@ -75,6 +78,7 @@ test("populated pre-team database preserves history and never backfills run snap
     db.close(); db = openDb(path); db.close(); db = openDb(path);
     expect(getRun(db, "finished")?.score).toBe(11);
     expect(getRun(db, "finished")?.team).toBeNull();
+    expect(rankedPlayers(db)).toEqual([{ playerId: "legacy", name: "Robot", score: 11 }]);
     expect(countEvents(db).run_ended).toBe(1);
     expect(teamTotals(db)).toEqual({ tabs: 0, spaces: 0 });
     const started = startRun(db, "legacy", "Robot", 0, "spaces");
@@ -146,13 +150,17 @@ test("hold migration backfills only finished high scores once and preserves appr
       CREATE TABLE events (id INTEGER PRIMARY KEY, type TEXT NOT NULL, at TEXT NOT NULL, run_id TEXT);
       INSERT INTO players VALUES ('player', 'Robot', 'robot', 'tabs');
       INSERT INTO runs VALUES ('high', 'player', 0, 300000, 13800, 1350, 300, 1, '[{"id":"ci-drone","count":1}]', 'tabs');
-      INSERT INTO runs VALUES ('boundary', 'player', 0, 224000, 7224, 700, 224, 0, '[]', 'tabs');
+      INSERT INTO runs VALUES ('boundary', 'player', 0, 100000, 3000, 290, 100, 0, '[]', 'tabs');
+      INSERT INTO runs VALUES ('below', 'player', 0, 99000, 2999, 290, 99, 0, '[]', 'tabs');
+      INSERT INTO runs VALUES ('above', 'player', 0, 101000, 3001, 290, 101, 0, '[]', 'tabs');
       INSERT INTO runs (id, player_id, started_at_ms, score) VALUES ('pending', 'player', 0, 13800);
       INSERT INTO events VALUES (1, 'run_ended', '2026-11-20T00:05:00.000Z', 'high');`);
     const before = db.query("SELECT * FROM runs ORDER BY id").all() as Record<string, unknown>[];
     db.close(); db = openDb(path);
     expect(getRun(db, "high")?.held).toBe(1);
     expect(getRun(db, "boundary")?.held).toBe(0);
+    expect(getRun(db, "below")?.held).toBe(0);
+    expect(getRun(db, "above")?.held).toBe(1);
     expect(getRun(db, "pending")?.held).toBe(0);
     expect(db.query("SELECT * FROM runs ORDER BY id").all().map(row => {
       const { held, ...rest } = row as Record<string, unknown>; return rest;
@@ -176,17 +184,17 @@ test("held runs leave earlier eligible bests, tie times and ten public ranks int
   };
   try {
     add("returning", "Returning", 100, 20);
-    const held = add("returning", "Returning", 7225, 1);
+    const held = add("returning", "Returning", 3001, 1);
     for (let i = 0; i < 10; i++) add(`p${i}`, `Robot ${i}`, 99 - i, 10);
-    const rival = add("rival", "Rival", 7225, 10); approveRun(db, rival);
-    const later = add("returning", "Returning", 7225, 30); approveRun(db, later);
+    const rival = add("rival", "Rival", 3001, 10); approveRun(db, rival);
+    const later = add("returning", "Returning", 3001, 30); approveRun(db, later);
     // The held finish at t=1 cannot beat the rival's eligible t=10.
     expect(leaderboard(db).slice(0, 2).map(row => row.playerId)).toEqual(["rival", "returning"]);
     db.query("UPDATE runs SET held = 1 WHERE id = ?").run(later);
     const rows = leaderboard(db);
     expect(rows).toHaveLength(10); expect(rows[1]).toEqual({ playerId: "returning", name: "Returning", score: 100 });
-    expect(personalBest(db, "returning")).toBe(7225);
-    expect(teamTotals(db).tabs).toBe(7225 + 100 + 945);
+    expect(personalBest(db, "returning")).toBe(3001);
+    expect(teamTotals(db).tabs).toBe(3001 + 100 + 945);
     const hidden = add("hidden", "Hidden Robot", 13800, 2);
     const blocked = add("blocked", "admin", 13800, 3);
     hideName(db, "Hidden Robot", 0);
@@ -196,7 +204,7 @@ test("held runs leave earlier eligible bests, tie times and ten public ranks int
     approveRun(db, hidden); approveRun(db, blocked); approveRun(db, held);
     expect(leaderboard(db)[0]?.playerId).toBe("returning");
     expect(leaderboard(db).some(row => ["hidden", "blocked"].includes(row.playerId))).toBe(false);
-    expect(teamTotals(db).tabs).toBe(7225 + 7225 + 100 + 945);
+    expect(teamTotals(db).tabs).toBe(3001 + 3001 + 100 + 945);
     expect(personalBest(db, "hidden")).toBe(13800); expect(countEvents(db)).toEqual(events);
   } finally { db.close(); }
 });
