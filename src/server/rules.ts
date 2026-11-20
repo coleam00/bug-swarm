@@ -30,11 +30,16 @@ export function validateName(value: unknown): { name: string; error?: never } | 
   if (!/^[A-Za-z0-9 _-]{2,16}$/.test(name)) return { error: "Use 2–16 letters, numbers, spaces, hyphens or underscores." };
   const normalized = moderationKey(name);
   if (reserved.has(normalized)) return { error: "That name is reserved" };
-  // Strip a simple numeric suffix BEFORE leet folding (123 would otherwise become
-  // i2e). Only short-term rejection uses this candidate; never grant exceptions to it.
-  const unsuffixed = moderationKey(name.replace(/[ _-]/g, "").replace(/[0-9]+$/, ""));
-  if (!approved.has(normalized) && (shortBlocked.has(normalized) || shortBlocked.has(unsuffixed) ||
-    substringBlocked.some(word => normalized.includes(word)))) {
+  if (approved.has(normalized)) return { name };
+  // Check numeric suffix boundaries BEFORE leet folding (123 becomes i2e).
+  // Try each split: 455123 contains both a leet word (455) and a suffix (123).
+  // These candidates can only reject a short term, never grant an exception.
+  const compact = name.replace(/[ _-]/g, "");
+  let shortMatch = shortBlocked.has(normalized);
+  for (let end = compact.length; !shortMatch && end > 0 && /[0-9]/.test(compact[end - 1]!); end--) {
+    shortMatch = shortBlocked.has(moderationKey(compact.slice(0, end - 1)));
+  }
+  if (shortMatch || substringBlocked.some(word => normalized.includes(word))) {
     return { error: "That name isn't allowed. Pick another." };
   }
   return { name };

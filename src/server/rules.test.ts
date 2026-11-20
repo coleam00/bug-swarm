@@ -50,6 +50,7 @@ test.each([
   "Scunthorpe2", "Hancock2",
   "fag123", "coon123", "ass123", "cum123", "tit123", "poof123", "jizz123",
   "F_4_G-123", "c00n_123", "fag888", "fag000", "coon-222",
+  "455123", "a55123", "717123", "b008123", "p155123",
   "Larsenfuck", "Draperfuck", "Anushkafuck", "Annalisa2", "Dickens2", "Sam Hancockfuck",
 ])("moderation rejects %s, including folded vocabulary and combined evasions", name => {
   expect(validateName(name).error).toBeDefined();

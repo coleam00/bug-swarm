@@ -5,6 +5,7 @@
 // Folded terms >= 4 characters match substrings; shorter terms match whole names
 // or whole names followed by digits. Check that suffix before leet folding, so
 // fag123/coon123 and separator/leet variants cannot turn the digits into letters.
+// Try every split of trailing digits: in 455123, 455 is the leet word, 123 its suffix.
 // This avoids ass -> as blocking Jason/classic. Short-term abusive compounds need
 // explicit entries (e.g. badass); this is deliberately not exhaustive detection.
 // For a legitimate collision, add the COMPLETE name to APPROVED_NAMES and an
