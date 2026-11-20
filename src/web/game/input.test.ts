@@ -50,9 +50,9 @@ test("fixed loop caps catch-up at five steps and visibility reset drops elapsed 
 
 test("touch has a radial dead zone, continuous speed and normalized direction in every quadrant", () => {
   for (const [dx, dy] of [[0, 0], [5, 0], [0, -6], [3.6, 4.8]]) expect(touchInput(dx!, dy!)).toEqual(IDLE);
-  expect(touchInput(6.01, 0).speed).toBeCloseTo(0.01 / 54);
+  expect(touchInput(6.01, 0).speed).toBeCloseTo(0.00018518518518518518, 10);
   for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.6, 0.8], [-0.6, 0.8], [0.6, -0.8], [-0.6, -0.8]]) {
-    for (const [radius, speed] of [[33, 0.5], [60, 1], [150, 1]]) {
+    for (const [radius, speed] of [[19.5, 0.25], [33, 0.5], [46.5, 0.75], [60, 1], [150, 1]]) {
       const input = touchInput(x! * radius!, y! * radius!);
       expect(input.x).toBeCloseTo(x!); expect(input.y).toBeCloseTo(y!);
       expect(Math.hypot(input.x, input.y)).toBeCloseTo(1);

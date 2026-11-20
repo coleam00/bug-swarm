@@ -4,9 +4,9 @@ Issue #36 replaces finger-target steering with a fixed-origin floating joystick.
 
 ## Correctness and layout
 
-`bun install --frozen-lockfile`, `bun run check` (222 tests, 87,011 assertions), default `bun run pacing`, and `bun run build` passed. Pacing kept its existing portrait/landscape evasive medians of 77.78 / 79.60 seconds, with zero score failures. Combat tuning, score rules and pacing thresholds are unchanged.
+`bun install --frozen-lockfile`, `bun run check` (222 tests, 87,091 assertions), default `bun run pacing`, and `bun run build` passed. Pacing kept its existing portrait/landscape evasive medians of 77.78 / 79.60 seconds, with zero score failures. Combat tuning, score rules and pacing thresholds are unchanged.
 
-- Pure input tests cover fixed origins, all directions, dead-zone boundaries, half/full speed, radial clamping, return to centre, exclusive ownership and no takeover through moves.
+- Pure input tests cover fixed origins, all directions, dead-zone boundaries, quarter/half/three-quarter/full speed, radial clamping, return to centre, exclusive ownership and no takeover through moves. Mutation checks confirm that quantized intermediate speeds and zero speed just outside the dead zone fail the mapping test.
 - Simulation tests cover explicit speed fractions, clamping, stationary zero speed despite a target, full-speed default vectors (including small scripted vectors), diagonal normalization, mouse stopping and bounds.
 - Engine tests exercise actual pointer-to-simulation wiring, stale mouse suppression, keyboard priority and opposing keys, non-owner events, outside-canvas capture, release/cancel/lost capture, blur, visibility, resize, run replacement, both choice transitions, death, fresh restart and unmount. Held-key restart protection and post-death effects remain covered by existing tests. Capture release dispatches a lost-capture event in the fixture to check reentrancy.
 - Renderer tests assert visible ring/knob geometry at DPR 1 and 2 across different world scales, independence from shake, stationary touchdown, disappearance without an active touch and balanced canvas state.
