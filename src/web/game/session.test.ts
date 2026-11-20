@@ -71,7 +71,14 @@ test.each(["before death", "after death", "after restart"])("start refusal %s st
   const { session, finishes, logs } = fixture({ start: () => ++starts === 1 ? response.promise : Promise.resolve({ runId: "next" }) });
   const original = session.start();
   expect(session.current).toBe(original); expect(session.view.over).toBe(false);
-  if (when === "before death") { response.reject(new RateLimitError()); await flush(); }
+  if (when === "before death") {
+    response.reject(new RateLimitError()); await flush();
+    expect(session.current).toBe(original); expect(session.view.over).toBe(false);
+    expect(original.result).toBeUndefined(); expect(original.simulation.dead).toBe(false);
+    const time = original.simulation.time;
+    step(original.simulation, IDLE, 1 / 60);
+    expect(original.simulation.time).toBeGreaterThan(time);
+  }
   session.end();
   if (when === "after restart") {
     const next = session.start();
@@ -97,8 +104,14 @@ test("429 after a team-conflict retry remains rate-limited, with no finish or fu
     if (++starts === 1) throw new TeamConflictError("spaces");
     throw new RateLimitError();
   } });
-  session.start(); session.end(); await flush();
+  const run = session.start(); await flush();
   expect(starts).toBe(2); expect(session.identity.team).toBe("spaces");
+  expect(session.current).toBe(run); expect(session.view.over).toBe(false);
+  expect(run.result).toBeUndefined(); expect(run.simulation.dead).toBe(false);
+  const time = run.simulation.time;
+  step(run.simulation, IDLE, 1 / 60);
+  expect(run.simulation.time).toBeGreaterThan(time);
+  session.end(); await flush();
   expect(session.view.save).toBe("rate-limited"); expect(finishes).toHaveLength(0);
 });
 
