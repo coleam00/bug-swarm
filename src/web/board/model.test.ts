@@ -61,6 +61,7 @@ test.each([
 test("malformed snapshots are rejected in full, including unsafe names and duplicate ids", () => {
   for (const value of [null, {}, [null], [entry("a", -1)], [entry("a", 1.1)], [entry("a", Infinity)],
     [entry("a", Number.MAX_SAFE_INTEGER + 1)], [entry("a", 1, "<img src=x>")], [entry("a", 1, "shit")],
+    ...["nigga", "f u c k", "fuuuck", "cole medin", "admin"].map(name => [entry("a", 1, name)]),
     [entry("a", 1, "a")], [entry("")], [entry("a"), entry("a")]]) {
     expect(() => readLeaders(value)).toThrow();
   }
@@ -68,6 +69,9 @@ test("malformed snapshots are rejected in full, including unsafe names and dupli
     expect(() => readTeams(value)).toThrow();
   }
   expect(readLeaders([entry("a", 0, " Good Robot ")])[0]?.name).toBe("Good Robot");
+  for (const name of ["Scunthorpe", "Hancock", "Annalise", "Jason", "therapist"]) {
+    expect(readLeaders([entry("a", 1, name)])[0]?.name).toBe(name);
+  }
 });
 
 test("score formatting is deterministic, compact above 999999, and keeps exact accessible values", () => {

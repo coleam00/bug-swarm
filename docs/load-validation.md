@@ -119,3 +119,30 @@ The existing `runLoad` harness ran its default 500-player, 60-second workload ag
 Headless installed Chrome **157.0.8103.51**, with touch emulation, loaded the production bundle through an interception adapter to an owned socket server with a separate scratch database. A player whose start budget was exhausted still played to death and displayed exactly “Too many runs right now. Your next run will save.” At **390×844**, the paragraph occupied 342×48 px; at **844×390**, 500.61×24 px. Neither layout overflowed horizontally; the 115×48 px restart button remained reachable by scrolling in landscape. Screenshots were inspected. Tapping restarted in **83.52/84.03 ms**, respectively, while the subsequent start response was deliberately held for two seconds. No browser page errors occurred. Owned servers and Chrome were stopped afterward.
 
 These checks do **not** verify Railway's ingress headers. The isolated, two-network [pre-stream proxy verification](../architecture.md#pre-stream-proxy-verification) remains the deployment procedure before enabling `TRUST_PROXY_HOPS=1`.
+
+## Name-moderation aggregation regression (issue #35, 2026-11-20)
+
+Validated the issue #35 implementation based on `ecca27f3258ddc0f4ca04a62a50dc61e8df5e073` on the same Windows 11 factory workstation and Bun 1.4.2 described above. `bun run check` passed TypeScript and all 393 tests; `bun run pacing` passed the default 20-case matrix and all four gates; `bun run build` passed. No frame-loop work or dependencies were added.
+
+The unchanged `runLoad` harness exercised the real production entry point with 500 players for 60 seconds, `NODE_ENV=production`, `LOAD_TEST_START_LIMIT=10000`, a fresh scratch database and a scratch home. As in the issue #33 measurement, a temporary launcher replaced only `Bun.serve`'s listener options with `{ unix: <scratch-directory>/app.sock, fetch: options.fetch }`; the harness runtime used `fetch(url, { ...init, unix: socket })`, real monotonic time and the existing sleep function. No TCP listener or existing server was used. Server and generator shared the factory machine/process, with no project checks running during measurement. These are local aggregation regression measurements, not Railway or network capacity evidence. The owned socket server was stopped in `finally`, and the launcher process exited after each run.
+
+- A separate smoke process/database first passed 5 players / 6 seconds: 54 requests, 5 accepted starts and finishes, zero failures, 100% under 200 ms; overall p50/p95/p99 **0.80/22.65/22.67 ms**.
+- Measured workload: **500/500** accepted starts/finishes, **27,902** requests, failures **{}**, zero 5xx/timeouts/transport/invalid-response failures, all required reads observed; **PASS** (exit 0).
+- Scheduling/drain: **60.003/0.020 seconds**. **96.69%** of requests succeeded in strictly under 200 ms, above the 95% target. The synchronized start burst remains the slowest route.
+
+| Method and route | Requests | p50 ms | p95 ms | p99 ms |
+| --- | ---: | ---: | ---: | ---: |
+| POST /api/runs | 500 | 1007.16 | 1931.70 | 1931.76 |
+| POST /api/runs/:runId/finish | 500 | 107.72 | 199.39 | 333.51 |
+| GET /api/players/:playerId/best | 1,000 | 86.79 | 199.23 | 333.79 |
+| GET /api/leaderboard | 12,951 | 3.36 | 136.78 | 212.46 |
+| GET /api/teams | 12,951 | 3.35 | 137.36 | 215.65 |
+| Overall | 27,902 | 3.72 | 150.82 | 1006.86 |
+
+Post-run stats reported `players: 500`, `finished_runs: 500`, `median_runs_per_player: 1.0`, `touch_share: 50%`. The leaderboard contained ten valid entries, and team totals were `{ "tabs": 52414, "spaces": 52211 }`. Automated legacy fixtures separately prove that newly blocked/reserved players disappear from both boards while all stored rows, personal bests, events and bet contributions survive.
+
+### Returned moderation findings
+
+The follow-up to `3933669` extends exact-name exceptions for Larsen, Draper, Anushka, Annalisa, Dickens and Sam Hancock, plus nearby collisions in the same name families. Short blocked terms followed by digits are now refused; the numeric-suffix candidate is checked before leet folding and is never used to grant an exception. The initial rule corpus reproduced 26 failures; a further suffix audit reproduced five more combinations where the blocked term itself ends in leet digits. Each possible trailing-digit boundary is checked, so `455123` cannot evade the same rule as `ass123`. TypeScript, 176 tests across the seven relevant files, the default 20-case pacing matrix and the production build passed locally. Full-suite execution remains with CI; local checks did not start the unrelated TCP-listener tests.
+
+Chrome Headless Shell **156.0.8078.4** loaded the production bundle through request interception to an owned socket in a fresh scratch directory, with scratch home, browser profile and database. At **390×844** with touch emulation, all six reported ordinary names entered play and received HTTP 201. `fag123`, `coon123`, `F_4_G-123`, `c00n_123`, five additional leet/suffix combinations, `admin`, spaced profanity and repeated-letter profanity were refused without entering play; the reserved message remained exact. At **1280×720**, the real `/board` showed all six legitimate stored players, omitted the two numeric-suffix slurs, and displayed team totals of **30/30**. Board reads preserved every stored row and both hidden slurs' personal bests. Screenshots were inspected; there were no page errors. The owned browser and socket server stopped in `finally`. No frame-loop or aggregation structure changed, and the earlier load measurement above was not repeated for this follow-up.

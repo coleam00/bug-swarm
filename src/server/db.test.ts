@@ -99,3 +99,37 @@ test("failed start event also rolls back a legacy player's team assignment", () 
     expect(db.query("SELECT COUNT(*) AS n FROM runs").get()).toEqual({ n: 0 });
   } finally { db.close(); }
 });
+
+test("team moderation filters each player's run-team sums without changing retained history", () => {
+  const db = openDb(":memory:");
+  try {
+    const add = (playerId: string, name: string, team: "tabs" | "spaces", score: number) => {
+      const result = startRun(db, playerId, name, 0, team);
+      if ("error" in result) throw new Error(result.error);
+      finishRun(db, result.runId, { playerId, score, seconds: score, squashes: 0, touch: true }, 1000);
+      return result.runId;
+    };
+    for (const [i, name] of ["nigga", "f u c k", "fuuuck", "admin", "Cole Medin"].entries()) {
+      add(`blocked${i}`, name, "tabs", 100);
+      add(`duplicate${i}`, name, "spaces", 200);
+    }
+    add("one", "Hancock", "tabs", 10);
+    add("one", "Hancock", "tabs", 20);
+    add("two", "Hancock", "spaces", 30);
+    // Run snapshots determine attribution even when the current team differs.
+    db.query("UPDATE players SET team = 'spaces' WHERE id = 'one'").run();
+    const legacy = add("legacy", "Scunthorpe", "tabs", 500);
+    db.query("UPDATE runs SET team = NULL WHERE id = ?").run(legacy);
+    startRun(db, "abandoned", "Robot", 0, "tabs");
+    add("hidden", "Hidden Robot", "spaces", 1000);
+    hideName(db, "Hidden Robot", 0);
+    const history = () => ["players", "runs", "events"].map(table => db.query(`SELECT * FROM ${table} ORDER BY id`).all());
+    const before = history();
+    expect(teamTotals(db)).toEqual({ tabs: 30, spaces: 30 });
+    expect(personalBest(db, "blocked0")).toBe(100);
+    expect(personalBest(db, "one")).toBe(20);
+    expect(history()).toEqual(before);
+    hideName(db, "Hancock", 0);
+    expect(teamTotals(db)).toEqual({ tabs: 0, spaces: 0 });
+  } finally { db.close(); }
+});

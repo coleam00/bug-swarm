@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { isId, nameKey, plausible, validFinish, validateName } from "./rules";
 import { parseFinish } from "./rules";
 import { UPGRADE_IDS } from "../shared/upgrades";
+import { BLOCKED_WORDS } from "./blocked-words";
 const finish = { playerId: crypto.randomUUID(), score: 62, squashes: 6, seconds: 2, touch: true };
 
 test("finish normalizes legacy and reordered builds and validates pick capacity", () => {
@@ -41,9 +42,44 @@ test("name rules trim and allow exactly the published character set and lengths"
   expect(validateName("ab").name).toBe("ab"); expect(validateName("1234567890123456").name).toBeDefined();
   expect(nameKey(" Mixed-0 ")).toBe("mixed-0");
 });
-test("blocked substrings ignore case and precisely the five swaps", () => {
-  for (const name of ["xxFuCKxx", "5h1t", "b1tch", "cunt", "n1gg3r", "f4gg0t"]) expect(validateName(name).error).toContain("isn't allowed");
-  expect(validateName("robot").error).toBeUndefined();
+test.each([
+  "xxFuCKxx", "5h1t", "b1tch", "cunt", "n1gg3r", "f4gg0t", "nigga", "f u c k", "fuuuck",
+  "F-U-C-K", "f_u_c_k", "F_u-U cK", "sh17", "8itch", "8-1_7 c H", "n i g g a", "faggot",
+  "ass", "a-s-s", "badass", "bullshit", "wanker", "kike", "chink", "dyke", "retard", "spastic",
+  "blowjob", "porn", "hentai", "Scunthorpefuck", "classicfuck", "Hancockfuck", "therapistfuck",
+  "Scunthorpe2", "Hancock2",
+  "fag123", "coon123", "ass123", "cum123", "tit123", "poof123", "jizz123",
+  "F_4_G-123", "c00n_123", "fag888", "fag000", "coon-222",
+  "455123", "a55123", "717123", "b008123", "p155123",
+  "Larsenfuck", "Draperfuck", "Anushkafuck", "Annalisa2", "Dickens2", "Sam Hancockfuck",
+])("moderation rejects %s, including folded vocabulary and combined evasions", name => {
+  expect(validateName(name).error).toBeDefined();
+});
+
+test.each([
+  "Scunthorpe", "classic", "class", "assistant", "Cassie", "Cassandra", "Cassidy", "Jason", "Mason",
+  "Thomas", "Jasmine", "Lucas", "Hancock", "Hitchcock", "Cockburn", "Peacock", "Dickinson", "Dickson",
+  "Essex", "Sussex", "Middlesex", "Annalise", "analysis", "canal", "therapist", "Robot", "Robot-7_ ok",
+  "ArchonFan", "AdminHelper", "SCUN-TH0RPE", "Hanncock",
+  "Larsen", "Draper", "Anushka", "Annalisa", "Dickens", "Sam Hancock",
+  "Arsen", "Arsene", "Arsenio", "Anush", "Anusha", "Annaliese", "Dickenson", "Van Dyke",
+  "Jason123", "classic123", "Cassie123", "Tito123", "Ali123", "Lars123", "Larson", "Sam Jones",
+])("ordinary names and words remain eligible: %s", name => {
+  expect(validateName(` ${name} `)).toEqual({ name });
+});
+
+test.each([
+  "colemedin", "cole medin", "dynamous", "archon", "admin", "moderator", "C0L3_M3D1N",
+  "D-Y N4M0U5", "AARCh0nn", "4 D M 1 N", "M0D3R470R",
+])("reserved equality uses the same normalization: %s", name => {
+  expect(validateName(name)).toEqual({ error: "That name is reserved" });
+});
+
+test("the curated vocabulary has a few hundred entries that are refused", () => {
+  expect(BLOCKED_WORDS.length).toBeGreaterThanOrEqual(250);
+  for (const word of BLOCKED_WORDS) {
+    expect(validateName(word).error).toBeDefined();
+  }
 });
 test("result requires nonnegative safe integers and an identity and touch boolean", () => {
   expect(validFinish(finish)).toBe(true); expect(isId(finish.playerId)).toBe(true);
