@@ -4,6 +4,7 @@ import { mountGame } from "./engine";
 import { Session } from "./session";
 import { canvasFixture } from "./canvas-fixture.test-support";
 import { arenaForViewport } from "./arena";
+import { ROBOT_SPEED } from "./config";
 
 function harness(screenShaped = false) {
   const names = ["window", "document", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;
@@ -18,7 +19,9 @@ function harness(screenShaped = false) {
   const context = fixture.context;
   const canvas = Object.assign(new EventTarget(), {
     width: 0, height: 0, getContext: () => context, getBoundingClientRect: () => box,
-    setPointerCapture: (id: number) => captures.add(id), hasPointerCapture: (id: number) => captures.has(id), releasePointerCapture: (id: number) => captures.delete(id),
+    setPointerCapture: (id: number) => captures.add(id), hasPointerCapture: (id: number) => captures.has(id), releasePointerCapture: (id: number) => {
+      captures.delete(id); event(canvas, "lostpointercapture", { pointerId: id });
+    },
   });
   const replacements = [win, doc, class { constructor(cb: () => void) { onResize = cb; } observe() {} disconnect() { disconnected = true; } }, (cb: FrameRequestCallback) => { callback = cb; return 1; }, () => { cancelled++; }];
   names.forEach((key, i) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: replacements[i] }));
@@ -67,10 +70,12 @@ test("engine maps mouse and touch, captures/releases pointers, prioritizes keys 
     h.event(h.win, "keyup", { key: "ArrowLeft" });
     h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 10, clientY: 370 });
     expect(h.captures.has(2)).toBe(true); expect(h.session.current!.touch).toBe(true);
-    h.tick(51); expect(h.session.current!.simulation.robot.x).toBeLessThan(300);
+    h.tick(51); expect(h.session.current!.simulation.robot.x).toBeCloseTo(300);
+    h.event(h.canvas, "pointermove", { pointerId: 2, pointerType: "touch", clientX: -50, clientY: 370 });
+    h.tick(68); expect(h.session.current!.simulation.robot.x).toBeLessThan(300);
     h.event(h.canvas, "pointercancel", { pointerId: 2 }); expect(h.captures.size).toBe(0);
-    const x = h.session.current!.simulation.robot.x; h.tick(68); expect(h.session.current!.simulation.robot.x).toBe(x);
-    h.event(h.win, "keydown", { key: "d", repeat: false }); h.event(h.win, "blur", {}); h.tick(85); h.tick(102);
+    const x = h.session.current!.simulation.robot.x; h.tick(85); expect(h.session.current!.simulation.robot.x).toBe(x);
+    h.event(h.win, "keydown", { key: "d", repeat: false }); h.event(h.win, "blur", {}); h.tick(102); h.tick(119);
     expect(h.session.current!.simulation.robot.x).toBe(x);
   } finally { h.cleanup(); }
 });
@@ -129,6 +134,8 @@ test("held keys cannot restart at death; a fresh key or touch immediately starts
     h.session.current!.simulation.dead = true; h.tick(68);
     h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 390, clientY: 370 });
     expect(h.session.view.over).toBe(false); expect(h.session.current!.touch).toBe(true); h.tick(85); h.tick(102);
+    expect(h.session.current!.simulation.robot.x).toBe(300);
+    h.event(h.canvas, "pointermove", { pointerId: 2, pointerType: "touch", clientX: 450, clientY: 370 }); h.tick(119);
     expect(h.session.current!.simulation.robot.x).toBeGreaterThan(300);
   } finally { h.cleanup(); }
 });
@@ -244,4 +251,74 @@ test.each([1, 2, 3])("fresh numeric key %i selects exactly its offered card", nu
     expect(h.session.view.choice).toBeNull(); expect(h.session.view.upgrades).toEqual([{ id, count: 1 }]);
     expect(s.time).toBe(20);
   } finally { h.cleanup(); }
+});
+
+test("touch wiring uses CSS displacement, ignores other fingers/mouse, and yields to nonzero keys", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness(true);
+  const pointer = (type: string, id: number, x = 100, y = 600, pointerType = "touch") =>
+    h.event(h.canvas, type, { pointerId: id, pointerType, button: 0, clientX: x, clientY: y });
+  try {
+    const s = h.session.current!.simulation; s.spawnIn = s.fireIn = Infinity;
+    h.tick(0); pointer("pointermove", 1, 390, 400, "mouse");
+    pointer("pointerdown", 2); h.tick(17);
+    expect(s.robot).toEqual({ x: 225, y: 400 });
+    expect(draw.mock.calls.at(-1)![2]).toEqual({ x: 90, y: 580, dx: 0, dy: 0 });
+    pointer("pointermove", 2, 133); h.tick(34);
+    const half = s.robot.x - 225; expect(half).toBeCloseTo(ROBOT_SPEED / 120);
+    for (const type of ["pointerdown", "pointermove", "pointerup", "pointercancel", "lostpointercapture"]) pointer(type, 3, -100, -100);
+    pointer("pointermove", 1, 0, 0, "mouse"); h.tick(51);
+    expect(s.robot.x - 225).toBeCloseTo(half * 2); expect(h.captures.has(2)).toBe(true);
+    h.event(h.win, "keydown", { key: "a", repeat: false }); h.tick(68);
+    expect(s.robot.x).toBeCloseTo(225);
+    h.event(h.win, "keydown", { key: "d", repeat: false }); h.tick(85);
+    expect(s.robot.x).toBeCloseTo(225 + half); // opposing keys cancel, touch resumes
+    h.event(h.win, "keyup", { key: "a" }); h.event(h.win, "keyup", { key: "d" });
+    pointer("pointermove", 2, -200); h.tick(102); // captured outside the canvas, never arena-clamped
+    expect(s.robot.x).toBeCloseTo(225 - half);
+    expect(draw.mock.calls.at(-1)![2]).toEqual({ x: 90, y: 580, dx: -60, dy: 0 });
+    pointer("pointermove", 2); h.tick(119); expect(s.robot.x).toBeCloseTo(225 - half);
+    pointer("pointerup", 2); pointer("pointermove", 3, 300); pointer("pointermove", 2, 300); h.tick(136);
+    expect(s.robot.x).toBeCloseTo(225 - half); expect(draw.mock.calls.at(-1)![2]).toBeNull();
+    pointer("pointermove", 1, 390, 370, "mouse"); h.tick(153);
+    expect(s.robot.x).toBeGreaterThan(225 - half);
+  } finally { h.cleanup(); draw.mockRestore(); }
+});
+
+test.each(["pointerup", "pointercancel", "lostpointercapture", "blur", "visibility", "resize", "token", "choice", "death"])(
+  "%s clears touch/capture/visual and delayed moves cannot revive it", reset => {
+    const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+    const pointer = (type: string, x = 100) => h.event(h.canvas, type, { pointerId: 2, pointerType: "touch", button: 0, clientX: x, clientY: 600 });
+    try {
+      let s = h.session.current!.simulation; s.spawnIn = s.fireIn = Infinity;
+      h.tick(0); pointer("pointerdown"); pointer("pointermove", 160); h.tick(17);
+      expect(draw.mock.calls.at(-1)![2]).not.toBeNull();
+      if (reset.startsWith("pointer") || reset === "lostpointercapture") pointer(reset);
+      else if (reset === "blur") h.event(h.win, "blur", {});
+      else if (reset === "visibility") h.event(h.doc, "visibilitychange", {});
+      else if (reset === "resize") h.resize(844, 390);
+      else if (reset === "token") { h.session.start(); s = h.session.current!.simulation; }
+      else if (reset === "death") { s.dead = true; h.tick(34); }
+      else {
+        s.time = 19.99; h.tick(34);
+        expect(h.session.view.choice).not.toBeNull(); expect(draw.mock.calls.at(-1)![2]).toBeNull();
+        const choice = h.session.view.choice!;
+        h.session.choose(h.session.view.token, choice.number, choice.offer[0]!);
+      }
+      expect(h.captures.size).toBe(0);
+      const robot = { ...s.robot };
+      pointer("pointermove", 300); h.tick(51); h.tick(68);
+      expect(s.robot).toEqual(robot); expect(draw.mock.calls.at(-1)![2]).toBeNull();
+      if (reset !== "death") {
+        pointer("pointerdown"); h.tick(85); expect(s.robot).toEqual(robot);
+        pointer("pointermove", 160); h.tick(102); expect(s.robot.x).toBeGreaterThan(robot.x);
+      }
+    } finally { h.cleanup(); draw.mockRestore(); }
+  });
+
+test("unmount releases an active touch and detaches its listeners", () => {
+  const h = harness();
+  h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 100, clientY: 600 });
+  expect(h.captures.has(2)).toBe(true); h.cleanup();
+  h.event(h.canvas, "pointerdown", { pointerId: 3, pointerType: "touch", button: 0, clientX: 100, clientY: 600 });
+  expect(h.captures.size).toBe(0);
 });

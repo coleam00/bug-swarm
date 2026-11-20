@@ -5,7 +5,11 @@ import { REVIEW_LASER, TEST_SHIELD, REFACTOR_BOMB, CI_DRONE, shieldCapacity, bom
 import { createUpgrades, openChoice, selectUpgrade, type UpgradeState } from "./upgrades";
 
 export interface Point { x: number; y: number }
-export interface Input { x: number; y: number; target: Point | null }
+export interface Input {
+  x: number; y: number; target: Point | null;
+  /** Directional speed fraction, clamped to 0..1. Omitted means full speed. Targets ignore it. */
+  speed?: number;
+}
 export interface Bug extends Point { id: number; kind: BugKind }
 // Read-only checkpoints around scored bomb/projectile resolution, before contact damage.
 // Observers must not mutate the simulation or retain its array as a snapshot.
@@ -89,6 +93,7 @@ export function step(state: Simulation, input: Input, dt: number, observer?: Kil
   state.time += dt;
   let dx = input.x, dy = input.y, distance = Math.hypot(dx, dy);
   let travel = ROBOT_SPEED * dt;
+  if (distance) travel *= Math.max(0, Math.min(1, input.speed ?? 1));
   if (!distance && input.target) {
     dx = input.target.x - state.robot.x; dy = input.target.y - state.robot.y;
     distance = Math.hypot(dx, dy); travel = Math.min(travel, distance);

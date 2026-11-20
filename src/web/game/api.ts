@@ -1,6 +1,10 @@
 import type { Best, Finish, Identity, Leader, RunStarted, Saved, TeamTotals } from "../../shared/api";
 import { isTeam, type Team } from "../../shared/teams";
 
+export class RateLimitError extends Error {
+  constructor() { super("Too many runs right now."); }
+}
+
 export class TeamConflictError extends Error {
   constructor(readonly team: Team) { super("The server has already assigned this player's team."); }
 }
@@ -24,6 +28,7 @@ export async function request<T>(path: string, body?: unknown, fetcher: (input: 
         method: body === undefined ? "GET" : "POST", cache: "no-store", signal: abort.signal,
         ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
       });
+      if (response.status === 429) throw new RateLimitError();
       if (!response.ok) {
         const message = await response.text();
         let detail;

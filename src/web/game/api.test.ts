@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { api, request } from "./api";
+import { api, RateLimitError, request, TeamConflictError } from "./api";
 import { createApp } from "../../server/app";
 import { getRun, openDb } from "../../server/db";
 import { UPGRADE_IDS } from "../../shared/upgrades";
@@ -21,6 +21,14 @@ test("request sends JSON, reads server responses and surfaces errors", async () 
 });
 test("the deadline also covers a response body that never completes", async () => {
   await expect(request("/api/leaderboard", undefined, async () => new Response(new ReadableStream({ start() {} })), 5)).rejects.toThrow();
+});
+
+test("429 is typed by status even without JSON; other failures and team conflicts retain their meaning", async () => {
+  for (const body of ['{"error":"Too many runs"}', "proxy rate limit", ""]) {
+    await expect(request("/api/runs", {}, async () => new Response(body, { status: 429 }))).rejects.toBeInstanceOf(RateLimitError);
+  }
+  await expect(request("/api/runs", {}, async () => new Response(new ReadableStream({ start() {} }), { status: 429 }))).rejects.toBeInstanceOf(RateLimitError);
+  await expect(request("/api/runs", {}, async () => Response.json({ code: "team-conflict", team: "tabs" }, { status: 409 }))).rejects.toBeInstanceOf(TeamConflictError);
 });
 
 test("exported client starts, finishes and reads scores against the in-process server", async () => {

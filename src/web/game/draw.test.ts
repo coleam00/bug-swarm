@@ -437,3 +437,32 @@ test.each([10, 30, 1500])("numeric atlas composes +%i in order, centered and cla
     expect(s.fixture.source(last).paints.filter(p => p.op === "fillText")).toHaveLength(11);
   }
 });
+
+test.each([1, 2])("joystick ring/knob retain CSS geometry at DPR %i across world scales and shake", ratio => {
+  for (const [width, height] of [[390, 844], [844, 390], [1280, 720]]) {
+    const s = scene({ width: 450, height: 800 }, width!, height!);
+    s.fixture.context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    s.renderer.resize(width!, height!, ratio, s.state.arena);
+    s.fx.hit();
+    for (const [dx, dy] of [[0, 0], [36, -48]]) {
+      s.fixture.context.paints.length = 0;
+      s.renderer.draw(s.state, s.fx, { x: 15, y: 200, dx: dx!, dy: dy! });
+      const circles = s.fixture.context.paints.filter(p => p.path.some(c => c.op === "arc" && c.args[0] === 15 + (p.op === "fill" ? dx! : 0) && c.args[1] === 200 + (p.op === "fill" ? dy! : 0)));
+      const ring = circles.find(p => p.op === "stroke")!, knob = circles.find(p => p.op === "fill")!;
+      expect(ring).toBeDefined(); expect(knob).toBeDefined();
+      expect(ring.path[0]!.args[2]).toBe(60); expect(knob.path[0]!.args[2]).toBe(12);
+      for (const paint of [ring, knob]) {
+        expect(paint.transform).toEqual([ratio, 0, 0, ratio, 0, 0]);
+        const alpha = colour(paint.op === "fill" ? paint.fillStyle : paint.strokeStyle).alpha * paint.globalAlpha;
+        expect(alpha).toBeGreaterThan(0.2); expect(alpha).toBeLessThan(0.8);
+        expect(paint.shadowBlur).toBe(0);
+      }
+      expect(ring.lineWidth).toBeGreaterThan(0); expect(ring.lineWidth).toBeLessThan(3);
+      expect(s.fixture.depth).toBe(0);
+      s.fixture.context.fillRect(0, 0, 1, 1);
+      expect(s.fixture.context.paints.at(-1)!.transform).toEqual([ratio, 0, 0, ratio, 0, 0]);
+    }
+    s.fixture.context.paints.length = 0; s.renderer.draw(s.state, s.fx, null);
+    expect(s.fixture.context.paints.some(p => p.path.some(c => c.op === "arc" && c.args[0] === 15 && c.args[1] === 200))).toBe(false);
+  }
+});
