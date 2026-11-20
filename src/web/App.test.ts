@@ -26,6 +26,7 @@ const { UPGRADE_IDS, UPGRADE_NAMES } = await import(${moduleUrl("../shared/upgra
 api.start = async () => ({ runId: "scratch-run" });
 api.finish = async () => ({ saved: true });
 api.teams = async () => ({ tabs: 0, spaces: 0 });
+api.standing = async () => ({ rank: null, total: 0, next: null });
 api.best = async () => ({ best: null }); api.leaders = async () => [];
 let session, movement;
 mock.module(${moduleUrl("game/session.ts")}, () => ({ CHOICE_GUARD_MS: 350, Session: class extends Session {
@@ -297,13 +298,13 @@ try {
   const readBest = api.best;
   api.best = async () => ({ best: 4321 });
   await act(async () => { await session.refreshBest(session.current); });
-  assert.ok(text(bestSummary()).includes("4321"), "Best must show the server value in the summary");
+  assert.ok(text(bestSummary()).includes("4,321"), "Best must show the server value in the summary");
   api.best = async () => { throw new Error("offline"); };
   await act(async () => { await session.refreshBest(session.current); });
   assert.ok(text(bestSummary()).includes("Unavailable"));
   let resolveBest;
   api.best = () => new Promise(resolve => { resolveBest = resolve; });
-  const race = () => tree.root.findByProps({ view: session.view });
+  const race = () => tree.root.find(node => typeof node.type === "function" && node.type.name === "TeamRace");
   assert.ok(race().findAllByType("p").some(node => text(node).trim()), "An empty race needs feedback");
   let resolveTeams;
   api.teams = () => new Promise(resolve => { resolveTeams = resolve; });
@@ -312,6 +313,39 @@ try {
   await act(async () => { resolveBest({ best: null }); });
   assert.ok(text(bestSummary()).includes("No saved runs yet"));
   api.best = readBest;
+  const summary = () => text(tree.root.findByProps({ className: "over-summary" })).replace(/ +/g, " ");
+  assert.ok(summary().includes("Not ranked"));
+  for (const [rank, gap] of [[1, null], [10, 1], [11, 1], [37, 120], [1001, 466548]]) {
+    api.standing = async () => ({ rank, total: 1234, next: rank === 1 ? null : { rank: rank - 1, pointsToBeat: gap } });
+    await act(async () => { await session.refreshStanding(session.current); });
+    assert.ok(summary().includes("Your best is # " + rank.toLocaleString("en-US") + " of 1,234"));
+    if (rank <= 10) assert.ok(summary().includes("You're in the top 10!"));
+    else assert.ok(summary().includes(gap.toLocaleString("en-US") + " " + (gap === 1 ? "point" : "points") + " to beat # " + (rank - 1).toLocaleString("en-US")));
+  }
+  api.leaders = async () => [
+    { playerId: "duplicate", name: "WWWWWWWWWWWWWWWW", score: 466548 },
+    { playerId: session.identity.playerId, name: "WWWWWWWWWWWWWWWW", score: 466548 },
+  ];
+  await act(async () => { await session.refreshLeaders(session.current); });
+  const rows = tree.root.findAllByType("li");
+  assert.equal(rows[0].props["aria-current"], undefined);
+  assert.equal(rows[1].props["aria-current"], "true");
+  assert.equal(text(rows[1].findByType("strong")), "466,548");
+  assert.equal(text(rows[1].findByProps({ className: "leader-name" })), "WWWWWWWWWWWWWWWW");
+  api.leaders = async () => [];
+  await act(async () => { await session.refreshLeaders(session.current); });
+  assert.equal(tree.root.findAllByProps({ "aria-current": "true" }).length, 0);
+  api.standing = async () => { throw new Error("ranking offline"); };
+  await act(async () => { await session.refreshStanding(session.current); });
+  assert.ok(summary().includes("Ranking unavailable"));
+  api.standing = () => new Promise(() => {});
+  await act(async () => { wait(800); session.start(); session.current.simulation.score = 466548; session.end(); });
+  assert.ok(summary().includes("Loading ranking…"));
+  assert.ok(summary().includes("466,548"));
+  await act(async () => { wait(800); session.restart(session.view.token); session.end(); });
+  assert.ok(summary().includes("Loading ranking…"));
+  api.standing = async () => ({ rank: null, total: 0, next: null });
+
   assert.ok(text(race().findByProps({ role: "status" })).trim(), "Loading needs feedback");
   assert.equal(race().findAllByProps({ className: "team-labels" }).length, 0, "Loading cannot invent totals");
   await act(async () => { resolveTeams({ tabs: 30, spaces: 10 }); });
@@ -330,6 +364,9 @@ try {
     assert.equal(labels[index].props.style.color, colour, name + " label colour");
     assert.equal(bar.findAllByType("span")[index].props.style.background, colour, name + " bar colour");
   }
+  api.teams = async () => ({ tabs: 466548, spaces: 123456 });
+  await act(async () => { await session.refreshTeams(session.current); });
+  assert.deepEqual(tree.root.findByProps({ className: "team-labels" }).findAllByType("strong").map(text), ["466,548", "123,456"]);
   api.teams = async () => ({ tabs: 0, spaces: 10 });
   await act(async () => { await session.refreshTeams(session.current); });
   assert.deepEqual(tree.root.findByProps({ className: "race-bar" }).findAllByType("span").map(span => span.props.style.width), ["0%", "100%"]);

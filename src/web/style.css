@@ -20,7 +20,7 @@ h1 { font-size: 1.8rem; } h2 { font-size: 1.2rem; }
 .team-choices button { flex: 1; min-width: 44px; }
 .team-race { max-width: 420px; margin: 12px auto; }
 .team-labels { display: flex; justify-content: space-between; gap: 12px; }
-.team-labels span { overflow-wrap: anywhere; min-width: 0; }
+.team-labels span { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; min-width: 0; }
 .race-bar { display: flex; height: 14px; margin-top: 6px; border-radius: 7px; overflow: hidden; }
 .race-bar.empty { opacity: 0.4; }
 #name-error { color: #ffaca3; min-height: 1.5em; }
@@ -36,7 +36,9 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .over ol { max-width: 420px; margin: 12px auto; padding-left: 32px; text-align: left; }
 .over li { padding: 3px 0 3px 4px; }
 .leader-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
-.leader-row span { overflow-wrap: anywhere; }
+.leader-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.leader-row strong, .team-labels strong { white-space: nowrap; }
+.over li[aria-current="true"] { background: #23463f; outline: 2px solid #86ded1; border-radius: 4px; }
 .restart { color: #86ded1; font-weight: bold; }
 footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px; padding: 8px 12px; font-size: 0.8rem; }
 /* Native modal dialogs use the viewport's top layer, outside shell padding. */
