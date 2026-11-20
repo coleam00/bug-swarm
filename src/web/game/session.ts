@@ -5,11 +5,26 @@ import { acquiredUpgrades } from "./upgrades";
 import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
 import { SQUARE_ARENA, type Arena } from "./arena";
 
+export const RESTART_GUARD_MS = 800;
+export const CHOICE_GUARD_MS = 350;
+export interface SessionTiming {
+  now(): number;
+  schedule(callback: () => void, delayMs: number): unknown;
+  cancel(handle: unknown): void;
+}
+const defaultTiming: SessionTiming = {
+  now: () => performance.now(),
+  schedule: (callback, delay) => setTimeout(callback, delay),
+  cancel: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+};
+type Guard = { token: number; choice: number | null; deadline: number };
+
 export interface LocalRun {
   token: number; simulation: Simulation; start: Promise<string | null>; runId?: string;
   touch: boolean; result?: Readonly<Finish>; startFailure?: "rate-limited";
 }
 export interface SessionView {
+  restartReady: boolean; choiceReady: boolean;
   token: number; over: boolean; score: number; save: "pending" | "saved" | "failed" | "rate-limited";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
@@ -23,6 +38,9 @@ export class Session {
   view: SessionView = this.emptyView(0);
   private listeners = new Set<() => void>();
   private poll?: ReturnType<typeof setInterval>;
+  private guard: Guard | null = null;
+  private guardTimer: unknown;
+  private guardGeneration = 0;
   private bestSequence = 0;
   private leadersSequence = 0;
   private bestApplied = 0;
@@ -32,15 +50,16 @@ export class Session {
   constructor(public identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error,
     private arena: () => Arena = () => SQUARE_ARENA,
-    private identityChanged: (identity: Identity) => void = () => {}) {}
+    private identityChanged: (identity: Identity) => void = () => {},
+    private timing: SessionTiming = defaultTiming) {}
 
   private emptyView(token: number): SessionView {
-    return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
+    return { token, restartReady: false, choiceReady: false, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
   }
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
-    this.syncPoll();
-    return () => { this.listeners.delete(listener); this.syncPoll(); };
+    this.syncPoll(); this.syncGuard();
+    return () => { this.listeners.delete(listener); this.syncPoll(); this.syncGuard(); };
   }
   private emit() { for (const listener of this.listeners) listener(); }
   private syncPoll() {
@@ -49,7 +68,45 @@ export class Session {
       void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!);
     }, 2000);
   }
-  start(touch = false): LocalRun {
+  private clearGuardTimer() {
+    this.guardGeneration++;
+    if (this.guardTimer !== undefined) this.timing.cancel(this.guardTimer);
+    this.guardTimer = undefined;
+  }
+  private syncGuard() {
+    this.clearGuardTimer();
+    const guard = this.guard;
+    if (!guard || !this.listeners.size) return;
+    const ready = guard.choice === null ? this.view.restartReady : this.view.choiceReady;
+    if (ready) return;
+    const remaining = guard.deadline - this.timing.now();
+    if (remaining <= 0) {
+      this.view = guard.choice === null ? { ...this.view, restartReady: true } : { ...this.view, choiceReady: true };
+      this.emit(); return;
+    }
+    const generation = this.guardGeneration;
+    this.guardTimer = this.timing.schedule(() => {
+      // Cancellation need not prevent a callback already queued by the host.
+      if (generation !== this.guardGeneration || this.guard !== guard) return;
+      this.guardTimer = undefined; this.syncGuard();
+    }, remaining);
+  }
+  canRestart(token: number): boolean {
+    return token === this.current?.token && this.view.over && this.guard?.choice === null &&
+      this.guard.token === token && this.timing.now() >= this.guard.deadline;
+  }
+  canChoose(token: number, number: number): boolean {
+    return token === this.current?.token && !this.current.result && !this.view.over &&
+      this.view.choice?.number === number && this.guard?.token === token && this.guard.choice === number &&
+      this.timing.now() >= this.guard.deadline;
+  }
+  restart(token: number, touch = false): boolean {
+    if (!this.canRestart(token)) return false;
+    return this.start(touch) !== null;
+  }
+  start(touch = false): LocalRun | null {
+    if (this.view.over && !this.canRestart(this.view.token)) return null;
+    this.clearGuardTimer(); this.guard = null;
     const token = this.view.token + 1;
     const run: LocalRun = { token, simulation: createSimulation(this.seed(), this.arena()), start: Promise.resolve(null), touch };
     this.current = run; this.view = this.emptyView(token); this.syncPoll();
@@ -75,15 +132,17 @@ export class Session {
   publishChoice(): void {
     const s = this.current?.simulation;
     if (!s?.upgrades.offer || this.view.over || this.view.choice?.number === s.upgrades.choiceNumber) return;
-    this.view = { ...this.view, choice: Object.freeze({ number: s.upgrades.choiceNumber, offer: s.upgrades.offer }) };
-    this.emit();
+    this.guard = { token: this.view.token, choice: s.upgrades.choiceNumber, deadline: this.timing.now() + CHOICE_GUARD_MS };
+    this.view = { ...this.view, choiceReady: false, choice: Object.freeze({ number: s.upgrades.choiceNumber, offer: s.upgrades.offer }) };
+    this.syncGuard(); this.emit();
   }
   choose(token: number, number: number, id: UpgradeId, touch = false): boolean {
     const run = this.current;
-    if (!run || run.result || token !== run.token || this.view.choice?.number !== number ||
+    if (!run || !this.canChoose(token, number) ||
       !chooseUpgrade(run.simulation, number, id)) return false;
     if (touch) this.touch();
-    this.view = { ...this.view, choice: null, upgrades: acquiredUpgrades(run.simulation.upgrades) }; this.emit();
+    this.clearGuardTimer(); this.guard = null;
+    this.view = { ...this.view, choiceReady: false, choice: null, upgrades: acquiredUpgrades(run.simulation.upgrades) }; this.emit();
     return true;
   }
   end(): void {
@@ -92,7 +151,9 @@ export class Session {
     const s = run.simulation;
     const upgrades = acquiredUpgrades(s.upgrades);
     run.result = Object.freeze({ playerId: this.identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: run.touch, upgrades });
-    this.view = { ...this.view, over: true, score: s.score, choice: null, upgrades }; this.emit(); this.syncPoll();
+    this.guard = { token: run.token, choice: null, deadline: this.timing.now() + RESTART_GUARD_MS };
+    this.view = { ...this.view, over: true, restartReady: false, choiceReady: false, score: s.score, choice: null, upgrades };
+    this.syncGuard(); this.emit(); this.syncPoll();
     void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
     void this.save(run);
   }

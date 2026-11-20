@@ -1,7 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
 import { Renderer } from "./draw";
 import { mountGame } from "./engine";
-import { Session } from "./session";
+import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
+import { FakeTiming } from "./timing.test-support";
 import { canvasFixture } from "./canvas-fixture.test-support";
 import { arenaForViewport } from "./arena";
 import { ROBOT_SPEED } from "./config";
@@ -25,16 +26,21 @@ function harness(screenShaped = false) {
   });
   const replacements = [win, doc, class { constructor(cb: () => void) { onResize = cb; } observe() {} disconnect() { disconnected = true; } }, (cb: FrameRequestCallback) => { callback = cb; return 1; }, () => { cancelled++; }];
   names.forEach((key, i) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: replacements[i] }));
+  const time = new FakeTiming();
+  let lastFrame = 0;
   const session = new Session({ playerId: crypto.randomUUID(), name: "Robot" }, {
     start: async () => ({ runId: "test-run" }), finish: async () => ({ saved: true }), best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
-  }, () => 1, undefined, screenShaped ? () => arenaForViewport(win.innerWidth, win.innerHeight) : undefined);
+  }, () => 1, undefined, screenShaped ? () => arenaForViewport(win.innerWidth, win.innerHeight) : undefined, undefined, time);
   session.start();
   const readouts: string[] = [];
   const unmount = mountGame(canvas as unknown as HTMLCanvasElement, session, () => {}, (text) => readouts.push(text));
   function event(target: EventTarget, type: string, props: Record<string, unknown>) {
     const value = Object.assign(new Event(type, { cancelable: true }), props); target.dispatchEvent(value); return value;
   }
-  return { session, canvas, win, doc, captures, event, readouts, resize: (w: number, h: number) => { box.width = w; box.height = h; onResize(); }, tick: (time: number) => callback!(time),
+  return { session, time, canvas, win, doc, captures, event, readouts, resize: (w: number, h: number) => { box.width = w; box.height = h; onResize(); }, tick: (timestamp: number) => {
+      // Explicit guard advances also move the next frame onto the same wall clock.
+      time.advance(Math.max(0, timestamp - lastFrame)); lastFrame = timestamp; callback!(time.now());
+    },
     cleanup() {
       unmount(); expect(cancelled).toBe(1); expect(disconnected).toBe(true); expect(captures.size).toBe(0);
       names.forEach((key, i) => { const descriptor = previous[i]; if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
@@ -51,10 +57,11 @@ test("rotation rescales the current run; keyboard and touch restarts sample the 
     h.event(h.canvas, "pointermove", { pointerId: 1, pointerType: "mouse", clientX: 854, clientY: 160 }); h.tick(17);
     expect(first.robot.x).toBeGreaterThan(225); expect(first.robot.y).toBeCloseTo(400);
     first.dead = true; h.tick(34); h.resize(295, 280);
+    h.time.advance(RESTART_GUARD_MS);
     h.event(h.win, "keydown", { key: " ", repeat: false });
     expect(h.session.current!.simulation.arena).toEqual({ width: 800, height: 450 });
     h.tick(51); h.session.current!.simulation.dead = true; h.tick(68);
-    h.win.innerWidth = 390; h.win.innerHeight = 844;
+    h.win.innerWidth = 390; h.win.innerHeight = 844; h.time.advance(RESTART_GUARD_MS);
     h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 200, clientY: 160 });
     expect(h.session.current!.simulation.arena).toEqual({ width: 450, height: 800 });
   } finally { h.cleanup(); }
@@ -121,17 +128,18 @@ test("F reports changing bug/effect readings, ignores repeats and resets effects
     expect(h.readouts).toHaveLength(count);
   } finally { h.cleanup(); draw.mockRestore(); }
 });
-test("held keys cannot restart at death; a fresh key or touch immediately starts a clean run", () => {
+test("held keys cannot restart at death; a fresh key or touch after the guard starts a clean run", () => {
   const h = harness();
   try {
     h.tick(0); h.event(h.win, "keydown", { key: "d", repeat: false });
     h.session.current!.simulation.dead = true; h.tick(17); const dead = h.session.current;
     h.event(h.win, "keydown", { key: "d", repeat: true }); expect(h.session.current).toBe(dead);
     h.event(h.win, "keydown", { key: "d", repeat: false }); expect(h.session.current).toBe(dead);
+    h.time.advance(RESTART_GUARD_MS);
     h.event(h.win, "keyup", { key: "d" }); h.event(h.win, "keydown", { key: "d", repeat: false });
     expect(h.session.current).not.toBe(dead); h.tick(34); h.tick(51);
     expect(h.session.current!.simulation.robot.x).toBeGreaterThan(300);
-    h.session.current!.simulation.dead = true; h.tick(68);
+    h.session.current!.simulation.dead = true; h.tick(68); h.time.advance(RESTART_GUARD_MS);
     h.event(h.canvas, "pointerdown", { pointerId: 2, pointerType: "touch", button: 0, clientX: 390, clientY: 370 });
     expect(h.session.view.over).toBe(false); expect(h.session.current!.touch).toBe(true); h.tick(85); h.tick(102);
     expect(h.session.current!.simulation.robot.x).toBe(300);
@@ -223,7 +231,7 @@ test.each([1, 2, 3])("fresh numeric key %i selects exactly its offered card", nu
   try {
     const s = h.session.current!.simulation; s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
     h.tick(0); h.tick(17);
-    const id = h.session.view.choice!.offer[number - 1]!;
+    const id = h.session.view.choice!.offer[number - 1]!; h.time.advance(CHOICE_GUARD_MS);
     h.event(h.win, "keydown", { key: String(number), repeat: false });
     expect(h.session.view.choice).toBeNull(); expect(h.session.view.upgrades).toEqual([{ id, count: 1 }]);
     expect(s.time).toBe(20);
@@ -279,6 +287,7 @@ test.each(["pointerup", "pointercancel", "lostpointercapture", "blur", "visibili
         s.time = 19.99; h.tick(34);
         expect(h.session.view.choice).not.toBeNull(); expect(draw.mock.calls.at(-1)![2]).toBeNull();
         const choice = h.session.view.choice!;
+        h.time.advance(CHOICE_GUARD_MS);
         h.session.choose(h.session.view.token, choice.number, choice.offer[0]!);
       }
       expect(h.captures.size).toBe(0);
@@ -298,4 +307,43 @@ test("unmount releases an active touch and detaches its listeners", () => {
   expect(h.captures.has(2)).toBe(true); h.cleanup();
   h.event(h.canvas, "pointerdown", { pointerId: 3, pointerType: "touch", button: 0, clientX: 100, clientY: 600 });
   expect(h.captures.size).toBe(0);
+});
+
+test("early canvas taps never capture or attribute touch; holding an early restart key cannot cross the deadline", () => {
+  const h = harness();
+  try {
+    h.tick(0); h.session.current!.simulation.dead = true; h.tick(17);
+    const run = h.session.current!, token = run.token;
+    const down = () => h.event(h.canvas, "pointerdown", { pointerId: 9, pointerType: "touch", button: 0, clientX: 100, clientY: 100 });
+    down(); expect(h.captures.size).toBe(0); expect(run.touch).toBe(false);
+    const early = h.event(h.win, "keydown", { key: "Enter", repeat: false }); expect(early.defaultPrevented).toBe(true);
+    h.time.advance(799); down(); expect(h.session.view.token).toBe(token);
+    h.time.advance(1);
+    h.event(h.canvas, "pointerup", { pointerId: 9 });
+    h.event(h.win, "keydown", { key: "Enter", repeat: true });
+    h.event(h.win, "keydown", { key: "Enter", repeat: false });
+    expect(h.session.current).toBe(run);
+    h.event(h.win, "keyup", { key: "Enter" });
+    h.event(h.win, "keydown", { key: "Enter", repeat: false });
+    expect(h.session.view.token).toBe(token + 1);
+    h.session.end(); h.time.advance(800); down();
+    expect(h.captures.has(9)).toBe(true); expect(h.session.current!.touch).toBe(true);
+  } finally { h.cleanup(); }
+});
+
+test.each(["1", "2", "3"])("early numeric %s is rejected through release, even when readiness changes", key => {
+  const h = harness();
+  try {
+    const s = h.session.current!.simulation; s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
+    h.tick(0); h.tick(17); const choice = h.session.view.choice!;
+    h.event(h.win, "keydown", { key, repeat: false }); expect(h.session.view.choice).toBe(choice);
+    h.event(h.win, "keyup", { key }); h.time.advance(349);
+    h.event(h.win, "keydown", { key, repeat: false }); expect(h.session.view.choice).toBe(choice);
+    h.time.advance(1);
+    for (const repeat of [true, false]) h.event(h.win, "keydown", { key, repeat });
+    expect(h.session.view.choice).toBe(choice); expect(s.time).toBe(20);
+    h.event(h.win, "keyup", { key }); h.event(h.win, "keydown", { key, repeat: false });
+    expect(h.session.view.choice).toBeNull();
+    expect(h.session.view.upgrades).toEqual([{ id: choice.offer[Number(key) - 1]!, count: 1 }]);
+  } finally { h.cleanup(); }
 });

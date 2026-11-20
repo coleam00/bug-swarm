@@ -143,10 +143,12 @@ try {
     await page.evaluate(() => { const s = (window as any).touchSession.current.simulation; s.time = 19.99; });
     await page.locator("dialog").waitFor();
     await page.screenshot({ path: join(evidence, "upgrade.png") });
+    await page.locator('dialog button[aria-disabled="false"]').first().waitFor();
     await page.locator("dialog button").first().tap(); await page.locator("dialog").waitFor({ state: "detached" }); await stationary();
     const beforeRestart = await read();
     await page.evaluate(() => { (window as any).touchSession.current.simulation.dead = true; });
     await page.locator(".over").waitFor();
+    await page.getByRole("button", { name: "Play again" }).waitFor({ state: "visible" });
     const restartBox = await page.locator("canvas").boundingBox(); assert.ok(restartBox);
     const restartTouch = { id: 1, x: restartBox.x + 60, y: restartBox.y + 60 };
     await touch("touchStart", [restartTouch]); await touch("touchEnd", []); await frames();

@@ -1,0 +1,52 @@
+{
+  "chrome": "156.0.8078.4",
+  "measuredAt": "2026-11-20T07:50:18.695Z",
+  "assertions": [
+    "390x844: early held touch releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed.",
+    "844x390: early held touch releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed.",
+    "1280x720: early held Space/Enter releases rejected; fresh card/numeric/restart inputs accepted; automatic prompts, fixed board layout, modal focus/escape, reduced motion, scrolling and offline restart passed."
+  ],
+  "390x844": {
+    "earlyOpacity": 0,
+    "finalAnimation": {
+      "opacity": "1",
+      "count": 1
+    },
+    "scroll": {
+      "top": 0,
+      "height": 760,
+      "content": 760
+    },
+    "startsBefore": 1,
+    "startsAfter": 2
+  },
+  "844x390": {
+    "earlyOpacity": 0.0953057,
+    "finalAnimation": {
+      "opacity": "1",
+      "count": 1
+    },
+    "scroll": {
+      "top": 417,
+      "height": 306,
+      "content": 723
+    },
+    "startsBefore": 1,
+    "startsAfter": 2
+  },
+  "1280x720": {
+    "earlyOpacity": 0.0955657,
+    "finalAnimation": {
+      "opacity": "1",
+      "count": 1
+    },
+    "scroll": {
+      "top": 87,
+      "height": 636,
+      "content": 723
+    },
+    "startsBefore": 1,
+    "startsAfter": 2
+  },
+  "errors": []
+}

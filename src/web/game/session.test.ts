@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 import type { Best, Finish, Leader, RunStarted, TeamTotals } from "../../shared/api";
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
-import { Session } from "./session";
+import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
+import { FakeTiming } from "./timing.test-support";
 import { arenaForViewport } from "./arena";
 import { step, IDLE } from "./simulation";
 
@@ -10,15 +11,21 @@ test("every start samples arena once and isolates dimensions from its provider",
   const api: GameApi = { teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
     best: async () => ({ best: null }), leaders: async () => [] };
   const session = new Session(identity, api, () => 42, undefined, () => { calls++; return dimensions; });
-  const first = session.start();
+  const first = startRun(session);
   dimensions.width = 1;
   expect(first.simulation.arena).toEqual({ width: 450, height: 800 });
   dimensions = { ...arenaForViewport(844, 390) };
-  const next = session.start(true);
+  const next = startRun(session, true);
   expect(calls).toBe(2); expect(next.simulation.arena).toEqual({ width: 800, height: 450 });
   expect(first.simulation.arena).toEqual({ width: 450, height: 800 });
 });
 
+const clocks = new WeakMap<Session, FakeTiming>();
+function startRun(session: Session, touch = false) {
+  // Existing non-timing scenarios request a fresh run only once input is eligible.
+  if (session.view.over) clocks.get(session)!.advance(RESTART_GUARD_MS);
+  return session.start(touch)!;
+}
 const identity = { playerId: crypto.randomUUID(), name: "Robot" };
 function deferred<T>() {
   let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
@@ -28,7 +35,7 @@ function deferred<T>() {
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 test("choice publication is immutable and transition-only; stale selections and restarts cannot alter finish builds", async () => {
   const start = deferred<RunStarted>(), { session, finishes } = fixture({ start: () => start.promise });
-  const run = session.start(), s = run.simulation;
+  const run = startRun(session), s = run.simulation;
   s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
   let transitions = 0;
   const unsubscribe = session.subscribe(() => { transitions++; });
@@ -38,14 +45,15 @@ test("choice publication is immutable and transition-only; stale selections and 
   expect(Object.isFrozen(choice)).toBe(true); expect(Object.isFrozen(choice.offer)).toBe(true);
   expect(session.choose(run.token + 1, choice.number, id)).toBe(false);
   expect(session.choose(run.token, choice.number - 1, id)).toBe(false);
+  clocks.get(session)!.advance(CHOICE_GUARD_MS);
   expect(session.choose(run.token, choice.number, id, true)).toBe(true);
   expect(session.choose(run.token, choice.number, id)).toBe(false);
-  expect(transitions).toBe(2); expect(run.touch).toBe(true);
+  expect(transitions).toBe(3); expect(run.touch).toBe(true);
   session.end(); const summary = session.view.upgrades, result = run.result!;
   expect(result.upgrades).toBe(summary); expect(summary).toEqual([{ id, count: 1 }]);
   expect(Object.isFrozen(summary)).toBe(true); expect(summary.every(Object.isFrozen)).toBe(true);
   expect(() => { (summary[0] as { count: number }).count = 99; }).toThrow();
-  session.start(); s.upgrades.counts[id] = 99;
+  startRun(session); s.upgrades.counts[id] = 99;
   expect(session.choose(run.token, choice.number, id)).toBe(false);
   start.resolve({ runId: "original" }); await flush();
   expect(finishes[0]?.result).toBe(result); expect(finishes[0]?.result.upgrades).toEqual([{ id, count: 1 }]);
@@ -62,14 +70,17 @@ function fixture(overrides: Partial<GameApi> = {}) {
     best: async () => ({ best: 7 }), leaders: async () => [{ playerId: "other", name: "Server", score: 99 }],
     ...overrides,
   };
-  return { session: new Session(identity, api, () => 42, (message, error) => logs.push({ message, error })), finishes, logs, starts: () => starts };
+  const time = new FakeTiming();
+  const session = new Session(identity, api, () => 42, (message, error) => logs.push({ message, error }), undefined, undefined, time);
+  clocks.set(session, time);
+  return { session, time, finishes, logs, starts: () => starts };
 }
 
 test.each(["before death", "after death", "after restart"])("start refusal %s stays on its local run and never submits", async (when) => {
   const response = deferred<RunStarted>();
   let starts = 0;
   const { session, finishes, logs } = fixture({ start: () => ++starts === 1 ? response.promise : Promise.resolve({ runId: "next" }) });
-  const original = session.start();
+  const original = startRun(session);
   expect(session.current).toBe(original); expect(session.view.over).toBe(false);
   if (when === "before death") {
     response.reject(new RateLimitError()); await flush();
@@ -81,7 +92,7 @@ test.each(["before death", "after death", "after restart"])("start refusal %s st
   }
   session.end();
   if (when === "after restart") {
-    const next = session.start();
+    const next = startRun(session);
     expect(session.current).toBe(next); expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
   }
   if (when !== "before death") { response.reject(new RateLimitError()); await flush(); }
@@ -94,7 +105,7 @@ test.each(["before death", "after death", "after restart"])("start refusal %s st
     expect(session.view.save).toBe("saved"); expect(finishes.map(finish => finish.id)).toEqual(["next"]);
   } else {
     expect(session.view.save).toBe("rate-limited");
-    session.start(); expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
+    startRun(session); expect(session.view.save).toBe("pending"); expect(session.view.over).toBe(false);
   }
 });
 
@@ -104,7 +115,7 @@ test("429 after a team-conflict retry remains rate-limited, with no finish or fu
     if (++starts === 1) throw new TeamConflictError("spaces");
     throw new RateLimitError();
   } });
-  const run = session.start(); await flush();
+  const run = startRun(session); await flush();
   expect(starts).toBe(2); expect(session.identity.team).toBe("spaces");
   expect(session.current).toBe(run); expect(session.view.over).toBe(false);
   expect(run.result).toBeUndefined(); expect(run.simulation.dead).toBe(false);
@@ -117,23 +128,23 @@ test("429 after a team-conflict retry remains rate-limited, with no finish or fu
 
 test("a finish refusal keeps generic save failure feedback", async () => {
   const { session } = fixture({ finish: async () => { throw new RateLimitError(); } });
-  session.start(); session.end(); await flush();
+  startRun(session); session.end(); await flush();
   expect(session.view.save).toBe("failed");
 });
 test("simulation starts immediately; a death before start response submits exactly once with its own id", async () => {
   const start = deferred<RunStarted>();
   const { session, finishes } = fixture({ start: () => start.promise });
-  const run = session.start(true); run.simulation.score = 23; run.simulation.squashes = 2; run.simulation.seconds = 3;
+  const run = startRun(session, true); run.simulation.score = 23; run.simulation.squashes = 2; run.simulation.seconds = 3;
   session.end(); session.end(); expect(session.view.over).toBe(true); expect(finishes).toHaveLength(0);
   start.resolve({ runId: "late" }); await flush();
   expect(finishes).toEqual([{ id: "late", result: { playerId: identity.playerId, score: 23, seconds: 3, squashes: 2, touch: true, upgrades: [] } }]);
   expect(Object.isFrozen(run.result)).toBe(true); expect(session.view.save).toBe("saved");
   expect(session.view.best).toBe(7); expect(session.view.leaders[0]?.score).toBe(99);
 });
-test("late starts and saves after immediate restart cannot mutate the new run", async () => {
+test("late starts and saves after an eligible restart cannot mutate the new run", async () => {
   const first = deferred<RunStarted>(), second = deferred<RunStarted>(); let calls = 0;
   const { session, finishes } = fixture({ start: () => ++calls === 1 ? first.promise : second.promise });
-  const old = session.start(); session.end(); session.start();
+  const old = startRun(session); session.end(); startRun(session);
   first.resolve({ runId: "old" }); second.resolve({ runId: "new" }); await flush();
   expect(finishes[0]?.id).toBe("old"); expect(session.current?.runId).toBe("new");
   expect(session.view.over).toBe(false); expect(session.view.save).toBe("pending"); expect(session.current).not.toBe(old);
@@ -142,16 +153,16 @@ test("offline start and rejected finish log failures and keep restart usable", a
   const failure = new Error("offline");
   for (const overrides of [{ start: async () => { throw failure; } }, { finish: async () => { throw failure; } }]) {
     const { session, logs } = fixture(overrides);
-    const run = session.start(); session.end(); await flush();
+    const run = startRun(session); session.end(); await flush();
     expect(session.view.save).toBe("failed"); expect(logs.some((entry) => entry.error === failure)).toBe(true);
     expect(logs.some((entry) => entry.message.includes(run.runId ?? String(run.token)) && entry.error instanceof Error)).toBe(true);
-    session.start(); expect(session.view.over).toBe(false);
+    startRun(session); expect(session.view.over).toBe(false);
   }
 });
 test("a pending save from an old run never changes current save state", async () => {
   const saved = deferred<{ saved: true }>();
   const { session } = fixture({ finish: () => saved.promise });
-  session.start(); session.end(); await flush(); session.start();
+  startRun(session); session.end(); await flush(); startRun(session);
   saved.resolve({ saved: true }); await flush(); expect(session.view.save).toBe("pending");
 });
 test("reads follow the server and stale reads cannot overwrite newer reads or runs", async () => {
@@ -160,7 +171,7 @@ test("reads follow the server and stale reads cannot overwrite newer reads or ru
     leaders: () => { const read = deferred<Leader[]>(); reads.push(read); return read.promise; },
     best: () => { const read = deferred<Best>(); bests.push(read); return read.promise; },
   });
-  session.start(); session.end(); await flush();
+  startRun(session); session.end(); await flush();
   expect(reads).toHaveLength(2); // On death, then after the durable save.
   reads[0]!.resolve([{ playerId: "b", name: "Old", score: 99 }]); bests[0]!.resolve({ best: 99 }); await flush();
   expect(session.view.leadersStatus).toBe("ready"); expect(session.view.leaders[0]?.name).toBe("Old");
@@ -176,14 +187,14 @@ test("reads follow the server and stale reads cannot overwrite newer reads or ru
   expect(session.view.leadersStatus).toBe("ready"); expect(session.view.bestStatus).toBe("ready");
   expect(session.view.best).toBe(2);
   void session.refreshLeaders(session.current!); void session.refreshBest(session.current!);
-  session.start(); reads[5]!.resolve([]); bests[5]!.resolve({ best: 99 }); await flush();
+  startRun(session); reads[5]!.resolve([]); bests[5]!.resolve({ best: 99 }); await flush();
   expect(session.view.leadersStatus).toBe("loading"); expect(session.view.over).toBe(false);
   expect(session.view.bestStatus).toBe("loading");
 });
 test("failed reads do not misreport an acknowledged save", async () => {
   const bestFailure = new Error("best unavailable"), leadersFailure = new Error("rankings unavailable");
   const { session, logs } = fixture({ best: async () => { throw bestFailure; }, leaders: async () => { throw leadersFailure; } });
-  session.start(); session.end(); await flush();
+  startRun(session); session.end(); await flush();
   expect(session.view.save).toBe("saved"); expect(session.view.bestStatus).toBe("failed"); expect(session.view.leadersStatus).toBe("failed");
   expect(logs.some((entry) => entry.error === bestFailure)).toBe(true);
   expect(logs.some((entry) => entry.error === leadersFailure)).toBe(true);
@@ -191,12 +202,12 @@ test("failed reads do not misreport an acknowledged save", async () => {
 test("touch resets between runs and subscriptions preserve the current run", async () => {
   const { session, starts } = fixture();
   const unsubscribe = session.subscribe(() => {});
-  if (!session.current) session.start(); unsubscribe();
+  if (!session.current) startRun(session); unsubscribe();
   const detach = session.subscribe(() => {});
-  if (!session.current) session.start(); await flush(); expect(starts()).toBe(1);
+  if (!session.current) startRun(session); await flush(); expect(starts()).toBe(1);
   session.touch(); expect(session.current?.touch).toBe(true);
-  session.start(); expect(session.current?.touch).toBe(false);
-  session.start(true); expect(session.current?.touch).toBe(true); detach();
+  startRun(session); expect(session.current?.touch).toBe(false);
+  startRun(session, true); expect(session.current?.touch).toBe(true); detach();
 });
 
 test("2500 ms leaderboard responses apply across 2000 ms polls, including a hidden row's removal", async () => {
@@ -226,7 +237,7 @@ test("2500 ms leaderboard responses apply across 2000 ms polls, including a hidd
     now = time;
   }
   try {
-    session.start(); session.end(); await flush();
+    startRun(session); session.end(); await flush();
     await advanceTo(2500);
     expect(session.view.leadersStatus).toBe("ready"); expect(session.view.leaders[0]?.name).toBe("Visible");
     hidden = true;
@@ -246,10 +257,10 @@ test("game-over polling refreshes every two seconds and stops when detached or r
   globalThis.clearInterval = (() => { cleared++; }) as typeof clearInterval;
   try {
     const { session } = fixture({ leaders: async () => { reads++; return []; }, teams: async () => { teamReads++; return { tabs: 0, spaces: 0 }; } });
-    const detach = session.subscribe(() => {}); session.start(); session.end(); await flush();
+    const detach = session.subscribe(() => {}); startRun(session); session.end(); await flush();
     expect(interval).toBe(2000); const before = reads, teamsBefore = teamReads; callback!(); await flush(); expect(reads).toBe(before + 1); expect(teamReads).toBe(teamsBefore + 1);
     detach(); expect(cleared).toBeGreaterThan(0); const stop = session.subscribe(() => {});
-    const beforeRestart = cleared; session.start(); expect(cleared).toBeGreaterThan(beforeRestart); stop();
+    const beforeRestart = cleared; startRun(session); expect(cleared).toBeGreaterThan(beforeRestart); stop();
   } finally { globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
 });
 
@@ -258,7 +269,7 @@ test("team reads apply despite newer pending requests, reject stale results, and
   const { session, logs } = fixture({ teams: () => {
     const read = deferred<TeamTotals>(); reads.push(read); return read.promise;
   } });
-  const run = session.start(); run.simulation.score = 999;
+  const run = startRun(session); run.simulation.score = 999;
   session.end(); await flush();
   expect(reads).toHaveLength(2); // Death and acknowledged save each refresh.
   expect(session.view.teamTotals).toBeNull();
@@ -282,7 +293,7 @@ test("team reads apply despite newer pending requests, reject stale results, and
   void session.refreshTeams(run);
   reads[6]!.resolve({ tabs: 3, spaces: 4 }); await flush();
   expect(session.view.teamsStatus).toBe("ready");
-  void session.refreshTeams(run); session.start();
+  void session.refreshTeams(run); startRun(session);
   reads[7]!.resolve({ tabs: 99, spaces: 99 }); await flush();
   expect(session.view.teamTotals).toBeNull(); expect(session.view.teamsStatus).toBe("loading");
 });
@@ -312,7 +323,7 @@ test("slow team polls apply without starvation and remove hidden totals within f
     now = time;
   }
   try {
-    session.start(); session.end(); await flush();
+    startRun(session); session.end(); await flush();
     await advanceTo(2500); expect(session.view.teamTotals?.tabs).toBe(99);
     hidden = true; await advanceTo(6500);
     expect(pending.length).toBeGreaterThan(0);
@@ -320,4 +331,104 @@ test("slow team polls apply without starvation and remove hidden totals within f
     unavailable = true; await advanceTo(10500); expect(session.view.teamsStatus).toBe("failed");
     unavailable = false; await advanceTo(14500); expect(session.view.teamsStatus).toBe("ready");
   } finally { detach(); globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear; }
+});
+
+test("restart rejects through 799ms without effects and accepts at 800ms, independent of saves", async () => {
+  const pending = deferred<RunStarted>();
+  let startCalls = 0;
+  const { session, time } = fixture({ start: () => { startCalls++; return pending.promise; } });
+  const run = session.start()!; session.end(); await flush();
+  expect(startCalls).toBe(1);
+  const view = session.view, result = run.result;
+  for (const elapsed of [0, 799]) {
+    time.advance(elapsed);
+    expect(session.canRestart(run.token)).toBe(false);
+    expect(session.restart(run.token, true)).toBe(false);
+    expect(session.start(true)).toBeNull(); session.end();
+    expect(session.view).toBe(view); expect(session.current).toBe(run);
+    expect(run.touch).toBe(false); expect(run.result).toBe(result);
+  }
+  // No subscribers/timer: eligibility still comes from the authoritative clock.
+  expect(time.pending.size).toBe(0); time.advance(1);
+  expect(session.restart(run.token - 1)).toBe(false);
+  expect(session.canRestart(run.token)).toBe(true);
+  expect(session.restart(run.token, true)).toBe(true);
+  expect(session.current!.touch).toBe(true); expect(session.view.over).toBe(false);
+  expect(session.restart(run.token)).toBe(false);
+  await flush(); expect(startCalls).toBe(2);
+  pending.resolve({ runId: "late" }); await flush();
+  expect(session.view.save).toBe("pending");
+});
+
+test("choice rejects through 349ms, preserves identity on duplicate publication and accepts at 350ms", () => {
+  const { session, time } = fixture(); const run = session.start()!, s = run.simulation;
+  s.time = 19.99; s.spawnIn = s.fireIn = Infinity; step(s, IDLE, 0.02); session.publishChoice();
+  const choice = session.view.choice!, frozen = structuredClone(s);
+  for (const elapsed of [0, 349]) {
+    time.advance(elapsed); session.publishChoice();
+    expect(session.view.choice).toBe(choice);
+    expect(session.choose(run.token, choice.number, choice.offer[0]!, true)).toBe(false);
+    expect(s).toEqual(frozen); expect(run.touch).toBe(false);
+  }
+  time.advance(1);
+  expect(session.choose(run.token + 1, choice.number, choice.offer[0]!)).toBe(false);
+  expect(session.choose(run.token, choice.number + 1, choice.offer[0]!)).toBe(false);
+  expect(session.choose(run.token, choice.number, choice.offer[0]!)).toBe(true);
+  expect(s.time).toBe(20);
+  s.time = 39.99; step(s, IDLE, 0.02); session.publishChoice();
+  expect(session.view.choiceReady).toBe(false);
+  expect(session.canChoose(run.token, session.view.choice!.number)).toBe(false);
+});
+
+test("readiness publishes once without input, API requests or poll resets; early timers reschedule the remainder", async () => {
+  let reads = 0;
+  const { session, time } = fixture({ leaders: async () => { reads++; return []; } });
+  let notifications = 0; const detach = session.subscribe(() => { notifications++; });
+  try {
+    session.start(); session.end(); await flush(); const before = notifications, requests = reads;
+    const timer = [...time.pending.values()][0]!; expect(timer.at).toBe(800);
+    time.time = 100; timer.callback();
+    expect(session.view.restartReady).toBe(false);
+    expect([...time.pending.values()][0]!.at).toBe(800);
+    time.advance(699); expect(notifications).toBe(before);
+    time.advance(1); expect(session.view.restartReady).toBe(true); expect(notifications).toBe(before + 1);
+    expect(reads).toBe(requests); expect(time.pending.size).toBe(0);
+    time.advance(100); expect(notifications).toBe(before + 1);
+  } finally { detach(); }
+});
+
+test("detach/reattach retains deadlines and obsolete callbacks cannot publish on a new transition", () => {
+  const { session, time } = fixture();
+  let detach = session.subscribe(() => {});
+  const run = session.start()!, s = run.simulation;
+  s.time = 19.99; step(s, IDLE, 0.02); session.publishChoice();
+  const choiceTimer = [...time.pending.values()][0]!.callback;
+  time.advance(100); detach(); expect(time.pending.size).toBe(0);
+  choiceTimer(); expect(time.pending.size).toBe(0);
+  detach = session.subscribe(() => {});
+  expect([...time.pending.values()][0]!.at).toBe(350);
+  time.advance(250); expect(session.view.choiceReady).toBe(true);
+  session.end(); expect(session.view.choiceReady).toBe(false);
+  expect(time.pending.size).toBe(1); choiceTimer(); expect(session.view.restartReady).toBe(false);
+  const deathTimer = [...time.pending.values()][0]!.callback;
+  detach(); time.advance(800); expect(session.view.restartReady).toBe(false);
+  detach = session.subscribe(() => {}); expect(session.view.restartReady).toBe(true);
+  session.restart(run.token); deathTimer();
+  expect(session.view.restartReady).toBe(false); expect(time.pending.size).toBe(0);
+  detach();
+});
+
+test("replacement and accepted selection cancel choice timers; death supersedes a choice with a full restart guard", () => {
+  const { session, time } = fixture(); const detach = session.subscribe(() => {});
+  try {
+    const offer = () => { const s = session.current!.simulation; s.time = 19.99; step(s, IDLE, 0.02); session.publishChoice(); };
+    session.start(); offer(); const stale = [...time.pending.values()][0]!.callback;
+    session.start(); expect(time.pending.size).toBe(0); stale(); expect(session.view.choiceReady).toBe(false);
+    offer(); time.time += 350;
+    const choice = session.view.choice!; expect(session.choose(session.view.token, choice.number, choice.offer[0]!)).toBe(true);
+    expect(time.pending.size).toBe(0);
+    session.start(); offer(); time.advance(100); session.end();
+    time.advance(799); expect(session.canRestart(session.view.token)).toBe(false);
+    time.advance(1); expect(session.view.restartReady).toBe(true);
+  } finally { detach(); }
 });
