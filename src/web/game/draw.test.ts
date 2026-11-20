@@ -332,9 +332,15 @@ test("shield bubble exists only with charges; two charges add a second outline",
   s.state.shieldCharges = 0; expect(outlines()).toHaveLength(0);
 });
 
-test("bomb ring expands across the arena, fades and expires", () => {
-  const s = scene(); s.fx.advance(0); s.fx.bomb(250, 200, 850);
-  const ring = () => s.render().find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[0] === 250));
+test.each([
+  { arena: SQUARE_ARENA, x: 300, y: 300 },
+  { arena: { width: 800, height: 450 }, x: 20, y: 30 },
+  { arena: { width: 450, height: 800 }, x: 430, y: 770 },
+])("bomb ring expands across $arena from ($x, $y), fades and expires", ({ arena, x, y }) => {
+  const s = scene(arena), farthestX = Math.max(x, arena.width - x), farthestY = Math.max(y, arena.height - y);
+  const cornerDistance = Math.hypot(farthestX, farthestY);
+  s.fx.advance(0); s.fx.bomb(x, y, cornerDistance);
+  const ring = () => s.render().find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[0] === x && c.args[1] === y));
   expect(ring()).toBeDefined();
   const first = ring()!; s.fx.advance(80); s.fx.advance(160); s.fx.advance(240);
   const later = ring()!;
@@ -343,7 +349,14 @@ test("bomb ring expands across the arena, fades and expires", () => {
   expect(later.globalAlpha).toBeGreaterThan(0.8); // stays bright through most expansion
   for (let t = 320; t <= 560; t += 80) s.fx.advance(t);
   expect(ring()!.globalAlpha).toBeLessThan(first.globalAlpha);
-  s.fx.advance(640); s.fx.advance(720);
+  s.fx.advance(640);
+  const nearEnd = ring()!, radius = nearEnd.path[0]!.args[2]!;
+  // Before expiry the painted ring must cross every arena edge and approach
+  // the farthest corner, not merely grow a little around the detonation.
+  visibleStroke(s, nearEnd, 0.02);
+  expect(radius).toBeGreaterThan(Math.max(farthestX, farthestY));
+  expect(radius).toBeGreaterThanOrEqual(cornerDistance * 0.95);
+  s.fx.advance(720);
   expect(ring()).toBeUndefined();
 });
 
@@ -363,7 +376,7 @@ test.each([false, true])("robot identity survives every foreground effect, hit a
   s.fx.squash(300, 300); s.fx.bomb(300, 300, 850);
   if (hit) s.fx.hit(); else s.state.invulnerableUntil = 10;
   const paints = s.render();
-  const ring = paints.filter(p => p.op === "stroke" && at(p, 300 + s.fx.shake.x, 300 + s.fx.shake.y) && p.path.some(c => c.op === "arc" && c.args[2] === 22)).at(-1)!;
+  const ring = paints.filter(p => p.op === "stroke" && at(p, 300 + s.fx.shake.x, 300 + s.fx.shake.y) && p.path.some(c => c.op === "arc" && c.args[2]! >= 20 && c.args[2]! <= 26)).at(-1)!;
   expect(ring).toBeDefined(); visibleStroke(s, ring, 0.9);
   expect(contrast(ring.strokeStyle, floorColour(s))).toBeGreaterThan(8);
   expect(ring.lineWidth).toBeGreaterThanOrEqual(3);
@@ -374,7 +387,7 @@ test.each([false, true])("robot identity survives every foreground effect, hit a
   const textIndex = paints.map(p => p.op === "drawImage" && p.args.length === 9).lastIndexOf(true);
   const bugIndex = paints.map(p => hasShape(p, "ellipse")).lastIndexOf(true);
   expect(bodyIndex).toBeGreaterThan(textIndex); expect(bodyIndex).toBeGreaterThan(bugIndex);
-  const halo = paints.find(p => glow(s, p) && p.args[3] === 88)!;
+  const halo = paints.find(p => glow(s, p) && Number(p.args[3]) >= 80 && Number(p.args[3]) <= 100 && Number(p.args[4]) >= 80 && Number(p.args[4]) <= 100 && Math.hypot(imageCentre(p)[0] - 300 - s.fx.shake.x, imageCentre(p)[1] - 300 - s.fx.shake.y) < 1e-6)!;
   expect(halo).toBeDefined(); expect(paints.indexOf(halo)).toBeGreaterThan(textIndex);
   // Particle and vignette passes also precede text and identity.
   const vignetteIndex = paints.map(p => p.op === "drawImage" && p.args[3] === 600).lastIndexOf(true);

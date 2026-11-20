@@ -40,7 +40,7 @@ Fresh real-RAF measurements use implementation **33f1896** (the production code 
 | Phone stress | 59.999 | 59.994 | 0.105 / 0.200 | 1.062 / 1.700 | 1024 / 6 / 12 / 1 / 1 |
 | Phone stress + burst | 59.682 | **56.000** | 0.142 / 0.300 | 1.687 / 3.000 | 1024 / 6 / 12 / 1 / 1 |
 
-Both normal stress runs meet the requested **58 FPS mean and lowest rolling** floor. The additional synthetic phone burst (300 cosmetic squashes every 500 ms) stayed bounded but its lowest rolling FPS was below 58; this extra workload is not a passing 58 FPS result. No samples are discarded and no cause is inferred. The normal stress comparison observed **0.055 ms less mean draw** and **0.007 ms less mean update** on desktop; these finite samples are not a guarantee of a speedup.
+Both normal stress runs meet the requested **58 FPS mean and lowest rolling** floor. The additional synthetic phone burst (300 cosmetic squashes every 1,000 ms) stayed bounded but its lowest rolling FPS was below 58; this extra workload is not a passing 58 FPS result. No samples are discarded and no cause is inferred. The normal stress comparison observed **0.055 ms less mean draw** and **0.007 ms less mean update** on desktop; these finite samples are not a guarantee of a speedup.
 
 Activity counters (including warmup) for desktop stress / desktop burst / phone stress / phone burst were respectively **69/69/66/67 shield blocks**, **4/4/4/4 bomb detonations**, **3324/3323/3311/3316 upgraded projectile kills**, and **423/423/423/423 drone cooldown firing transitions**. No page errors or API requests occurred. Vite and Chrome were stopped after capture/measurement.
 
