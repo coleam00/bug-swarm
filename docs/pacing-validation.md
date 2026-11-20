@@ -1,5 +1,23 @@
 # Pacing validation
 
+## Score plausibility calibration: issue #34
+
+Before changing validation, `runBroadMatrix()` from `scripts/pacing.ts` at `e5bd626764f19c2a729655621e8cb5a79e7d94b9` reproduced all 2,000 broad cases with zero invalid finishes:
+
+- Maximum run-average squashes per **submitted integer gameplay second**: **466 / 156 = 2.987179487**. This is the denominator used by the server cap, rather than a peak one-second burst.
+- Maximum run-average squashes per precise gameplay second: **2.969413764**.
+- Longest gameplay duration: **156.933333333 seconds**.
+
+All three maxima occur in evasive seed **46**, viewport **1280×800**, priority **ci-drone → review-laser → refactor-bomb → test-shield**. The maximum score is **4,816**, rather than the issue's approximate 2,600. Reproduce by importing `runBroadMatrix`, then reducing the returned rows by `squashes / seconds`, `squashes / elapsed` and `elapsed`, respectively.
+
+`rules.ts` caps squashes at **4.5 per submitted second** (approximately 1.5 × the measured maximum, rounded upward) and submitted gameplay duration at **300 seconds**. Submitted seconds cannot exceed whole server elapsed seconds. Extra wall-clock time, including upgrade choices, earns no extra squash allowance; an otherwise legal short finish can still arrive after a long pause. These empirical bounds limit obvious forgeries, not cheating: the maximum accepted score is still **13,800**, and the owner hides bad entries manually. Exceptional legitimate runs can exceed these measured bounds.
+
+The harness feeds every finish through the real `plausible()` function using `Math.ceil(state.time * 1000)` as its synthetic server completion timestamp, the first integer millisecond at or after completion. Raw `elapsed` remains unchanged for measurements. This avoids microscopic floating-point drift below a whole second when simulation scoring uses `floor(time + 1e-9)`; the server gains no clock slack. The seeded API simulation fixture uses the same convention. Default-matrix acceptance and the existing ten-seed broad slice cover compatibility, including whole-second finishes; full broad validation remains a manual command.
+
+Client saving also accounts for asynchronous registration: Session records the start acknowledgement on a monotonic clock and waits only if time since that acknowledgement cannot yet cover the unchanged submitted seconds. Gameplay and restart remain immediate. A real Session/simulation/request-client/in-memory-API regression reproduces the review's 250 ms start / 50 ms finish latency case (13 seconds, 8 squashes, 93 points), then verifies acceptance and board/team credit. It also covers a delayed response, a long pause with no unnecessary wait, and immediate restart during the previous run's pending save. Strict server elapsed validation remains unchanged. The cache-invalidation fixture now primes caches after one gameplay second and finishes 100 ms later; independently removing either invalidation fails the test while moderation-expiry assertions remain intact.
+
+Return validation: `bun run check --test-name-pattern '^(?!Vite serves cards)'` passes TypeScript and **258 tests / 87,446 assertions**. The two existing Vite tests are excluded because they open TCP listeners, which this task's socket-only isolation forbids; the unfiltered check is left to CI. `bun run pacing` (20 cases) and `bun run pacing --broad` (2,000 cases) pass every gate with **zero rejected finishes**. Rule and API regressions reject the 20-second / 120-squash forgery; the API confirms no event, personal best, leaderboard or team credit, then accepts a legal finish on the same run.
+
 ## Current correction: issue #30
 
 The fixed broad harness was captured against unchanged combat at `0339ee9`, before tuning. [Complete before report](pacing-validation/issue-30-before.txt) and [complete after report](pacing-validation/issue-30-after.txt) contain all 2,000 cases, acquired builds, grouping summaries and gates. Older evidence below describes issue #21 and remains historical.

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { isId, nameKey, plausible, validFinish, validateName, MAX_SQUASHES_PER_SECOND } from "./rules";
+import { isId, nameKey, plausible, validFinish, validateName } from "./rules";
 import { parseFinish } from "./rules";
 import { UPGRADE_IDS } from "../shared/upgrades";
 const finish = { playerId: crypto.randomUUID(), score: 62, squashes: 6, seconds: 2, touch: true };
@@ -19,12 +19,21 @@ test("finish normalizes legacy and reordered builds and validates pick capacity"
   expect(parseFinish({ ...result, upgrades: [{ ...upgrades[0], count: 5 }] })).toBeNull();
 });
 
-test("faster spawning retains the six squashes per second cap: boundary accepted, one more rejected", () => {
-  expect(MAX_SQUASHES_PER_SECOND).toBe(6);
-  const seconds = 60, squashes = MAX_SQUASHES_PER_SECOND * seconds;
-  const boundary = { ...finish, seconds, squashes, score: squashes * 10 + seconds };
-  expect(plausible(boundary, 1000, 61000)).toBe(true);
-  expect(plausible({ ...boundary, squashes: squashes + 1, score: boundary.score + 10 }, 1000, 61000)).toBe(false);
+test.each([20000, 600000])("squash allowance uses submitted gameplay seconds even after %i ms of wall time", elapsed => {
+  const result = (seconds: number, squashes: number) => ({ ...finish, seconds, squashes, score: squashes * 10 + seconds });
+  expect(plausible(result(20, 120), 1000, 1000 + elapsed)).toBe(false);
+  expect(plausible(result(20, 90), 1000, 1000 + elapsed)).toBe(true);
+  expect(plausible(result(20, 91), 1000, 1000 + elapsed)).toBe(false);
+  expect(plausible(result(1, 4), 1000, 1000 + elapsed)).toBe(true);
+  expect(plausible(result(1, 5), 1000, 1000 + elapsed)).toBe(false);
+  expect(plausible(result(0, 0), 1000, 1000 + elapsed)).toBe(true);
+  expect(plausible(result(0, 1), 1000, 1000 + elapsed)).toBe(false);
+});
+
+test("submitted gameplay duration is capped at 300 seconds despite longer wall time", () => {
+  const boundary = { ...finish, seconds: 300, squashes: 0, score: 300 };
+  expect(plausible(boundary, 1000, 601000)).toBe(true);
+  expect(plausible({ ...boundary, seconds: 301, score: 301 }, 1000, 601000)).toBe(false);
 });
 test("name rules trim and allow exactly the published character set and lengths", () => {
   expect(validateName("  Robot-7_ ok  ")).toEqual({ name: "Robot-7_ ok" });
@@ -44,11 +53,10 @@ test("result requires nonnegative safe integers and an identity and touch boolea
   expect(validFinish({ ...finish, touch: 1 })).toBe(false); expect(validFinish(null)).toBe(false);
   expect(validFinish({ ...finish, playerId: "bad" })).toBe(false);
 });
-test("server elapsed boundaries give seconds two seconds slack but never squash slack", () => {
-  expect(plausible(finish, 1000, 2000)).toBe(true);
-  expect(plausible(finish, 1000, 1999)).toBe(false);
-  expect(plausible({ ...finish, score: 63, seconds: 3 }, 1000, 2000)).toBe(true);
-  expect(plausible({ ...finish, score: 64, seconds: 4 }, 1000, 2000)).toBe(false);
-  expect(plausible({ ...finish, score: 63 }, 1000, 2000)).toBe(false);
-  expect(plausible({ ...finish, score: 2, squashes: 0 }, 1000, 0)).toBe(true);
+test("submitted seconds never exceed server elapsed time and scores must match exactly", () => {
+  expect(plausible(finish, 1000, 2999)).toBe(false);
+  expect(plausible(finish, 1000, 3000)).toBe(true);
+  expect(plausible({ ...finish, score: 63 }, 1000, 3000)).toBe(false);
+  expect(plausible({ ...finish, score: 2, squashes: 0 }, 1000, 0)).toBe(false);
+  expect(plausible({ ...finish, score: 0, seconds: 0, squashes: 0 }, 1000, 0)).toBe(true);
 });

@@ -3,6 +3,10 @@ import type { Best, Finish, Leader, RunStarted, TeamTotals } from "../../shared/
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
 import { FakeTiming } from "./timing.test-support";
+import { request } from "./api";
+import { createApp } from "../../server/app";
+import { countEvents, getRun, openDb } from "../../server/db";
+import { plausible } from "../../server/rules";
 import { arenaForViewport } from "./arena";
 import { step, IDLE } from "./simulation";
 
@@ -33,6 +37,79 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+
+test.each([
+  { startDelay: 250, responseDelay: 0, finishDelay: 50, pause: 0, restart: false },
+  { startDelay: 50, responseDelay: 250, finishDelay: 0, pause: 0, restart: false },
+  { startDelay: 250, responseDelay: 0, finishDelay: 50, pause: 600000, restart: false },
+  { startDelay: 1500, responseDelay: 0, finishDelay: 50, pause: 0, restart: true },
+])("honest finishes survive delayed registration without blocking play: %j", async scenario => {
+  let now = 0;
+  const pending: { at: number; resolve: () => void }[] = [];
+  const sleep = (ms: number) => new Promise<void>(resolve => { pending.push({ at: now + ms, resolve }); });
+  async function advanceTo(target: number) {
+    await flush();
+    for (;;) {
+      pending.sort((a, b) => a.at - b.at);
+      if (!pending.length || pending[0]!.at > target) break;
+      const next = pending.shift()!;
+      now = next.at; next.resolve(); await flush();
+    }
+    now = target; await flush();
+  }
+  const db = openDb(":memory:"), app = createApp(db, { now: () => Math.floor(now) });
+  const submitted: Finish[] = [], statuses: number[] = [], errors: unknown[] = [], waits: number[] = [];
+  const fetcher = async (path: string, init?: RequestInit) => {
+    const start = path === "/api/runs", finish = path.endsWith("/finish");
+    if (start) await sleep(scenario.startDelay);
+    if (finish) { submitted.push(JSON.parse(String(init?.body)) as Finish); await sleep(scenario.finishDelay); }
+    const response = await app.request(path, init);
+    if (start) await sleep(scenario.responseDelay);
+    if (finish) statuses.push(response.status);
+    return response;
+  };
+  const api: GameApi = {
+    start: identity => request("/api/runs", identity, fetcher),
+    finish: (id, result) => request(`/api/runs/${id}/finish`, result, fetcher),
+    best: id => request(`/api/players/${id}/best`, undefined, fetcher),
+    leaders: () => request("/api/leaderboard", undefined, fetcher),
+    teams: () => request("/api/teams", undefined, fetcher),
+  };
+  const session = new Session({ ...identity, team: "tabs" }, api, () => 42,
+    (_message, error) => errors.push(error), () => arenaForViewport(390, 844), undefined,
+    { now: () => now, sleep: ms => { waits.push(ms); return sleep(ms); } });
+  try {
+    const run = session.start(true)!, s = run.simulation;
+    expect(s.time).toBe(0); expect(run.runId).toBeUndefined();
+    while (!s.dead) { step(s, IDLE, 1 / 60); await advanceTo(Math.ceil(s.time * 1000)); }
+    await advanceTo(now + scenario.pause);
+    const expected = { playerId: identity.playerId, score: s.score, squashes: s.squashes, seconds: s.seconds, touch: true, upgrades: [] };
+    expect(expected).toMatchObject({ score: 93, squashes: 8, seconds: 13 });
+    session.end(); session.end(); await flush();
+    if (scenario.restart) {
+      await advanceTo(now + RESTART_GUARD_MS - 1);
+      expect(session.restart(run.token)).toBe(false);
+      await advanceTo(now + 1);
+      expect(statuses).toEqual([]); // The old save is still waiting for server elapsed time.
+      expect(session.restart(run.token)).toBe(true);
+      expect(session.view.over).toBe(false);
+      await flush();
+    }
+    await advanceTo(now + 30000);
+    expect(errors).toEqual([]); expect(statuses).toEqual([200]);
+    expect(submitted).toEqual([expected]); expect(run.result).toEqual(expected);
+    expect(countEvents(db).run_ended).toBe(1);
+    const stored = getRun(db, run.runId!)!;
+    expect(plausible(expected, stored.started_at_ms, stored.ended_at_ms!)).toBe(true);
+    expect(await api.best(identity.playerId)).toEqual({ best: expected.score });
+    expect(await api.teams()).toEqual({ tabs: expected.score, spaces: 0 });
+    expect(await api.leaders()).toEqual([{ playerId: identity.playerId, name: identity.name, score: expected.score }]);
+    if (scenario.pause) expect(waits).toEqual([]);
+    if (scenario.restart) {
+      expect(session.current).not.toBe(run); expect(session.view.over).toBe(false); expect(session.view.save).toBe("pending");
+    } else expect(session.view.save).toBe("saved");
+  } finally { db.close(); }
+});
 test("choice publication is immutable and transition-only; stale selections and restarts cannot alter finish builds", async () => {
   const start = deferred<RunStarted>(), { session, finishes } = fixture({ start: () => start.promise });
   const run = startRun(session), s = run.simulation;
@@ -62,7 +139,7 @@ test("choice publication is immutable and transition-only; stale selections and 
 });
 function fixture(overrides: Partial<GameApi> = {}) {
   const finishes: { id: string; result: Finish }[] = [], logs: { message: string; error: unknown }[] = [];
-  let starts = 0;
+  let starts = 0, now = 0;
   const api: GameApi = {
     teams: async () => ({ tabs: 0, spaces: 0 }),
     start: async () => ({ runId: `run-${++starts}` }),
@@ -71,7 +148,8 @@ function fixture(overrides: Partial<GameApi> = {}) {
     ...overrides,
   };
   const time = new FakeTiming();
-  const session = new Session(identity, api, () => 42, (message, error) => logs.push({ message, error }), undefined, undefined, time);
+  const session = new Session(identity, api, () => 42, (message, error) => logs.push({ message, error }), undefined, undefined,
+    { now: () => now, sleep: async ms => { now += ms; } }, time);
   clocks.set(session, time);
   return { session, time, finishes, logs, starts: () => starts };
 }

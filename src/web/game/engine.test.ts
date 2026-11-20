@@ -30,7 +30,8 @@ function harness(screenShaped = false) {
   let lastFrame = 0;
   const session = new Session({ playerId: crypto.randomUUID(), name: "Robot" }, {
     start: async () => ({ runId: "test-run" }), finish: async () => ({ saved: true }), best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
-  }, () => 1, undefined, screenShaped ? () => arenaForViewport(win.innerWidth, win.innerHeight) : undefined, undefined, time);
+  }, () => 1, undefined, screenShaped ? () => arenaForViewport(win.innerWidth, win.innerHeight) : undefined, undefined,
+    { now: time.now, sleep: async ms => { time.advance(ms); } }, time);
   session.start();
   const readouts: string[] = [];
   const unmount = mountGame(canvas as unknown as HTMLCanvasElement, session, () => {}, (text) => readouts.push(text));
@@ -223,6 +224,29 @@ test("choice releases steering/capture, freezes visuals, requires fresh numeric 
     h.tick(600000); expect(s.time).toBe(20); h.tick(600017);
     expect(s.time).toBeCloseTo(20 + 1 / 60); expect(s.robot).toEqual(robot);
     expect(h.session.view.upgrades.reduce((sum, item) => sum + item.count, 0)).toBe(1);
+  } finally { h.cleanup(); draw.mockRestore(); }
+});
+
+test("shield flash, bomb and merged labels freeze through choices, resume without catch-up, decay after death and reset on focus/restart", () => {
+  const draw = spyOn(Renderer.prototype, "draw"), h = harness();
+  try {
+    const s = h.session.current!.simulation; s.spawnIn = s.fireIn = Infinity;
+    h.tick(0); const fx = draw.mock.calls.at(-1)![1];
+    fx.block(); fx.bomb(100, 100, 850); fx.squash(100, 100); fx.squash(110, 100);
+    expect(fx.labels.total[0]).toBe(20);
+    s.time = 19.99; h.tick(17); expect(h.session.view.choice).not.toBeNull();
+    const flash = fx.shieldFlash, ring = fx.ring.life, label = fx.labels.life[0];
+    h.tick(60000); expect(fx.shieldFlash).toBe(flash); expect(fx.ring.life).toBe(ring); expect(fx.labels.life[0]).toBe(label);
+    h.event(h.win, "keydown", { key: "1", repeat: false });
+    h.tick(120000); expect(fx.shieldFlash).toBe(flash); expect(fx.ring.life).toBe(ring);
+    h.tick(120017); expect(fx.shieldFlash).toBeLessThan(flash); expect(fx.ring.life).toBeLessThan(ring);
+    s.dead = true; h.tick(120034);
+    for (let i = 0; i < 50; i++) h.tick(120051 + i * 17);
+    expect(fx.shieldFlash).toBe(0); expect(fx.ring.life).toBe(0); expect(fx.labels.count).toBe(0);
+    fx.block(); fx.bomb(100, 100, 850); fx.squash(100, 100);
+    h.event(h.win, "blur", {}); expect(fx.liveCount).toBe(0); expect(fx.labels.total.every(n => n === 0)).toBe(true);
+    fx.block(); fx.bomb(100, 100, 850); h.session.start(); h.tick(122000);
+    expect(fx.liveCount).toBe(0); expect(fx.shieldFlash).toBe(0);
   } finally { h.cleanup(); draw.mockRestore(); }
 });
 
