@@ -126,10 +126,11 @@ test("finish invalidates rankings, a separate moderation connection expires with
   const app = createApp(db, { now: () => time });
   const playerId = crypto.randomUUID();
   const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" as const }))).json() as { runId: string };
+  time += 1000;
   expect(await (await app.request("/api/leaderboard")).json()).toEqual([]);
   expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: 0, spaces: 0 });
-  time += 1000;
-  await app.request(`/api/runs/${runId}/finish`, post({ playerId, score: 1, squashes: 0, seconds: 1, touch: false }));
+  time += 100;
+  expect((await app.request(`/api/runs/${runId}/finish`, post({ playerId, score: 1, squashes: 0, seconds: 1, touch: false }))).status).toBe(200);
   const response = await app.request("/api/leaderboard"); expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(await response.json()).toEqual([{ playerId, name: "Robot", score: 1 }]);
   const teams = await app.request("/api/teams");

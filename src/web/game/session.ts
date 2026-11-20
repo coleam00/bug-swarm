@@ -6,7 +6,7 @@ import type { AcquiredUpgrade, UpgradeId } from "../../shared/upgrades";
 import { SQUARE_ARENA, type Arena } from "./arena";
 
 export interface LocalRun {
-  token: number; simulation: Simulation; start: Promise<string | null>; runId?: string;
+  token: number; simulation: Simulation; start: Promise<string | null>; runId?: string; registeredAt?: number;
   touch: boolean; result?: Readonly<Finish>;
 }
 export interface SessionView {
@@ -32,7 +32,8 @@ export class Session {
   constructor(public identity: Identity, private api: GameApi, private seed: () => number,
     private log: (message: string, error: unknown) => void = console.error,
     private arena: () => Arena = () => SQUARE_ARENA,
-    private identityChanged: (identity: Identity) => void = () => {}) {}
+    private identityChanged: (identity: Identity) => void = () => {},
+    private clock = { now: () => performance.now(), sleep: (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms)) }) {}
 
   private emptyView(token: number): SessionView {
     return { token, over: false, score: 0, save: "pending", best: null, bestStatus: "loading", leaders: [], leadersStatus: "loading", teamTotals: null, teamsStatus: "loading", choice: null, upgrades: Object.freeze([]) };
@@ -64,7 +65,7 @@ export class Session {
         return this.api.start(this.identity);
       }
     }).then(({ runId }) => {
-      run.runId = runId; return runId;
+      run.registeredAt = this.clock.now(); run.runId = runId; return runId;
     }).catch((error) => {
       this.log(`Run start failed [${run.token}]`, error); return null;
     });
@@ -99,6 +100,10 @@ export class Session {
     try {
       const id = await run.start;
       if (!id) throw new Error("No server run id");
+      // Registration can trail immediate gameplay. Time since its acknowledgement
+      // is a conservative lower bound on server elapsed time; delay only the save.
+      const readyAt = run.registeredAt! + run.result!.seconds * 1000;
+      while (this.clock.now() < readyAt) await this.clock.sleep(Math.ceil(readyAt - this.clock.now()));
       await this.api.finish(id, run.result!);
       if (this.current !== run) return;
       this.view = { ...this.view, save: "saved" }; this.emit();

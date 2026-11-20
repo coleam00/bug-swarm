@@ -29,7 +29,7 @@ api.teams = async () => ({ tabs: 0, spaces: 0 });
 api.best = async () => ({ best: null }); api.leaders = async () => [];
 let session;
 mock.module(${moduleUrl("game/session.ts")}, () => ({ Session: class extends Session {
-  constructor(...args) { super(...args); session = this; }
+  constructor(...args) { super(...args, { now: () => clock, sleep: async ms => { wait(ms); } }); session = this; }
 } }));
 mock.module(${moduleUrl("game/engine.ts")}, () => ({ mountGame: () => () => {} }));
 
