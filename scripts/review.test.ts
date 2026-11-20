@@ -5,12 +5,12 @@ import { join } from "node:path";
 import { countEvents, finishRun, getRun, leaderboard, openDb, startRun, teamTotals } from "../src/server/db";
 import { report } from "./stats";
 
-test("review and approve CLI use separate processes, retain history and respect hide", () => {
+test("review and approve package scripts use separate processes, retain history and respect hide", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-review-")), home = join(dir, "home"); mkdirSync(home);
   const env = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, DATA_DIR: dir };
   const path = join(dir, "app.db");
   const run = (script: string, args: string[] = []) => {
-    const child = Bun.spawnSync([process.execPath, `scripts/${script}.ts`, ...args], { env, stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawnSync([process.execPath, "run", "--silent", script, ...args], { cwd: join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" });
     return { code: child.exitCode, out: child.stdout.toString().trim(), error: child.stderr.toString().trim() };
   };
   let db: ReturnType<typeof openDb> | undefined;

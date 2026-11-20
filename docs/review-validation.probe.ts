@@ -89,7 +89,7 @@ try {
       await page.getByText("Not ranked", { exact: true }).waitFor();
       assert.equal(await page.locator('.team-labels').getByText("0", { exact: true }).count(), 1);
       const command = (script: string, args: string[] = []) => {
-        const child = Bun.spawnSync([process.execPath, `scripts/${script}.ts`, ...args], { env: { ...env, DATA_DIR: data }, stdout: "pipe", stderr: "pipe" });
+        const child = Bun.spawnSync([process.execPath, "run", "--silent", script, ...args], { env: { ...env, DATA_DIR: data }, stdout: "pipe", stderr: "pipe" });
         assert.equal(child.exitCode, 0, child.stderr.toString()); return child.stdout.toString().trim();
       };
       const review = command("review"); assert.ok(review.includes(runId));
