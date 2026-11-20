@@ -1,5 +1,51 @@
 # Procedural look validation
 
+## Full-swarm readability (issue #39, 2026-11-20)
+
+The robot now has a final foreground pass, a dark-backed mint identity ring and a cached soft halo. Particles, vignette, bomb and labels cannot cover it. Charged shields have a blue bubble outside that ring; real charge consumption starts a separate 220 ms blue-white rim, including after the last charge. Bombs use bright violet/white strokes for 650 ms, expanding to the farthest corner. Larger blue-violet drones and source-coloured projectiles remain distinct with or without laser; lasers have longer, wider beams.
+
+Score text has exactly 12 slots. Kills within 250 ms of the first emission and 40 logical world units of its original position merge into the nearest group (inclusive boundaries, slot-order ties). A merge changes only the numeric total, never the anchor or lifetime. Unmatched overflow drops only cosmetic text. One cached atlas holds `+` and ten digits, with no per-total cache, strings or text rasterization during drawing. Gameplay scoring, movement, collision sizes, targeting, upgrade strength, cooldowns and server contracts are unchanged.
+
+### Visual evidence
+
+Factory headless Chrome **156.0.8078.4** used fresh scratch home/browser profiles and our own loopback Vite process, with no API or database server. Baseline is **371060ad73472c6739005774e8b878c989f15fa4**. Both captures use the developer benchmark's `profile=double`, seed 73, 150 bugs and two of every upgrade. Desktop is **1280×720 / DPR 1**; phone is **390×844 CSS px / DPR 2** (phone PNGs are presented at CSS resolution). Controlled RAF times are for image comparison only. [Before state/time records](look-evidence/issue-39/before-capture.json) and [after records](look-evidence/issue-39/after-capture.json) distinguish charged, blocked and expired effects.
+
+| Scene (controlled elapsed time) | Desktop before / after | Phone before / after |
+| --- | --- | --- |
+| Dense combat, no shield (8000 ms) | [before](look-evidence/issue-39/before-desktop-dense.png) / [after](look-evidence/issue-39/after-desktop-dense.png) | [before](look-evidence/issue-39/before-phone-dense.png) / [after](look-evidence/issue-39/after-phone-dense.png) |
+| Charged shield (1950 ms) | [before](look-evidence/issue-39/before-desktop-charged.png) / [after](look-evidence/issue-39/after-desktop-charged.png) | [before](look-evidence/issue-39/before-phone-charged.png) / [after](look-evidence/issue-39/after-phone-charged.png) |
+| Real block, one charge remains (2050 ms) | [before](look-evidence/issue-39/before-desktop-block.png) / [after](look-evidence/issue-39/after-desktop-block.png) | [before](look-evidence/issue-39/before-phone-block.png) / [after](look-evidence/issue-39/after-phone-block.png) |
+| Bomb expansion (250 ms) | [before](look-evidence/issue-39/before-desktop-bomb-early.png) / [after](look-evidence/issue-39/after-desktop-bomb-early.png) | [before](look-evidence/issue-39/before-phone-bomb-early.png) / [after](look-evidence/issue-39/after-phone-bomb-early.png) |
+| Bomb expansion (400 ms) | [before](look-evidence/issue-39/before-desktop-bomb-mid.png) / [after](look-evidence/issue-39/after-desktop-bomb-mid.png) | [before](look-evidence/issue-39/before-phone-bomb-mid.png) / [after](look-evidence/issue-39/after-phone-bomb-mid.png) |
+
+At 8000 ms, live labels fell from **19 to 10 desktop** and **19 to 6 phone**. During the opening bomb's mass clear, baseline labels reached **152/153 desktop/phone**, versus **12/12** after aggregation. Visual inspection at [320×180 before](look-evidence/issue-39/before-quarter-dense.png) and [after](look-evidence/issue-39/after-quarter-dense.png) confirmed the mint ring is identifiable even at the arena edge.
+
+Additional adversarial fixtures place all 150 bugs around the robot after the timed run. The uncharged robot remains above the swarm at [desktop centre](look-evidence/issue-39/after-desktop-overlap.png), [phone centre](look-evidence/issue-39/after-phone-overlap.png) and [320×180](look-evidence/issue-39/after-quarter-overlap.png). From that fixture, a real simulation step with one charge and immunity expired produces the [desktop last-charge flash](look-evidence/issue-39/after-desktop-last-block.png) and [phone last-charge flash](look-evidence/issue-39/after-phone-last-block.png): zero charges, 150 bugs, 220 ms flash remaining. The arena-edge probes put the robot at (14,14) and cluster the bugs there: [desktop before](look-evidence/issue-39/before-desktop-edge.png) / [after](look-evidence/issue-39/after-desktop-edge.png), [phone before](look-evidence/issue-39/before-phone-edge.png) / [after](look-evidence/issue-39/after-phone-edge.png), [quarter-size before](look-evidence/issue-39/before-quarter-edge.png) / [after](look-evidence/issue-39/after-quarter-edge.png). The edge probe's label/projectile context differs after the additional centre/block probes; only the timed rows above are exact same-clock comparisons. Normal clipping is preserved, so an edge robot's outer ring is partially clipped while its body and remaining ring stay visible.
+
+### Behavior and frame budget
+
+Focused tests cover aggregation boundaries, nearest/tied groups, immutable anchors, non-extending windows, exact totals through +1500, full-pool merges/drop/reuse/reset and storage identity. Renderer tests check numeric atlas order/width/edge clamping, effective opacity/contrast, foreground ordering, shield/identity separation, expanding bomb strokes, larger drone cores, both source palettes and both laser paths. Real simulation tests cover source metadata and shield consumption/refill/immunity; engine tests freeze all new effects during choices, resume without catch-up, decay after death and clear on focus/restart. Existing deterministic observation and weapon-rule tests remain green.
+
+`bun run check` passed **229 tests / 87,928 assertions**, TypeScript clean. Default `bun run pacing` passed all **20** cases (evasive median **78.69 s**, longest **136.87 s**, no score failures); `bun run build` passed. No dependency or runtime image asset was added.
+
+Added work is bounded: at most 12 distance comparisons per squash; at most 12 labels composed from one fixed eleven-cell atlas (five glyph draws for +1500); one shield timer; one halo draw, larger cached drone glows and a few extra strokes. Particle/trail capacities stay 1024/128, and bomb storage remains one replaceable slot. The smaller label pool removes the old 256-slot draw/update scan.
+
+Fresh real-RAF measurements use implementation **33f1896** (the production code in this PR), the same Chrome version/machine as the fresh baseline, and **10 seconds warmup + 60 seconds sampling** per run. Profiles ran sequentially after checks/build, with no concurrent checks or capture work. Each acquired four laser/shield/bomb picks and nine drones. Every sample held **150–150 bugs**. Reports retain full precision, viewport/DPR, population bounds, fixture cost, upgrade activity and effect peaks: [baseline](look-evidence/issue-39/before-bench.json), [all after samples](look-evidence/issue-39/after-bench.json).
+
+| Viewport / profile | Mean FPS | Lowest rolling FPS | Update mean / p95 ms | Draw mean / p95 ms | Peak particles / trails / labels / rings / block flashes |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Desktop baseline stress | 59.999 | 59.988 | 0.109 / 0.200 | 1.084 / 1.800 | 1024 / 6 / 198 / 1 / not instrumented |
+| Desktop stress | 59.999 | 59.994 | 0.102 / 0.200 | 1.029 / 1.700 | 1024 / 6 / 12 / 1 / 1 |
+| Desktop stress + burst | 59.999 | 59.988 | 0.117 / 0.200 | 1.531 / 2.800 | 1024 / 6 / 12 / 1 / 1 |
+| Phone stress | 59.999 | 59.994 | 0.105 / 0.200 | 1.062 / 1.700 | 1024 / 6 / 12 / 1 / 1 |
+| Phone stress + burst | 59.682 | **56.000** | 0.142 / 0.300 | 1.687 / 3.000 | 1024 / 6 / 12 / 1 / 1 |
+
+Both normal stress runs meet the requested **58 FPS mean and lowest rolling** floor. The additional synthetic phone burst (300 cosmetic squashes every 500 ms) stayed bounded but its lowest rolling FPS was below 58; this extra workload is not a passing 58 FPS result. No samples are discarded and no cause is inferred. The normal stress comparison observed **0.055 ms less mean draw** and **0.007 ms less mean update** on desktop; these finite samples are not a guarantee of a speedup.
+
+Activity counters (including warmup) for desktop stress / desktop burst / phone stress / phone burst were respectively **69/69/66/67 shield blocks**, **4/4/4/4 bomb detonations**, **3324/3323/3311/3316 upgraded projectile kills**, and **423/423/423/423 drone cooldown firing transitions**. No page errors or API requests occurred. Vite and Chrome were stopped after capture/measurement.
+
+## Historical validation
+
 The subsequent balance change's current pacing tests, updated shield/bomb rules and fresh normal/double/stress-burst/late-speed Chrome measurements are in [pacing-validation.md](pacing-validation.md). That change replaces the historical no-upgrade duration fixtures described below with an upgrade-enabled regression harness. The measurements below remain the evidence recorded for their respective earlier changes.
 
 The renderer uses Canvas 2D commands only. The full rectangular world's grid and vignette, glows and score glyph are cached on detached canvases; actors and legs are drawn procedurally. Base beetles are coral; fast beetles are smaller, bright gold and have a quicker gait, selected through `BUG_STYLES[bug.kind]`. Collision dimensions and all simulation rules remain those merged from main in #10. The original look change added no image assets, rendering dependencies or upgrade visuals. The later upgrade integration and its fresh evidence are recorded separately below.
