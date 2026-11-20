@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
-import { countEvents, getRun, hideName, openDb, recordEvent } from "./db";
+import { countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
 import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
 import { acquiredUpgrades } from "../web/game/upgrades";
 import { arenaForViewport } from "../web/game/arena";
@@ -40,6 +40,53 @@ test("events are counted by type, with zeros for types not seen", async () => {
 });
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+test("new and existing identities cannot start with blocked or reserved names or write any rows", async () => {
+  const app = createApp(db);
+  for (const name of ["fuuuck", "admin", "fag123", "coon123"]) {
+    for (const existing of [false, true]) {
+      const playerId = crypto.randomUUID();
+      if (existing) startRun(db, playerId, name, 0, "tabs");
+      const counts = () => ["players", "runs", "events"].map(table => db.query(`SELECT COUNT(*) AS n FROM ${table}`).get());
+      const before = counts();
+      const response = await app.request("/api/runs", post({ playerId, name, team: "tabs" }));
+      expect(response.status).toBe(400);
+      const body = await response.json() as { error: string };
+      if (name === "admin") expect(body.error).toBe("That name is reserved");
+      else expect(body.error).toBeTruthy();
+      expect(counts()).toEqual(before);
+    }
+  }
+});
+
+test("ordinary-name entries stay on both boards while numeric-suffix legacy slurs are hidden without deleting history", async () => {
+  let time = 0;
+  const app = createApp(db, { now: () => time });
+  const blocked = ["fag123", "coon123"].map((name, i) => {
+    const playerId = crypto.randomUUID();
+    const result = startRun(db, playerId, name, 0, i ? "tabs" : "spaces");
+    if ("error" in result) throw new Error(result.error);
+    finishRun(db, result.runId, { playerId, score: 20, squashes: 0, seconds: 20, touch: false }, 20000);
+    return playerId;
+  });
+  const valid = [];
+  for (const [i, name] of ["Larsen", "Draper", "Anushka", "Annalisa", "Dickens", "Sam Hancock"].entries()) {
+    const playerId = crypto.randomUUID();
+    const response = await app.request("/api/runs", post({ playerId, name, team: i % 2 ? "tabs" : "spaces" }));
+    expect(response.status).toBe(201);
+    const { runId } = await response.json() as { runId: string };
+    time += 1000;
+    expect((await app.request(`/api/runs/${runId}/finish`, post({ playerId, score: 1, squashes: 0, seconds: 1, touch: false }))).status).toBe(200);
+    valid.push({ playerId, name, score: 1 });
+  }
+  const history = () => ["players", "runs", "events"].map(table => db.query(`SELECT * FROM ${table} ORDER BY id`).all());
+  const before = history();
+  const leaders = await app.request("/api/leaderboard"), teams = await app.request("/api/teams");
+  expect(await leaders.json()).toEqual(valid);
+  expect(await teams.json()).toEqual({ tabs: 3, spaces: 3 });
+  for (const playerId of blocked) expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: 20 });
+  expect(history()).toEqual(before);
+});
 test("finish persists canonical builds with one linked event, accepts equivalent retries and rejects changed builds", async () => {
   let time = 0;
   const app = createApp(db, { now: () => time });

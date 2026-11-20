@@ -116,11 +116,13 @@ export function hideName(db: Database, name: string, now: number): void {
 }
 export function teamTotals(db: Database): TeamTotals {
   const totals: TeamTotals = { tabs: 0, spaces: 0 };
-  const rows = db.query(`SELECT r.team, SUM(r.score) AS total FROM runs r
+  const rows = db.query(`SELECT p.name, r.team, SUM(r.score) AS total FROM runs r
     JOIN players p ON p.id = r.player_id
     WHERE r.ended_at_ms IS NOT NULL AND r.team IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM hidden_names h WHERE h.name_key = p.name_key)
-    GROUP BY r.team`).all() as { team: string; total: number }[];
-  for (const team of TEAMS) totals[team] = rows.find(row => row.team === team)?.total ?? 0;
+    GROUP BY p.id, p.name, r.team`).all() as { name: string; team: Team; total: number }[];
+  for (const row of rows) {
+    if (!validateName(row.name).error) totals[row.team] += row.total;
+  }
   return totals;
 }
