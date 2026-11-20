@@ -60,7 +60,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
     const unmount = mountGame(canvas.current!, session, setHud, setDebug);
     return () => { unmount(); unsubscribe(); };
   }, [session, initialTouch]);
-  return <main className="game">
+  return <main className="game" data-phase={view.over ? "over" : view.choice ? "choice" : "playing"}>
     <header className="hud"><strong>Bug Swarm</strong><span>Score {hud.score}</span><span>{3 - hud.hits} hits left · {hud.seconds}s</span></header>
     <div className="surface"><canvas ref={canvas} tabIndex={0} aria-label="Bug Swarm arena. Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop." />
       {view.choice && <ChoiceDialog key={`${view.token}/${view.choice.number}`} session={session} view={view}
@@ -72,16 +72,20 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
           const start = restartPress.current; restartPress.current = null;
           if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) session.start(event.pointerType === "touch");
         }}>
-        <h1>Game over</h1><p className="final-score">Score {view.score}</p>
-        <TeamRace view={view} />
-        <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
-        <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
-        <p className="restart">Tap or press a key to play again</p>
-        <button type="button" onClick={(event) => { if (event.detail === 0) session.start(); }}>Play again</button>
-        <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
-        <h2>Live top 10</h2>
-        {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
-          <ol>{view.leaders.map((row) => <li key={row.playerId}><span>{row.name}</span><strong>{row.score}</strong></li>)}</ol> : <p>No saved scores yet</p>}
+        <div className="over-summary">
+          <h1>Game over</h1><p className="final-score">Score {view.score}</p>
+          <TeamRace view={view} />
+          <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
+          <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
+          <p className="restart">Tap or press a key to play again</p>
+          <button type="button" onClick={(event) => { if (event.detail === 0) session.start(); }}>Play again</button>
+        </div>
+        <div className="over-board">
+          <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
+          <h2>Live top 10</h2>
+          {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
+            <ol>{view.leaders.map((row) => <li key={row.playerId}><div className="leader-row"><span>{row.name}</span><strong>{row.score}</strong></div></li>)}</ol> : <p>No saved scores yet</p>}
+        </div>
       </section>}
     </div>
     <footer>Drag · WASD / arrows · mouse <span>{debug || "F: frame readout"}</span></footer>

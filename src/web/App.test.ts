@@ -128,6 +128,8 @@ try {
   storageFails = false; stored = JSON.stringify(identity);
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
   assert.ok(session?.current, "App did not start its real Session");
+  const phase = () => tree.root.findByProps({ className: "game" }).props["data-phase"];
+  assert.equal(phase(), "playing");
   const portrait = session.current;
   assert.deepEqual(portrait.simulation.arena, { width: 450, height: 800 });
   window.innerWidth = 844; window.innerHeight = 390;
@@ -141,6 +143,7 @@ try {
     s.time = 19.99; s.spawnIn = s.fireIn = Infinity;
     act(() => { step(s, IDLE, 0.02); session.publishChoice(); });
     const dialog = dialogs.at(-1), choice = session.view.choice;
+    assert.equal(phase(), "choice");
     assert.ok(dialog?.open, "Choice must open as a modal");
     const renderedDialog = tree.root.findByType("dialog");
     assert.ok(renderedDialog.props["aria-labelledby"], "Choice must be labelled");
@@ -159,6 +162,7 @@ try {
     const id = choice.offer[index];
     act(() => { cards[index].props.onPointerDown({ pointerType: "touch" }); cards[index].props.onClick(); });
     assert.equal(session.view.choice, null, "Touch must resume the run");
+    assert.equal(phase(), "playing");
     assert.deepEqual(session.view.upgrades, [{ id, count: 1 }]);
     assert.equal(session.current.touch, true);
     assert.equal(dialog.open, false, "Selecting must close the modal");
@@ -169,6 +173,7 @@ try {
   const s = session.current.simulation;
   UPGRADE_IDS.forEach((id, index) => { for (let n = 0; n <= index; n++) pick(s, id); });
   await act(async () => { session.end(); });
+  assert.equal(phase(), "over");
   const build = text(tree.root.findByProps({ className: "build" }));
   for (const id of UPGRADE_IDS) assert.ok(build.includes(UPGRADE_NAMES[id]), "Build must name every acquired upgrade");
   assert.deepEqual(build.match(/[0-9]+/g).map(Number).sort(), [1, 2, 3, 4]);
@@ -180,7 +185,7 @@ try {
   assert.ok(text(race().findByProps({ role: "status" })).trim(), "Loading needs feedback");
   assert.equal(race().findAllByProps({ className: "team-labels" }).length, 0, "Loading cannot invent totals");
   await act(async () => { resolveTeams({ tabs: 30, spaces: 10 }); });
-  const overChildren = tree.root.findByProps({ "aria-label": "Game over" }).children;
+  const overChildren = tree.root.findByProps({ className: "over-summary" }).children;
   const scoreIndex = overChildren.findIndex(node => node.props?.className === "final-score");
   assert.ok(scoreIndex >= 0);
   assert.equal(overChildren[scoreIndex + 1], race(), "The race belongs directly beneath the final score");
@@ -223,6 +228,7 @@ try {
     restart.props.onClick({ detail: 1 });
   });
   assert.equal(session.view.token, token + 1, "A button tap must start exactly once");
+  assert.equal(phase(), "playing");
   assert.equal(session.view.save, "pending");
   assert.equal(tree.root.findAllByProps({ "aria-label": "Game over" }).length, 0, "Refused starts must allow immediate restart");
   api.start = normalStart;

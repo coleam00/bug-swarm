@@ -29,6 +29,7 @@ test("initial HTML carries complete cards, dark theme and generated icon links",
   const description = "Steer a glowing robot, squash bugs, pick upgrades, and race Tabs vs Spaces on the shared leaderboard.";
   const alt = "A glowing robot surrounded by colourful beetles on Bug Swarm's dark grid arena.";
   expect(Object.fromEntries(tags)).toMatchObject({
+    viewport: "width=device-width, initial-scale=1.0, viewport-fit=cover",
     description, "theme-color": "#0b1018", "og:title": "Bug Swarm", "og:description": description,
     "og:type": "website", "og:site_name": "Bug Swarm", "og:url": "https://swarm.test/",
     "og:image": "https://swarm.test/og-image.png", "og:image:type": "image/png", "og:image:width": "1200",
