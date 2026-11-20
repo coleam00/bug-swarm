@@ -3,7 +3,7 @@
 ## Stack
 - Bun (runtime, package manager, test runner), TypeScript strict, Vite for the browser build, Canvas 2D for the game, Hono on Bun for a small API, SQLite through `bun:sqlite` for runs and scores.
 - Why: the bootcamp's supported stack, with the same commands on Windows, macOS and Linux. A game loop needs no UI framework; the server exists for the shared leaderboard and the bet.
-- The scaffolded React screen stays only as a thin shell for name entry, upgrade choices and the game-over screen around the canvas. No React in the game loop.
+- The scaffolded React screen stays only as a thin shell for name entry, the first-run steering hint, upgrade choices and the game-over screen around the canvas. No React in the game loop.
 
 ## How it runs
 - Install: `bun install`
@@ -114,6 +114,10 @@ Use an isolated Railway deployment with scratch data and the same ingress config
 `scripts/look-benchmark.html` is a developer-only Vite page using the production renderer, fixed stepper and effects. It keeps 150 bugs present without an API or database. It is excluded from the production entry points. Reproduction steps, measurements and device limitations are in [docs/look-validation.md](docs/look-validation.md).
 
 ## Upgrade contract and choices
+
+The first locally started arena shows a nonblocking DOM steering hint: “Drag anywhere to move” for touch entry or a coarse pointer, otherwise “WASD, arrows or mouse”. `steering-hint.ts` consumes a separate `bug-swarm-steering-hint-seen=1` localStorage flag at local start, including for existing identities after deployment, without waiting for registration. Entry and `/board` do not consume it. Storage getter/read/write failures log once and retain page-lifetime suppression. Restart never rearms the hint.
+
+The controller retains its initial run token and four-second monotonic wall-time deadline across effect detachment/reattachment. A one-shot timer and foreground deadline checks expire it; actual robot displacement, death, a choice or token replacement dismiss it sooner. While pending, `mountGame` compares position around the existing fixed-step advance and reports movement once; it removes observation after dismissal. Touch-down, dead-zone or ignored input, paused frames and resize do not dismiss it. React receives only hint transitions. Chrome layout, offline, persistence and frame-cost evidence: [docs/steering-validation.md](docs/steering-validation.md). Issue #40’s proposed 20–30-second idle range remains unresolved; its candidate reports are linked from the pacing validation document, and production pacing is unchanged.
 
 `src/shared/upgrades.ts` owns the four ids, names and 20-second interval. Finish requests carry acquired upgrades as `{ id, count }` entries, once each in registry order. Counts record picks, independent of remaining combat resources. The server accepts legacy omitted upgrades as `[]`, validates total picks against survival seconds, normalizes ordering and includes the normalized build in identical-retry comparisons. The existing `runs.upgrades` JSON column and its linked `run_ended` event commit together. No additional event payload or migration is needed. Choice pauses need no server-clock change: elapsed time is an upper bound.
 

@@ -1,5 +1,24 @@
 # Pacing validation
 
+## Issue 40: opening investigation (unresolved)
+
+The first-run steering hint is implemented; **the gentler opening and idle 20–30-second harness gate remain pending**. No candidate was selected for production. The existing spawn curve, upgrades, steering policies, seeds, score checks and pacing gates remain unchanged. This is an empirical tuning failure, not a proof that no curve can satisfy the requested targets.
+
+Baseline reports for this checkout: [default](steering-evidence/before-default.txt), [full broad](steering-evidence/before-broad.txt). The baseline default idle range is 12.45–15.90 seconds, evasive median 78.69 seconds. The broad evasive median is 76.73 seconds, longest run 156.93 seconds, with zero score failures and every existing gate passing.
+
+Curve-only experiments varied quiet openings, linear opening intervals, pressure around 15–20 seconds, short pressure after the first choice, and relief before the unchanged 60-second knot. Reaching the first choice changes the stationary robot's build: laser's firing bonus/penetration and bomb's acquisition clear can sustain it through a sparse opening. Increasing pressure to overwhelm those builds also kills the scripted evasive shield/drone builds early. Default idle still takes the first card; broad idle still follows each named priority. No idle detector, artificial death, upgrade bypass, steering-policy change or scoring relaxation was used.
+
+Two representative rejected curves are reproducible with `bun docs/steering-pacing-investigation.ts` using scratch environment/data paths. It mutates only its process-local configuration, runs the unchanged default and full 2,000-case broad harness, prints the proposed inclusive raw-time idle gate with the existing 1e-7 tolerance, and writes [exact knots and summaries](steering-evidence/pacing-investigation.json).
+
+| Rejected curve | Default idle range | Default evasive median | Broad idle range | Broad evasive median | Broad longest | Score failures |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Gentle | 32.30–128.98s | 79.07s | 18.47–104.92s | 76.05s | 153.00s | 0 |
+| Pressure | 27.37–30.65s | 34.67s | 27.27–31.62s | 34.43s | 140.40s | 0 |
+
+Gentle uses `(time, interval)` knots `(0,.95), (15,.9), (20,.2), (22,.2), (23,10), (45,10)` before the original late knots. It preserves every evasive gate but fails both idle gates; 359/1,000 broad idle cases leave the proposed range. Pressure uses `(0,2), (15,2), (20,.02), (22,.02), (23,10), (45,10)` before the original late knots. It brings all but 31/1,000 broad idle cases inside the range, but fails the default evasive gate, broad overall median and four of the five per-priority floors. Every run in both candidates ends by 240 seconds.
+
+Complete rejected reports: [gentle default](steering-evidence/gentle-default.txt), [gentle broad](steering-evidence/gentle-broad.txt), [pressure default](steering-evidence/pressure-default.txt), [pressure broad](steering-evidence/pressure-broad.txt). These are diagnostic failures, not acceptance evidence. The proposed gate and its production regression tests must be added together with a passing balance change. The first-run hint's Chrome/layout/lifecycle and frame-cost evidence lives in [steering validation](steering-validation.md).
+
 ## Score plausibility calibration: issue #34
 
 Before changing validation, `runBroadMatrix()` from `scripts/pacing.ts` at `e5bd626764f19c2a729655621e8cb5a79e7d94b9` reproduced all 2,000 broad cases with zero invalid finishes:

@@ -5,6 +5,7 @@ import { api } from "./game/api";
 import { loadIdentity, storeIdentity } from "./game/identity";
 import { mountGame, type Hud } from "./game/engine";
 import { CHOICE_GUARD_MS, Session } from "./game/session";
+import { SteeringHint } from "./game/steering-hint";
 import { arenaForViewport } from "./game/arena";
 import { UPGRADE_NAMES, nextPickDescription } from "../shared/upgrades";
 import type { SessionView } from "./game/session";
@@ -52,6 +53,9 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
   const [view, setView] = useState(session.view);
   const [hud, setHud] = useState<Hud>({ score: 0, hits: 0, seconds: 0 });
   const [debug, setDebug] = useState("");
+  const [hint] = useState(() => new SteeringHint());
+  const [hintVisible, setHintVisible] = useState(false);
+  const [touchHint] = useState(() => initialTouch || (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches));
   const canvas = useRef<HTMLCanvasElement>(null);
   const restartPress = useRef<{ x: number; y: number; pointerId: number; token: number } | null>(null);
   const restartKeys = useRef(new Set<string>());
@@ -64,12 +68,19 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
   useEffect(() => {
     const unsubscribe = session.subscribe(() => setView(session.view));
     if (!session.current) session.start(initialTouch);
-    const unmount = mountGame(canvas.current!, session, setHud, setDebug);
-    return () => { unmount(); unsubscribe(); };
-  }, [session, initialTouch]);
+    const detachHint = hint.attach(session, setHintVisible);
+    const foreground = () => { if (!document.hidden) hint.refresh(); };
+    document.addEventListener("visibilitychange", foreground); window.addEventListener("focus", foreground);
+    const unmount = mountGame(canvas.current!, session, setHud, setDebug, hint);
+    return () => {
+      unmount(); detachHint(); unsubscribe();
+      document.removeEventListener("visibilitychange", foreground); window.removeEventListener("focus", foreground);
+    };
+  }, [session, hint, initialTouch]);
   return <main className="game">
     <header className="hud"><strong>Bug Swarm</strong><span>Score {hud.score}</span><span>{3 - hud.hits} hits left · {hud.seconds}s</span></header>
     <div className="surface"><canvas ref={canvas} tabIndex={0} aria-label="Bug Swarm arena. Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop." />
+      {hintVisible && <p className="steering-hint" role="status">{touchHint ? "Drag anywhere to move" : "WASD, arrows or mouse"}</p>}
       {view.choice && <ChoiceDialog key={`${view.token}/${view.choice.number}`} session={session} view={view}
         restoreFocus={() => canvas.current?.focus({ preventScroll: true })} />}
       {view.over && <section className="over" aria-label="Game over"

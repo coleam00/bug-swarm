@@ -7,7 +7,9 @@ import type { Point } from "./simulation";
 import type { Session } from "./session";
 
 export interface Hud { score: number; hits: number; seconds: number }
-export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (value: Hud) => void, debug: (text: string) => void): () => void {
+export interface MovementObserver { pending(token: number): boolean; moved(token: number): void }
+export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (value: Hud) => void, debug: (text: string) => void,
+  movement?: MovementObserver): () => void {
   const ctx = canvas.getContext("2d")!;
   const keys = new Set<string>();
   const heldAtDeath = new Set<string>();
@@ -117,7 +119,12 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
       if (!session.view.choice) fx.advance(timestamp);
       if (!session.view.over) {
         const keyboard = keyboardInput(keys, target);
+        if (movement && !movement.pending(run.token)) movement = undefined;
+        const x = movement ? run.simulation.robot.x : 0, y = movement ? run.simulation.robot.y : 0;
         loop.advance(timestamp, run.simulation, keyboard.x || keyboard.y ? keyboard : pointer.joystick ? pointer.input : keyboard);
+        if (movement && (x !== run.simulation.robot.x || y !== run.simulation.robot.y)) {
+          const observer = movement; movement = undefined; observer.moved(run.token);
+        }
         session.publishChoice();
         if (run.simulation.dead) {
           for (const key of keys) heldAtDeath.add(key);
@@ -145,6 +152,7 @@ export function mountGame(canvas: HTMLCanvasElement, session: Session, hud: (val
   window.addEventListener("blur", clear); document.addEventListener("visibilitychange", visibility);
   frame = requestAnimationFrame(tick);
   return () => {
+    movement = undefined;
     cancelAnimationFrame(frame); observer.disconnect(); unsubscribe(); clear(); renderer.dispose();
     canvas.removeEventListener("pointerdown", down); canvas.removeEventListener("pointermove", move);
     canvas.removeEventListener("pointerup", release); canvas.removeEventListener("pointercancel", release);
