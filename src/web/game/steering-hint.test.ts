@@ -9,6 +9,7 @@ function fixture(memory?: SteeringHintMemory) {
   const storage = { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
   const session = new Session({ playerId: crypto.randomUUID(), name: "Robot" }, {
     start: () => new Promise(() => {}), finish: async () => ({ saved: true }),
+    standing: async () => ({ rank: null, total: 0, next: null }),
     best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
   }, () => 1, undefined, undefined, undefined, undefined, time);
   const hint = new SteeringHint(memory ?? new SteeringHintMemory(() => storage), time);

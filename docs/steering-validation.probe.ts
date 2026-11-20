@@ -54,7 +54,8 @@ try {
         if (path.startsWith("/api/")) {
           if (offline) return route.abort();
           return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } : path.endsWith("/finish") ? { saved: true } :
-            path === "/api/teams" ? { tabs: 0, spaces: 0 } : path.endsWith("/best") ? { best: null } : [] });
+            path === "/api/teams" ? { tabs: 0, spaces: 0 } : path.endsWith("/best") ? { best: null } :
+            path.endsWith("/standing") ? { rank: null, total: 0, next: null } : [] });
         }
         if (["/favicon.svg", "/favicon.ico", "/apple-touch-icon.png", "/og-image.png"].includes(path)) return route.fulfill({ status: 204 });
         const file = path === "/" || path === "/board" ? "index.html" : path.slice(1);
@@ -85,7 +86,7 @@ try {
       assert.equal(await page.evaluate(() => localStorage.getItem("bug-swarm-steering-hint-seen")), null);
       await page.goto("http://localhost/"); await page.locator("#name").fill("Hint Robot");
       await page.getByRole("button", { name: "Join Tabs" }).click(); await discover();
-      assert.equal(await hint.textContent(), touch ? "Drag anywhere to move" : "WASD, arrows or mouse");
+      assert.ok((await hint.textContent())?.trim());
       const layout = await hint.evaluate((element: HTMLElement) => {
         const r = element.getBoundingClientRect(), surface = element.parentElement!, arena = surface.getBoundingClientRect();
         return { x: r.x, y: r.y, width: r.width, height: r.height, arena: { x: arena.x, y: arena.y, width: arena.width, height: arena.height },

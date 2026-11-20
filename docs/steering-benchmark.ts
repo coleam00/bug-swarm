@@ -6,6 +6,7 @@ import { arenaForViewport } from "../src/web/game/arena";
 
 const session = new Session({ playerId: crypto.randomUUID(), name: "Benchmark" }, {
   start: async () => ({ runId: "fixture" }), finish: async () => ({ saved: true }),
+  standing: async () => ({ rank: null, total: 0, next: null }),
   best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
 }, () => 73, console.error, () => arenaForViewport(innerWidth, innerHeight));
 session.start();
