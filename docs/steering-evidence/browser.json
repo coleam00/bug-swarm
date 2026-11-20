@@ -1,6 +1,6 @@
 {
   "chrome": "158.0.8127.36",
-  "at": "2026-11-20T10:05:41.574Z",
+  "at": "2026-11-20T10:15:10.363Z",
   "assertions": [
     "390x844: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
     "844x390: board/entry eligibility, exact text, arena layout, input pass-through, movement, 4s expiry, restart/reload, existing identity, blocked storage and offline play",
@@ -23,14 +23,14 @@
         "height": 844
       },
       "x": 74.53125,
-      "y": 108.796875,
+      "y": 111.671875,
       "width": 240.9375,
       "height": 51.1875,
       "arena": {
         "x": 0,
         "y": 48,
         "width": 390,
-        "height": 760
+        "height": 796
       },
       "font": "18px",
       "pointerEvents": "none",
@@ -44,14 +44,14 @@
         "height": 390
       },
       "x": 301.53125,
-      "y": 72.46875,
+      "y": 60.625,
       "width": 240.9375,
       "height": 51.1875,
       "arena": {
         "x": 0,
-        "y": 48,
+        "y": 32,
         "width": 844,
-        "height": 306
+        "height": 358
       },
       "font": "18px",
       "pointerEvents": "none",
