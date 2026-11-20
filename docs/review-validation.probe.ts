@@ -105,10 +105,11 @@ try {
       await Promise.all([page.locator(".team-labels").getByText("7,000", { exact: true }).waitFor(),
         board.locator('.board-team strong[aria-label="7,000 points"]').waitFor()]);
       await page.getByText("Your best is #1 of 11", { exact: true }).waitFor();
+      await page.getByText("Score saved", { exact: true }).waitFor();
       const releaseMs = performance.now() - began; assert.ok(releaseMs <= 5000, `Release took ${releaseMs} ms`);
       assert.equal(getRun(db, runId)?.held, 0);
       assert.ok((await page.locator(".over ol li").first().textContent()).includes("Review Robot"));
-      assert.equal(await page.getByText("Under review", { exact: true }).count(), 1);
+      assert.equal(await page.getByText("Under review", { exact: true }).count(), 0);
       assert.deepEqual(await board.locator(".board-rank").allTextContents(), ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
       await board.screenshot({ path: join(evidence, `approved-board-${size.width}.png`) });
       await page.screenshot({ path: join(evidence, `approved-game-${size.width}.png`) });
@@ -119,7 +120,7 @@ try {
       await page.getByRole("button", { name: "Play again" }).click();
       await page.waitForFunction(() => !(window as any).reviewSession.view.over);
       assert.equal(await page.locator(".over").count(), 0);
-      measurements.push({ standing, replay, replayStarted: true, size, fixture: "synthetic 7,000 points / 300 seconds / 670 squashes", finishes, review, approval, releaseMs, layout });
+      measurements.push({ reviewStatus: "Score saved", standing, replay, replayStarted: true, size, fixture: "synthetic 7,000 points / 300 seconds / 670 squashes", finishes, review, approval, releaseMs, layout });
     } finally { await context.close(); db.close(); }
   }
   assert.deepEqual(errors, []);

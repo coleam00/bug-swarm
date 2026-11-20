@@ -172,6 +172,9 @@ try {
   assert.ok(tree.root.findAllByType("button").some(button => text(button).includes("Play again")));
   api.finish = async () => ({ saved: true, held: false });
 
+  await act(async () => { wait(2000); });
+  assert.equal(text(tree.root.findByProps({ role: "status" })), "Score saved");
+
   // Wall-clock guards publish without input, keep their layout, and never queue a press.
   const pointerEvent = { pointerType: "touch", pointerId: 7, button: 0, clientX: 5, clientY: 5 };
   const keyEvent = key => ({ key, repeat: false, prevented: false, preventDefault() { this.prevented = true; } });

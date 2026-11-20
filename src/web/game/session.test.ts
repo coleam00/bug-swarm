@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { Best, Finish, Leader, RunStarted, Standing, TeamTotals } from "../../shared/api";
+import type { Best, Finish, Leader, RunStarted, Saved, Standing, TeamTotals } from "../../shared/api";
 import { RateLimitError, TeamConflictError, type GameApi } from "./api";
 import { CHOICE_GUARD_MS, RESTART_GUARD_MS, Session } from "./session";
 import { FakeTiming } from "./timing.test-support";
@@ -255,6 +255,42 @@ test("held is a successful server save that retains the score and refreshes all 
   expect([bests, leaders, teams]).toEqual([2, 2, 2]); expect(logs).toEqual([]);
   startRun(session); expect(session.view.over).toBe(false);
 });
+test("review reads retain durable saves on failure, ignore older held responses and stop after approval", async () => {
+  const replies: ReturnType<typeof deferred<Saved>>[] = [];
+  const calls: { id: string; result: Finish }[] = [];
+  const { session, logs } = fixture({ leaders: async () => [], finish: (id, result) => {
+    calls.push({ id, result });
+    if (calls.length === 1) return Promise.resolve({ saved: true, held: true });
+    const reply = deferred<Saved>(); replies.push(reply); return reply.promise;
+  } });
+  const run = startRun(session); session.end(); await flush();
+  const older = session.refreshReview(run), failed = session.refreshReview(run);
+  const failure = new Error("offline"); replies[1]!.reject(failure); await failed;
+  expect(session.view.save).toBe("held");
+  expect(logs.some(log => log.error === failure && log.message.includes(run.runId!))).toBe(true);
+  const approved = session.refreshReview(run);
+  replies[2]!.resolve({ saved: true, held: false }); await approved;
+  replies[0]!.resolve({ saved: true, held: true }); await older;
+  expect(session.view.save).toBe("saved");
+  await session.refreshReview(run);
+  expect(session.view.leaders).toEqual([]);
+  expect(session.view.standing?.rank).toBeNull(); // Approval does not depend on public visibility.
+  expect(calls).toHaveLength(4);
+  expect(calls.every(call => call.id === run.runId && call.result === run.result)).toBe(true);
+});
+
+test("late review approval cannot change a restarted run", async () => {
+  const reply = deferred<Saved>(); let finishes = 0;
+  const { session } = fixture({ finish: () => ++finishes === 1 ? Promise.resolve({ saved: true, held: true }) : reply.promise });
+  const run = startRun(session); session.end(); await flush();
+  const pending = session.refreshReview(run);
+  startRun(session);
+  reply.resolve({ saved: true, held: false }); await pending;
+  expect(session.view.save).toBe("pending");
+  await session.refreshReview(run);
+  expect(finishes).toBe(2);
+});
+
 test("reads follow the server and stale reads cannot overwrite newer reads or runs", async () => {
   const reads: ReturnType<typeof deferred<Leader[]>>[] = [], bests: ReturnType<typeof deferred<Best>>[] = [];
   const { session } = fixture({

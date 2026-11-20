@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "./app";
-import { approveRun, finishRun, hideName, openDb, startRun } from "./db";
+import { approveRun, countEvents, finishRun, hideName, openDb, startRun } from "./db";
 import { BoardController } from "../web/board/polling";
 import { FakeScheduler } from "../web/board/polling.test-support";
 import { Session } from "../web/game/session";
@@ -74,7 +74,8 @@ test("external approval expires both caches at one second and reaches real board
     expect(snapshot.leaders.data?.map(row => row.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(snapshot.teams.data?.totals).toEqual({ tabs: 955, spaces: 13800 });
     expect(clock.time - 300000).toBeLessThanOrEqual(5000);
-    expect(session.view.save).toBe("held"); // This workflow acknowledges finish status; no live status API.
+    expect(session.view.save).toBe("saved");
+    expect(countEvents(db).run_ended).toBe(12); // Status polling never adds another finish event.
   } finally {
     board.stop(); detach(); globalThis.setInterval = originalSet; globalThis.clearInterval = originalClear;
     owner.close(); db.close(); rmSync(dir, { recursive: true, force: true });

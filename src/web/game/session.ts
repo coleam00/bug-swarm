@@ -70,6 +70,7 @@ export class Session {
     if (this.poll) { clearInterval(this.poll); this.poll = undefined; }
     if (this.listeners.size && this.view.over) this.poll = setInterval(() => {
       void this.refreshLeaders(this.current!); void this.refreshTeams(this.current!); void this.refreshStanding(this.current!);
+      void this.refreshReview(this.current!);
     }, 2000);
   }
   private clearGuardTimer() {
@@ -177,6 +178,19 @@ export class Session {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);
       if (this.current !== run) return;
       this.view = { ...this.view, save: run.startFailure ?? "failed" }; this.emit();
+    }
+  }
+  async refreshReview(run: LocalRun): Promise<void> {
+    if (this.current !== run || this.view.save !== "held" || !run.runId || !run.result) return;
+    try {
+      // Identical finish retries read the persisted hold without writing another event.
+      const saved = await this.api.finish(run.runId, run.result);
+      if (!saved.held && this.current === run && this.view.save === "held") {
+        this.view = { ...this.view, save: "saved" }; this.emit();
+      }
+    } catch (error) {
+      // The score is already durable; a status-read failure must not become a save failure.
+      this.log(`Review status read failed [${run.runId}]`, error);
     }
   }
   async refreshBest(run: LocalRun): Promise<void> {
