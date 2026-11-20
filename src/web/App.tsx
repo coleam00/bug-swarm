@@ -77,7 +77,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
       document.removeEventListener("visibilitychange", foreground); window.removeEventListener("focus", foreground);
     };
   }, [session, hint, initialTouch]);
-  return <main className="game">
+  return <main className="game" data-phase={view.over ? "over" : view.choice ? "choice" : "playing"}>
     <header className="hud"><strong>Bug Swarm</strong><span>Score {hud.score}</span><span>{3 - hud.hits} hits left · {hud.seconds}s</span></header>
     <div className="surface"><canvas ref={canvas} tabIndex={0} aria-label="Bug Swarm arena. Touch and drag anywhere to steer. Drag farther to move faster; lift to stop. Use WASD, arrows or your mouse on desktop." />
       {hintVisible && <p className="steering-hint" role="status">{touchHint ? "Drag anywhere to move" : "WASD, arrows or mouse"}</p>}
@@ -100,20 +100,24 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
           if (start && start.pointerId === event.pointerId && start.token === view.token &&
             Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) session.restart(start.token, event.pointerType === "touch");
         }}>
-        <h1>Game over</h1><p className="final-score">Score {view.score}</p>
-        <TeamRace view={view} />
-        <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
-        <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
-        <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
-          <p className="restart">Tap or press a key to play again</p>
-          <button type="button" tabIndex={view.restartReady ? 0 : -1} onClick={(event) => {
-            if (event.detail === 0 && !restartKeys.current.size) session.restart(view.token);
-          }}>Play again</button>
+        <div className="over-summary">
+          <h1>Game over</h1><p className="final-score">Score {view.score}</p>
+          <TeamRace view={view} />
+          <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
+          <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
+          <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
+            <p className="restart">Tap or press a key to play again</p>
+            <button type="button" tabIndex={view.restartReady ? 0 : -1} onClick={(event) => {
+              if (event.detail === 0 && !restartKeys.current.size) session.restart(view.token);
+            }}>Play again</button>
+          </div>
         </div>
-        <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
-        <h2>Live top 10</h2>
-        {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
-          <ol>{view.leaders.map((row) => <li key={row.playerId}><span>{row.name}</span><strong>{row.score}</strong></li>)}</ol> : <p>No saved scores yet</p>}
+        <div className="over-board">
+          <p className="build">{view.upgrades.length ? view.upgrades.map(({ id, count }) => `${UPGRADE_NAMES[id]} ×${count}`).join(" · ") : "No upgrades taken"}</p>
+          <h2>Live top 10</h2>
+          {view.leadersStatus === "loading" ? <p>Loading…</p> : view.leadersStatus === "failed" ? <p>Couldn't load the leaderboard</p> : view.leaders.length ?
+            <ol>{view.leaders.map((row) => <li key={row.playerId}><div className="leader-row"><span>{row.name}</span><strong>{row.score}</strong></div></li>)}</ol> : <p>No saved scores yet</p>}
+        </div>
       </section>}
     </div>
     <footer>Drag · WASD / arrows · mouse <span>{debug || "F: frame readout"}</span></footer>
