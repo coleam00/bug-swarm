@@ -23,6 +23,7 @@ test("drone orbit is deterministic, evenly spaced, and acquisition preserves exi
 test("drones target independently from their own position, share laser budgets, and pause with the run", () => {
   const s = createSimulation(1); s.spawnIn = s.fireIn = Infinity;
   pick(s, CI_DRONE); pick(s, CI_DRONE); pick(s, REVIEW_LASER);
+  s.fireIn = Infinity; // Isolate drone cadence after laser acquisition clamps robot readiness.
   s.bugs = [{ id: 2, kind: "base", x: 440, y: 300 }, { id: 1, kind: "base", x: 160, y: 300 }];
   expect(nearestBug(s)!.id).toBe(1);
   step(s, IDLE, 0.001);

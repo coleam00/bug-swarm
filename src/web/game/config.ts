@@ -11,9 +11,12 @@ export type BugKind = typeof BUG_KINDS[number]["id"];
 export const BUG_DEFINITIONS = Object.fromEntries(BUG_KINDS.map((kind) => [kind.id, kind])) as
   Record<BugKind, typeof BUG_KINDS[number]>;
 export const FAST_BUG_EVERY = 4;
-// Idle ceiling: 60 seconds. Evasive median target: 60–180 seconds.
+// Idle ceiling: 60 seconds. Broad evasive median target: 75–110 seconds.
 export const SPAWN_CURVE = [
-  { time: 0, interval: 0.9 }, { time: 20, interval: 0.8 }, { time: 30, interval: 0.7 },
+  // A brief base-bug opening punishes standing still, then gives moving players
+  // room for their first upgrade and the fast-bug introduction. Pressure resumes
+  // toward 60s; the late schedule and pursuit remain independent of this relief.
+  { time: 0, interval: 0.2 }, { time: 20, interval: 4 }, { time: 30, interval: 4 },
   { time: 60, interval: 0.3 }, { time: 120, interval: 0.2 }, { time: 180, interval: 0.18 },
 ] as const;
 export function spawnInterval(time: number): number {
