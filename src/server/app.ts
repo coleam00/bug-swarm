@@ -110,14 +110,15 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (!run || run.player_id !== finish.playerId) return c.json({ error: "Run not found." }, 404);
     if (run.ended_at_ms !== null) {
       const identical = run.score === finish.score && run.squashes === finish.squashes && run.seconds === finish.seconds && run.touch === Number(finish.touch) && run.upgrades === JSON.stringify(finish.upgrades);
-      return identical ? c.json({ saved: true }) : c.json({ error: "Run already finished." }, 409);
+      return identical ? c.json({ saved: true, held: Boolean(run.held) }) : c.json({ error: "Run already finished." }, 409);
     }
     const time = now();
     if (!plausible(finish, run.started_at_ms, time)) return c.json({ error: "Score is impossible for this run's elapsed time." }, 400);
-    finishRun(db, id, finish, time);
+    const saved = finishRun(db, id, finish, time);
+    if (!saved) return c.json({ error: "Run already finished." }, 409);
     cached = undefined;
     cachedTeams = undefined;
-    return c.json({ saved: true });
+    return c.json(saved);
   });
   app.get("/api/leaderboard", (c) => {
     const time = now();

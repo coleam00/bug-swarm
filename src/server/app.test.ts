@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
-import { countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
+import { approveRun, countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
 import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
 import { acquiredUpgrades } from "../web/game/upgrades";
 import { arenaForViewport } from "../web/game/arena";
@@ -40,6 +40,31 @@ test("events are counted by type, with zeros for types not seen", async () => {
 });
 
 const post = (body: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+test.each([223, 224, 225, 300])("plausible %i-second finish is saved with its hold state; retries follow approval", async seconds => {
+  let time = 0;
+  const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+  const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" }))).json() as { runId: string };
+  const squashes = seconds === 300 ? 1350 : 700, score = 10 * squashes + seconds, held = score > 7224;
+  time = seconds * 1000;
+  const result = { playerId, score, squashes, seconds, touch: true };
+  const send = (body = result) => app.request(`/api/runs/${runId}/finish`, post(body));
+  // A high but impossible submission is still refused and leaves no finish or hold.
+  expect((await send({ ...result, score: 13810, squashes: 1351, seconds: 300 })).status).toBe(400);
+  expect(getRun(db, runId)?.ended_at_ms).toBeNull(); expect(getRun(db, runId)?.held).toBe(0);
+  for (let i = 0; i < 2; i++) {
+    const response = await send(); expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ saved: true, held });
+  }
+  expect(getRun(db, runId)).toMatchObject({ score, seconds, squashes, held: Number(held), ended_at_ms: time, touch: 1 });
+  expect(await (await app.request("/api/leaderboard")).json()).toEqual(held ? [] : [{ playerId, name: "Robot", score }]);
+  expect(await (await app.request("/api/teams")).json()).toEqual({ tabs: held ? 0 : score, spaces: 0 });
+  expect(await (await app.request(`/api/players/${playerId}/best`)).json()).toEqual({ best: score });
+  approveRun(db, runId);
+  expect(await (await send()).json()).toEqual({ saved: true, held: false });
+  expect((await send({ ...result, touch: false })).status).toBe(409);
+  expect(countEvents(db).run_ended).toBe(1);
+});
 
 test("new and existing identities cannot start with blocked or reserved names or write any rows", async () => {
   const app = createApp(db);

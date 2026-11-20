@@ -12,7 +12,7 @@ import { step, IDLE } from "./simulation";
 
 test("every start samples arena once and isolates dimensions from its provider", () => {
   let calls = 0, dimensions = { ...arenaForViewport(390, 844) };
-  const api: GameApi = { teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true }),
+  const api: GameApi = { teams: async () => ({ tabs: 0, spaces: 0 }), start: async () => ({ runId: "arena" }), finish: async () => ({ saved: true, held: false }),
     best: async () => ({ best: null }), leaders: async () => [] };
   const session = new Session(identity, api, () => 42, undefined, () => { calls++; return dimensions; });
   const first = startRun(session);
@@ -143,7 +143,7 @@ function fixture(overrides: Partial<GameApi> = {}) {
   const api: GameApi = {
     teams: async () => ({ tabs: 0, spaces: 0 }),
     start: async () => ({ runId: `run-${++starts}` }),
-    finish: async (id, result) => { finishes.push({ id, result }); return { saved: true }; },
+    finish: async (id, result) => { finishes.push({ id, result }); return { saved: true, held: false }; },
     best: async () => ({ best: 7 }), leaders: async () => [{ playerId: "other", name: "Server", score: 99 }],
     ...overrides,
   };
@@ -237,11 +237,23 @@ test("offline start and rejected finish log failures and keep restart usable", a
     startRun(session); expect(session.view.over).toBe(false);
   }
 });
-test("a pending save from an old run never changes current save state", async () => {
-  const saved = deferred<{ saved: true }>();
+test("a pending held save from an old run never changes current save state", async () => {
+  const saved = deferred<{ saved: true; held: boolean }>();
   const { session } = fixture({ finish: () => saved.promise });
   startRun(session); session.end(); await flush(); startRun(session);
-  saved.resolve({ saved: true }); await flush(); expect(session.view.save).toBe("pending");
+  saved.resolve({ saved: true, held: true }); await flush(); expect(session.view.save).toBe("pending");
+});
+
+test("held is a successful server save that retains the score and refreshes all result reads", async () => {
+  let bests = 0, leaders = 0, teams = 0;
+  const { session, logs } = fixture({ finish: async () => ({ saved: true, held: true }),
+    best: async () => { bests++; return { best: 13800 }; },
+    leaders: async () => { leaders++; return []; }, teams: async () => { teams++; return { tabs: 0, spaces: 0 }; } });
+  const run = startRun(session); run.simulation.score = 13800;
+  session.end(); await flush();
+  expect(session.view).toMatchObject({ score: 13800, save: "held", best: 13800, leaders: [], teamTotals: { tabs: 0, spaces: 0 } });
+  expect([bests, leaders, teams]).toEqual([2, 2, 2]); expect(logs).toEqual([]);
+  startRun(session); expect(session.view.over).toBe(false);
 });
 test("reads follow the server and stale reads cannot overwrite newer reads or runs", async () => {
   const reads: ReturnType<typeof deferred<Leader[]>>[] = [], bests: ReturnType<typeof deferred<Best>>[] = [];

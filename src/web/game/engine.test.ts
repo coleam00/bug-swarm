@@ -29,7 +29,7 @@ function harness(screenShaped = false) {
   const time = new FakeTiming();
   let lastFrame = 0;
   const session = new Session({ playerId: crypto.randomUUID(), name: "Robot" }, {
-    start: async () => ({ runId: "test-run" }), finish: async () => ({ saved: true }), best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
+    start: async () => ({ runId: "test-run" }), finish: async () => ({ saved: true, held: false }), best: async () => ({ best: null }), leaders: async () => [], teams: async () => ({ tabs: 0, spaces: 0 }),
   }, () => 1, undefined, screenShaped ? () => arenaForViewport(win.innerWidth, win.innerHeight) : undefined, undefined,
     { now: time.now, sleep: async ms => { time.advance(ms); } }, time);
   session.start();

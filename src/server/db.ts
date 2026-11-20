@@ -1,9 +1,9 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Finish, Leader, TeamTotals } from "../shared/api";
+import type { Finish, Leader, Saved, TeamTotals } from "../shared/api";
 import { TEAMS, type Team } from "../shared/teams";
-import { nameKey, validateName } from "./rules";
+import { nameKey, needsReview, REVIEW_SCORE, validateName } from "./rules";
 export { TEAMS } from "../shared/teams";
 
 // Every event the app records, named once. The server writes them and `bun run stats` reads them,
@@ -39,6 +39,12 @@ export function openDb(path: string): Database {
       CREATE INDEX IF NOT EXISTS runs_player_score ON runs(player_id, score DESC, ended_at_ms);
       CREATE INDEX IF NOT EXISTS runs_finished ON runs(ended_at_ms) WHERE ended_at_ms IS NOT NULL;
     `);
+    const runColumns = db.query("PRAGMA table_info(runs)").all() as { name: string }[];
+    if (!runColumns.some(column => column.name === "held")) {
+      db.exec("ALTER TABLE runs ADD COLUMN held INTEGER NOT NULL DEFAULT 0 CHECK (held IN (0,1));");
+      // Only on column creation: ordinary reopen must preserve owner approvals.
+      db.query("UPDATE runs SET held = 1 WHERE ended_at_ms IS NOT NULL AND score > ?").run(REVIEW_SCORE);
+    }
     for (const table of ["players", "runs"]) {
       const columns = db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
       if (!columns.some(column => column.name === "team")) {
@@ -64,7 +70,7 @@ export function countEvents(db: Database): Record<EventType, number> {
 }
 
 export interface Run {
-  team: Team | null;
+  held: number; team: Team | null;
   id: string; player_id: string; started_at_ms: number; ended_at_ms: number | null;
   score: number | null; squashes: number | null; seconds: number | null; touch: number | null; upgrades: string;
 }
@@ -87,14 +93,33 @@ export function startRun(db: Database, playerId: string, name: string, now: numb
     return { runId: id };
   }).immediate();
 }
-export function finishRun(db: Database, id: string, finish: Finish, now: number): boolean {
+export function finishRun(db: Database, id: string, finish: Finish, now: number): Saved | null {
   return db.transaction(() => {
-    const result = db.query(`UPDATE runs SET ended_at_ms = ?, score = ?, squashes = ?, seconds = ?, touch = ?, upgrades = ?
-      WHERE id = ? AND ended_at_ms IS NULL`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), JSON.stringify(finish.upgrades ?? []), id);
-    if (!result.changes) return false;
+    const held = needsReview(finish.score);
+    const result = db.query(`UPDATE runs SET ended_at_ms = ?, score = ?, squashes = ?, seconds = ?, touch = ?, upgrades = ?, held = ?
+      WHERE id = ? AND ended_at_ms IS NULL`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), JSON.stringify(finish.upgrades ?? []), Number(held), id);
+    if (!result.changes) return null;
     db.query("INSERT INTO events(type, at, run_id) VALUES (?, ?, ?)").run(EVENT_TYPES[2], new Date(now).toISOString(), id);
-    return true;
-  })();
+    return { saved: true, held } as const;
+  }).immediate();
+}
+export interface HeldRun {
+  id: string; name: string; score: number; seconds: number; squashes: number; ended_at_ms: number;
+}
+export function listHeldRuns(db: Database): HeldRun[] {
+  return db.query(`SELECT r.id, p.name, r.score, r.seconds, r.squashes, r.ended_at_ms
+    FROM runs r JOIN players p ON p.id = r.player_id
+    WHERE r.held = 1 AND r.ended_at_ms IS NOT NULL ORDER BY r.ended_at_ms, r.id`).all() as HeldRun[];
+}
+export function approveRun(db: Database, id: string): "approved" | "already-eligible" {
+  return db.transaction(() => {
+    const run = getRun(db, id);
+    if (!run) throw new Error("Run not found.");
+    if (run.ended_at_ms === null) throw new Error("Run has not finished.");
+    if (!run.held) return "already-eligible" as const;
+    db.query("UPDATE runs SET held = 0 WHERE id = ?").run(id);
+    return "approved" as const;
+  }).immediate();
 }
 export function personalBest(db: Database, playerId: string): number | null {
   return (db.query("SELECT MAX(score) AS best FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL")
@@ -102,10 +127,10 @@ export function personalBest(db: Database, playerId: string): number | null {
 }
 export function leaderboard(db: Database): Leader[] {
   const rows = db.query(`WITH bests AS (
-      SELECT player_id, MAX(score) AS score FROM runs WHERE ended_at_ms IS NOT NULL GROUP BY player_id
+      SELECT player_id, MAX(score) AS score FROM runs WHERE ended_at_ms IS NOT NULL AND held = 0 GROUP BY player_id
     ) SELECT p.id AS playerId, p.name, b.score, MIN(r.ended_at_ms) AS achieved
     FROM bests b JOIN players p ON p.id = b.player_id
-    JOIN runs r ON r.player_id = b.player_id AND r.score = b.score AND r.ended_at_ms IS NOT NULL
+    JOIN runs r ON r.player_id = b.player_id AND r.score = b.score AND r.ended_at_ms IS NOT NULL AND r.held = 0
     WHERE NOT EXISTS (SELECT 1 FROM hidden_names h WHERE h.name_key = p.name_key)
     GROUP BY p.id ORDER BY b.score DESC, achieved ASC, p.id ASC`).all() as Leader[];
   return rows.filter((row) => !validateName(row.name).error).slice(0, 10)
@@ -118,7 +143,7 @@ export function teamTotals(db: Database): TeamTotals {
   const totals: TeamTotals = { tabs: 0, spaces: 0 };
   const rows = db.query(`SELECT p.name, r.team, SUM(r.score) AS total FROM runs r
     JOIN players p ON p.id = r.player_id
-    WHERE r.ended_at_ms IS NOT NULL AND r.team IS NOT NULL
+    WHERE r.ended_at_ms IS NOT NULL AND r.held = 0 AND r.team IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM hidden_names h WHERE h.name_key = p.name_key)
     GROUP BY p.id, p.name, r.team`).all() as { name: string; team: Team; total: number }[];
   for (const row of rows) {

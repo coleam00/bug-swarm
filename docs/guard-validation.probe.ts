@@ -26,7 +26,7 @@ try {
       if (path.startsWith("/api/")) {
         if (offline) return route.abort();
         if (path === "/api/runs") starts++;
-        return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } : path.endsWith("/finish") ? { saved: true } :
+        return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } : path.endsWith("/finish") ? { saved: true, held: false } :
           path === "/api/teams" ? { tabs: 123, spaces: 99 } : path.endsWith("/best") ? { best: 100 } :
             Array.from({ length: 10 }, (_, i) => ({ playerId: String(i), name: `Robot ${i}`, score: 100 - i })) });
       }

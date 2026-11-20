@@ -46,7 +46,7 @@ try {
     const serveProduction = (route: any) => {
       const path = new URL(route.request().url()).pathname;
       if (path.startsWith("/api/")) return route.fulfill({ json: path === "/api/runs" ? { runId: crypto.randomUUID() } :
-        path.endsWith("/finish") ? { saved: true } : path === "/api/teams" ? { tabs: 0, spaces: 0 } : path.endsWith("/best") ? { best: null } : [] });
+        path.endsWith("/finish") ? { saved: true, held: false } : path === "/api/teams" ? { tabs: 0, spaces: 0 } : path.endsWith("/best") ? { best: null } : [] });
       const file = path === "/" ? "index.html" : path.slice(1);
       assert.ok(file === "index.html" || /^assets\/[\w.-]+$/.test(file));
       return route.fulfill({ body: readFileSync(join("dist", file)), contentType: file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html" });

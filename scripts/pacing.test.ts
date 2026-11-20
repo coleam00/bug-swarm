@@ -2,12 +2,13 @@ import { expect, spyOn, test } from "bun:test";
 import { CHOICE_INTERVAL, CI_DRONE, REFACTOR_BOMB, REVIEW_LASER, TEST_SHIELD, UPGRADE_IDS, type UpgradeId } from "../src/shared/upgrades";
 import { createSimulation, IDLE, step } from "../src/web/game/simulation";
 import { acquiredUpgrades, createUpgrades, openChoice, selectUpgrade } from "../src/web/game/upgrades";
+import { needsReview, REVIEW_SCORE } from "../src/server/rules";
 import { broadScenarios, broadTargets, evasiveInput, median, pacingCommand, printReport, PRIORITIES, priorityKey, resolveChoice, runBroadMatrix, runMatrix, runScenario, SCENARIOS, selectCard, summarize, targets, under60, VIEWPORTS, type Result } from "./pacing";
 
 test("default matrix keeps all five seeds, modes, shapes and distinct upgrade priorities", () => {
   const rows = runMatrix();
   expect(rows).toHaveLength(20);
-  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
+  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true, scoresUnheld: true });
   for (const seed of [1, 42, 12345, 7, 99]) for (const mode of ["idle", "evasive"] as const)
     for (const viewport of [[390, 844], [1280, 800]])
       expect(rows.filter(r => r.seed === seed && r.mode === mode && r.viewport[0] === viewport[0] && r.viewport[1] === viewport[1])).toHaveLength(1);
@@ -16,6 +17,23 @@ test("default matrix keeps all five seeds, modes, shapes and distinct upgrade pr
   for (const priority of priorities) expect([...priority].sort()).toEqual([...UPGRADE_IDS].sort());
   expect(priorities.some(p => p[0] === TEST_SHIELD)).toBe(true);
   expect(priorities.some(p => p[0] === CI_DRONE && p[1] === REFACTOR_BOMB)).toBe(true);
+});
+
+test("measured broad maximum stays below review and both command modes reject otherwise plausible held scores", () => {
+  const measured = runScenario({ seed: 46, mode: "evasive", viewport: [1280, 800],
+    priority: [CI_DRONE, REVIEW_LASER, REFACTOR_BOMB, TEST_SHIELD] });
+  expect(measured.score).toBe(4816); expect(measured.validScore).toBe(true); expect(needsReview(measured.score)).toBe(false);
+  for (const rows of [reportFixture([90]), broadFixture()]) {
+    rows[0] = { ...rows[0]!, score: REVIEW_SCORE + 1, squashes: 700, seconds: 225, validScore: true };
+    expect(targets(rows).scoresPlausible).toBe(true); expect(targets(rows).scoresUnheld).toBe(false);
+    if (rows.length === 20) {
+      expect(broadTargets(rows).scoresPlausible).toBe(true); expect(broadTargets(rows).scoresUnheld).toBe(false);
+    }
+  }
+  for (const args of [[], ["--broad"]]) expect(pacingCommand(args, scenario => ({
+    ...reported(scenario.mode, scenario.viewport, scenario.mode === "idle" ? 30 : 90), ...scenario,
+    score: 7225, seconds: 225, squashes: 700, validScore: true,
+  }), () => {})).toBe(1);
 });
 
 test("broad enumeration crosses 100 seeds, five full priorities, both shapes and modes exactly once", () => {
@@ -179,17 +197,17 @@ function reportFixture(portrait: readonly number[], landscape = portrait, idle =
 }
 test.each([60, 180])("target report accepts the inclusive %i-second evasive boundary", duration => {
   expect(targets(reportFixture([duration]))).toEqual({ idle60: true, evasiveMedian60to180: true,
-    allDead240: true, scoresPlausible: true });
+    allDead240: true, scoresPlausible: true, scoresUnheld: true });
 });
 test("idle target rejects a completed run beyond 60 seconds", () => {
   expect(targets(reportFixture([120], [120], 61))).toEqual({ idle60: false, evasiveMedian60to180: true,
-    allDead240: true, scoresPlausible: true });
+    allDead240: true, scoresPlausible: true, scoresUnheld: true });
 });
 test("overall ceiling checks the longest run even when both medians are valid", () => {
   const atLimit = reportFixture([60, 120, 240]);
-  expect(targets(atLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true });
+  expect(targets(atLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: true, scoresUnheld: true });
   const overLimit = reportFixture([60, 120, 241]);
-  expect(targets(overLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: false, scoresPlausible: true });
+  expect(targets(overLimit)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: false, scoresPlausible: true, scoresUnheld: true });
 });
 test.each([59, 181])("evasive median rejects %i seconds overall and within either viewport", duration => {
   expect(targets(reportFixture([duration])).evasiveMedian60to180).toBe(false);
@@ -198,10 +216,10 @@ test.each([59, 181])("evasive median rejects %i seconds overall and within eithe
   expect(targets(reportFixture([120], [duration])).evasiveMedian60to180).toBe(false);
 });
 test("target report rejects missing groups and invalid scores", () => {
-  expect(targets([])).toEqual({ idle60: false, evasiveMedian60to180: false, allDead240: false, scoresPlausible: false });
+  expect(targets([])).toEqual({ idle60: false, evasiveMedian60to180: false, allDead240: false, scoresPlausible: false, scoresUnheld: false });
   expect(targets(reportFixture([120], [])).evasiveMedian60to180).toBe(false);
   const rows = reportFixture([120]); rows[0]!.validScore = false;
-  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: false });
+  expect(targets(rows)).toEqual({ idle60: true, evasiveMedian60to180: true, allDead240: true, scoresPlausible: false, scoresUnheld: true });
 });
 
 test.each([

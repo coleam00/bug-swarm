@@ -1,5 +1,32 @@
 # Pacing validation
 
+## Score review ceiling: issue #49
+
+`bun run pacing --broad` at `31b5ee6481b59ff19b78784e123f31a9ff96851f` measured a maximum **4,816 points** across **2,000 runs**: evasive seed **46**, **1280x800**, priority **ci-drone / review-laser / refactor-bomb / test-shield**. `REVIEW_SCORE = 7224` is **4,816 × 1.5**. Only scores strictly above it are held. Plausibility remains an independent rejection gate; a plausible **13,800 / 300 seconds / 1,350 squashes** finish is saved but held.
+
+Both pacing commands now require `scoresUnheld`, using production `needsReview`, alongside `scoresPlausible`. The default matrix, ten-seed broad slice, measured maximum scenario and a plausible synthetic result above the ceiling exercise that distinction. The full broad workload remains outside the routine suite. This is an empirical outlier check: lower forged scores can still pass, and exceptional honest runs can need review.
+
+The additive `runs.held` migration holds existing finished scores above the ceiling only when adding the column. Approvals persist across retries and reopen. Held runs stay in private bests and bet stats, but are excluded before public best selection, tie ordering, the top-ten cutoff and team sums. Manual hides and current name validation remain authoritative after approval.
+
+Owner commands use `DATA_DIR/app.db` (default `data/app.db`):
+
+```sh
+bun run review
+bun run approve <run-id>
+bun run hide "Robot Name"
+```
+
+Review prints run id, JSON-escaped name, score, submitted seconds, squashes and UTC finish time, oldest first, including hidden or now-blocked names. An empty or missing database prints `No held runs` without creating a missing file. Approve releases one finished run; an already eligible run is a successful no-op. Invalid arguments, missing databases and unknown or unfinished ids fail. Approval retains all finish fields and events. Hide applies to held players too. See [architecture.md](../architecture.md#owner-commands) for command semantics.
+
+Validation on Windows, 2026-11-20:
+
+- `bun run check`: TypeScript and **449 tests** passed. It covers migration/reopen, atomic rollback, 7,223/7,224/7,225 boundaries, the 13,800-point forgery, retries before/after approval, moderation, CLI subprocesses, private stats, eligible personal bests/ties, held UI, stale responses and replay. After the final report-fixture simplification and board-copy change, the focused pacing and Board tests passed (**29 tests**) and the affected review tests were rerun.
+- `bun run pacing` (**20 cases**) and `bun run pacing --broad` (**2,000 cases**): every gate passed, including `scoresPlausible` and `scoresUnheld`; maximum score remained **4,816**. `bun run build` passed.
+- File-backed API/Session/BoardController integration: both primed caches retain the held state through **999 ms**, refresh at **1,000 ms**, and both real polling clients show the approved run, contiguous ranks and team sums at **2,000 ms**. Approval uses a separate database connection; an approved hidden player stays excluded.
+- [Chrome evidence](review-evidence/browser.json): Chrome for Testing **159.0.8154.6**, **390x844** portrait and **844x390** landscape, no horizontal overflow or page errors. The production bundle used real API handlers, scratch SQLite and the actual `review` / `approve` subprocesses through intercepted browser routes, with no listening server. The deliberately synthetic high-score fixture showed its score, private best, `Under review` and replay control. Approval reached both live views and team totals in **2.11 s / 1.84 s**. The status intentionally remains the finish acknowledgement while the screen stays open; there is no live review-status API. [Held portrait](review-evidence/held-390.png), [held landscape](review-evidence/held-844.png), [approved game](review-evidence/approved-game-390.png), [approved board](review-evidence/approved-board-390.png).
+
+Reproduce Chrome evidence with [review-validation.probe.ts](review-validation.probe.ts): create a scratch directory with its own `package.json`, install `playwright-core` there, set `SCRATCH` to it and `CHROME` to an isolated Chrome executable, run `bun run build`, then `bun docs/review-validation.probe.ts`. The probe creates its own home/profile and databases below scratch and closes every browser/database handle. Its server clock uses a synthetic offset to exercise a 300-second fixture immediately, then advances with real elapsed time for cache expiry. This proves browser layout and the review workflow, not human gameplay or mobile hardware performance.
+
 ## Score plausibility calibration: issue #34
 
 Before changing validation, `runBroadMatrix()` from `scripts/pacing.ts` at `e5bd626764f19c2a729655621e8cb5a79e7d94b9` reproduced all 2,000 broad cases with zero invalid finishes:
@@ -10,7 +37,7 @@ Before changing validation, `runBroadMatrix()` from `scripts/pacing.ts` at `e5bd
 
 All three maxima occur in evasive seed **46**, viewport **1280×800**, priority **ci-drone → review-laser → refactor-bomb → test-shield**. The maximum score is **4,816**, rather than the issue's approximate 2,600. Reproduce by importing `runBroadMatrix`, then reducing the returned rows by `squashes / seconds`, `squashes / elapsed` and `elapsed`, respectively.
 
-`rules.ts` caps squashes at **4.5 per submitted second** (approximately 1.5 × the measured maximum, rounded upward) and submitted gameplay duration at **300 seconds**. Submitted seconds cannot exceed whole server elapsed seconds. Extra wall-clock time, including upgrade choices, earns no extra squash allowance; an otherwise legal short finish can still arrive after a long pause. These empirical bounds limit obvious forgeries, not cheating: the maximum accepted score is still **13,800**, and the owner hides bad entries manually. Exceptional legitimate runs can exceed these measured bounds.
+`rules.ts` caps squashes at **4.5 per submitted second** (approximately 1.5 × the measured maximum, rounded upward) and submitted gameplay duration at **300 seconds**. Submitted seconds cannot exceed whole server elapsed seconds. Extra wall-clock time, including upgrade choices, earns no extra squash allowance; an otherwise legal short finish can still arrive after a long pause. These empirical bounds limit obvious forgeries, not cheating: the maximum accepted score is still **13,800**. Issue #49 now holds scores above **7,224** for owner review, as described below; lower forged scores can still pass. Exceptional legitimate runs can exceed these measured bounds.
 
 The harness feeds every finish through the real `plausible()` function using `Math.ceil(state.time * 1000)` as its synthetic server completion timestamp, the first integer millisecond at or after completion. Raw `elapsed` remains unchanged for measurements. This avoids microscopic floating-point drift below a whole second when simulation scoring uses `floor(time + 1e-9)`; the server gains no clock slack. The seeded API simulation fixture uses the same convention. Default-matrix acceptance and the existing ten-seed broad slice cover compatibility, including whole-second finishes; full broad validation remains a manual command.
 

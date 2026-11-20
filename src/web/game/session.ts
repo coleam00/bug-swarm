@@ -25,7 +25,7 @@ export interface LocalRun {
 }
 export interface SessionView {
   restartReady: boolean; choiceReady: boolean;
-  token: number; over: boolean; score: number; save: "pending" | "saved" | "failed" | "rate-limited";
+  token: number; over: boolean; score: number; save: "pending" | "saved" | "held" | "failed" | "rate-limited";
   best: number | null; bestStatus: "loading" | "ready" | "failed";
   leaders: Leader[]; leadersStatus: "loading" | "ready" | "failed";
   teamTotals: TeamTotals | null; teamsStatus: "loading" | "ready" | "failed";
@@ -166,9 +166,9 @@ export class Session {
       // is a conservative lower bound on server elapsed time; delay only the save.
       const readyAt = run.registeredAt! + run.result!.seconds * 1000;
       while (this.clock.now() < readyAt) await this.clock.sleep(Math.ceil(readyAt - this.clock.now()));
-      await this.api.finish(id, run.result!);
+      const saved = await this.api.finish(id, run.result!);
       if (this.current !== run) return;
-      this.view = { ...this.view, save: "saved" }; this.emit();
+      this.view = { ...this.view, save: saved.held ? "held" : "saved" }; this.emit();
       void this.refreshBest(run); void this.refreshLeaders(run); void this.refreshTeams(run);
     } catch (error) {
       this.log(`Score save failed [${run.runId ?? `local-${run.token}`}]`, error);

@@ -55,7 +55,7 @@ It opens from a link with nothing to install and no account, works with one thum
 - 60 frames per second with 150 bugs on screen in current Chrome on a mid-range phone and laptop.
 - The game never waits on the server: if the API is down, the run still plays, and the game-over screen says the score couldn't be saved.
 - Every name shown anywhere passes the name rules (2 to 16 characters, letters, numbers, spaces, `-` and `_`, not on the blocked-word list), and the owner can hide any name from every board with one command.
-- The server accepts a score only for a run it started, and only if the score is possible for the time the run actually lasted by the server's clock.
+- The server accepts a score only for a run it started, and only if the score is possible for the time the run actually lasted by the server's clock. Scores above the measured review ceiling are saved privately with "Under review" and enter the public top 10 and team totals only after owner approval.
 - Every visual effect fits the frame budget: the look never costs the 60 frames per second.
 - No account, no sign-in, no purchases, no ads, no audio this release.
 
@@ -102,7 +102,7 @@ The factory files one phase at a time. Each phase leaves the game playable.
 ### Phase 3: Tabs vs Spaces, and the stream board
 
 - **Proves:** a team race gives every player, not only the top 10, a reason to keep playing.
-- **Outcome:** on first visit the player picks Tabs or Spaces next to their name; every finished run adds its score to the team. `/board` is a full-screen page for the stream: the top 10 and the two team totals as a race, in type readable when the stream is shown small.
+- **Outcome:** on first visit the player picks Tabs or Spaces next to their name; every eligible finished run adds its score to the team; scores above the measured ceiling wait for owner review. `/board` is a full-screen page for the stream: the top 10 and the two team totals as a race, in type readable when the stream is shown small.
 - **Acceptance:**
   - [ ] First visit asks for a team (Tabs or Spaces) with the name; existing players are asked once on their next visit; the game-over screen shows both team totals.
   - [ ] `/board` shows the top 10 and both team totals, refreshes at least every 5 seconds, and is readable at 1280x720 shrunk to a quarter of the screen.
@@ -116,7 +116,7 @@ The factory files one phase at a time. Each phase leaves the game playable.
 - Purchases, ads, or prizes handled by the game.
 - Audio and music (a later release).
 - Reading YouTube chat or any outside service.
-- Cheat-proof scoring beyond the plausibility check; the owner hides bad entries by hand.
+- Cheat-proof scoring beyond the plausibility check and measured review ceiling; the owner reviews held outliers and hides bad entries by hand.
 
 ## Open questions
 

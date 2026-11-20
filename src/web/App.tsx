@@ -91,7 +91,7 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
         }}>
         <h1>Game over</h1><p className="final-score">Score {view.score}</p>
         <TeamRace view={view} />
-        <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
+        <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "held" ? "Under review" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
         <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best ?? "No saved runs yet"}</p>
         <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
           <p className="restart">Tap or press a key to play again</p>

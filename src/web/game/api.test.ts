@@ -42,7 +42,7 @@ test("exported client starts, finishes and reads scores against the in-process s
     expect(getRun(db, runId)?.player_id).toBe(identity.playerId);
     now += 60000;
     const upgrades = [{ id: UPGRADE_IDS[0], count: 2 }, { id: UPGRADE_IDS[3], count: 1 }];
-    expect(await api.finish(runId, { playerId: identity.playerId, score: 60, squashes: 0, seconds: 60, touch: false, upgrades })).toEqual({ saved: true });
+    expect(await api.finish(runId, { playerId: identity.playerId, score: 60, squashes: 0, seconds: 60, touch: false, upgrades })).toEqual({ saved: true, held: false });
     expect(getRun(db, runId)?.ended_at_ms).toBe(now);
     expect(JSON.parse(getRun(db, runId)!.upgrades)).toEqual(upgrades);
     expect(await api.leaders()).toEqual([{ playerId: identity.playerId, name: identity.name, score: 60 }]);

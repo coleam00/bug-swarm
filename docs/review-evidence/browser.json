@@ -1,0 +1,59 @@
+{
+  "chrome": "159.0.8154.6",
+  "measuredAt": "2026-11-20T09:41:43.784Z",
+  "measurements": [
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "fixture": "synthetic 13,800 points / 300 seconds / 1,350 squashes",
+      "finishes": [
+        {
+          "status": 200,
+          "body": {
+            "saved": true,
+            "held": true
+          }
+        }
+      ],
+      "review": "run id\tname\tscore\tseconds\tsquashes\twhen (UTC)\n9d501eaa-b217-43f6-9fdf-5b027921906f\t\"Review Robot\"\t13800\t300\t1350\t1970-01-01T00:05:00.309Z",
+      "approval": "Approved: 9d501eaa-b217-43f6-9fdf-5b027921906f",
+      "releaseMs": 2113.1738,
+      "layout": {
+        "viewport": 390,
+        "body": 390,
+        "status": [
+          "Under review"
+        ]
+      }
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "fixture": "synthetic 13,800 points / 300 seconds / 1,350 squashes",
+      "finishes": [
+        {
+          "status": 200,
+          "body": {
+            "saved": true,
+            "held": true
+          }
+        }
+      ],
+      "review": "run id\tname\tscore\tseconds\tsquashes\twhen (UTC)\nc980306c-7c79-4b50-8cae-2c617c8a17ba\t\"Review Robot\"\t13800\t300\t1350\t1970-01-01T00:05:01.324Z",
+      "approval": "Approved: c980306c-7c79-4b50-8cae-2c617c8a17ba",
+      "releaseMs": 1835.107,
+      "layout": {
+        "viewport": 844,
+        "body": 844,
+        "status": [
+          "Under review"
+        ]
+      }
+    }
+  ],
+  "errors": []
+}

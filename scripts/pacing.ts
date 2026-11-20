@@ -3,7 +3,7 @@ import { STEP } from "../src/web/game/config";
 import { chooseUpgrade, createSimulation, IDLE, step, type Input, type Simulation } from "../src/web/game/simulation";
 import { acquiredUpgrades } from "../src/web/game/upgrades";
 import { CI_DRONE as D, REFACTOR_BOMB as B, REVIEW_LASER as L, TEST_SHIELD as S, type UpgradeId } from "../src/shared/upgrades";
-import { parseFinish, plausible } from "../src/server/rules";
+import { needsReview, parseFinish, plausible } from "../src/server/rules";
 
 export const SCENARIOS = [
   { seed: 1, priority: [S, D, B, L] }, { seed: 42, priority: [D, B, S, L] },
@@ -91,7 +91,8 @@ export function broadTargets(rows: readonly Result[]): Record<string, boolean> {
     })),
     idle60: completeGroups && rows.filter(r => r.mode === "idle").every(r => r.dead && r.elapsed <= 60 + TOLERANCE),
     allDead240: completeGroups && rows.every(r => r.dead && r.elapsed <= 240 + TOLERANCE),
-    scoresPlausible: completeGroups && rows.every(r => r.validScore) };
+    scoresPlausible: completeGroups && rows.every(r => r.validScore),
+    scoresUnheld: completeGroups && rows.every(r => !needsReview(r.score)) };
 }
 export function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
@@ -111,7 +112,8 @@ export function targets(rows: readonly Result[]) {
     evasiveMedian60to180: medianInRange(evasive) && VIEWPORTS.every(v =>
       medianInRange(evasive.filter(r => r.viewport[0] === v[0] && r.viewport[1] === v[1]))),
     allDead240: rows.length > 0 && rows.every(r => within(r, 240)),
-    scoresPlausible: rows.length > 0 && rows.every(r => r.validScore) };
+    scoresPlausible: rows.length > 0 && rows.every(r => r.validScore),
+    scoresUnheld: rows.length > 0 && rows.every(r => !needsReview(r.score)) };
 }
 export function printReport(rows: readonly Result[], broad = false): void {
   for (const r of rows) console.log(`${r.mode} ${r.viewport.join("x")} seed=${r.seed} priority=${r.mode === "idle" && !broad ? "first-card" : r.priority.join(",")} seconds=${r.dead ? "" : ">="}${r.elapsed.toFixed(2)} ${r.dead ? "death" : "CUTOFF"} score=${r.score} build=${JSON.stringify(r.build)}`);

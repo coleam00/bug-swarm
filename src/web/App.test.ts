@@ -24,7 +24,7 @@ const { step, IDLE } = await import(${moduleUrl("game/simulation.ts")});
 const { pick } = await import(${moduleUrl("game/upgrade-fixture.test-support.ts")});
 const { UPGRADE_IDS, UPGRADE_NAMES } = await import(${moduleUrl("../shared/upgrades.ts")});
 api.start = async () => ({ runId: "scratch-run" });
-api.finish = async () => ({ saved: true });
+api.finish = async () => ({ saved: true, held: false });
 api.teams = async () => ({ tabs: 0, spaces: 0 });
 api.best = async () => ({ best: null }); api.leaders = async () => [];
 let session;
@@ -159,6 +159,15 @@ try {
   act(() => { wait(800); session.start(); });
   assert.deepEqual(session.current.simulation.arena, { width: 800, height: 450 });
   assert.deepEqual(portrait.simulation.arena, { width: 450, height: 800 });
+
+  api.finish = async () => ({ saved: true, held: true });
+  session.current.simulation.score = 13800;
+  await act(async () => { session.end(); });
+  assert.equal(text(tree.root.findByProps({ role: "status" })), "Under review");
+  assert.ok(text(tree.root.findByProps({ "aria-label": "Game over" })).includes("13800"));
+  act(() => { wait(800); });
+  assert.ok(tree.root.findAllByType("button").some(button => text(button).includes("Play again")));
+  api.finish = async () => ({ saved: true, held: false });
 
   // Wall-clock guards publish without input, keep their layout, and never queue a press.
   const pointerEvent = { pointerType: "touch", pointerId: 7, button: 0, clientX: 5, clientY: 5 };
