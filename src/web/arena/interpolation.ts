@@ -15,6 +15,14 @@ export class Interpolation {
   private lastEvent = 0;
   get time() { return Number.isFinite(this.combatTick) ? this.combatTick * STEP_MS : 0; }
   private playerTransitions = new Map<string, number>();
+  observation(now: number) {
+    const latest = this.samples.at(-1);
+    if (!latest) return { a: -1, b: -1, fraction: 0, transitions: [...this.playerTransitions] };
+    const target = latest.snapshot.tick + (now - latest.at - INTERPOLATION_MS) / STEP_MS;
+    let a = this.samples[0]!, b = a;
+    for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
+    return { a: a.snapshot.tick, b: b.snapshot.tick, fraction: a === b ? 0 : Math.max(0, Math.min(1, (target - a.snapshot.tick) / (b.snapshot.tick - a.snapshot.tick))), transitions: [...this.playerTransitions] };
+  }
   clear() { this.samples = []; this.combatTick = -Infinity; this.lastEvent = 0; this.playerTransitions.clear(); }
   push(snapshot: Snapshot, at: number) {
     const last = this.samples.at(-1);

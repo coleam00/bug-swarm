@@ -9,19 +9,23 @@ import { configuredOrigin, renderShareMeta } from "./share-meta";
 import { RoomManager, type Connection } from "./arena/rooms";
 import { SERVER_MESSAGE_BYTES } from "../shared/arena/constants";
 import { packagedBuildId } from "./build";
+import { guardPlaytest } from "./playtest";
+import type { RoomOptions } from "./arena/rooms";
 
 // Production and integration tests use the same HTTP/WebSocket boundary.
-export function createServer(options: { port?: number; hostname?: string; dataDir?: string; env?: Record<string, string | undefined> } = {}) {
+export function createServer(options: { port?: number; hostname?: string; dataDir?: string; env?: Record<string, string | undefined>; assets?: string; playtest?: RoomOptions } = {}) {
   const env = options.env ?? process.env, config = readConfig(env);
   const { port, dataDir, hostname } = { ...config, ...options };
   const { startLimit, trustProxyHops } = config;
+  const assets = options.assets ?? "dist";
+  guardPlaytest(env, !!options.playtest, assets);
   // Validate configuration and prepare assets before opening SQLite.
   const publicOrigin = configuredOrigin(env), shareAssets = createShareAssets();
-  const template = existsSync("dist/index.html") ? readFileSync("dist/index.html", "utf8") : undefined;
-  const buildId = packagedBuildId();
+  const template = existsSync(join(assets, "index.html")) ? readFileSync(join(assets, "index.html"), "utf8") : undefined;
+  const buildId = packagedBuildId(join(assets, "build.json"));
   if (startLimit > START_LIMIT) console.warn(`LOAD TEST: start limit raised to ${startLimit} per IP per ten minutes. Unset LOAD_TEST_START_LIMIT before serving players.`);
   let invalidateScores = () => {};
-  const db = openDb(join(dataDir, "app.db")), arenas = new RoomManager(db, buildId, { invalidate: () => invalidateScores() });
+  const db = openDb(join(dataDir, "app.db")), arenas = new RoomManager(db, buildId, { ...options.playtest, invalidate: () => invalidateScores() });
   try {
     const peers = new WeakMap<Request, string>();
     const trusted = (env.TRUSTED_PROXIES ?? "").split(",").map(v => v.trim()).filter(Boolean);
@@ -37,7 +41,7 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
     app.get("/", c => html(c.req.url));
     app.get("/index.html", c => html(c.req.url));
     for (const alias of ["/arena", "/arena/"]) app.get(alias, c => c.redirect("/" + new URL(c.req.url).search, 307));
-    app.use("/*", serveStatic({ root: "./dist" }));
+    app.use("/*", serveStatic({ root: assets.replaceAll("\\", "/") }));
     app.get("*", c => html(c.req.url));
 
     const server = Bun.serve<{ connection?: Connection }>({

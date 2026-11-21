@@ -9,22 +9,25 @@ import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
 import { createPickupDraws, pickupAlpha, effectRemaining, type PickupDraw } from "./pickups/registry";
 import { PICKUPS, PICKUP_KINDS } from "../../shared/arena/pickups/registry";
+import type { PaintTrace } from "./observation";
 import { HiveHud } from "./hive-hud";
 import { personalLevel } from "./level";
+declare const __ARENA_PLAYTEST__: boolean;
+const observing = typeof __ARENA_PLAYTEST__ === "undefined" || __ARENA_PLAYTEST__;
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
   private pickupDraw: Record<PickupKind, PickupDraw>;
   private bugDraw: Record<BugKind, BugDraw>;
   private globDraw = createGlobDraw();
   private hiveHud = new HiveHud();
-  private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
+  private bursts = Array.from({ length: MAX_EVENTS }, () => ({ id: 0, tick: 0, x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
   reset() { this.hiveHud.reset(); this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
   events(events: CombatEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { this.hiveHud.event(e, now); Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
   private floor: CanvasPattern | null;
   private glows = new Map<string, HTMLCanvasElement>();
   private labels = new Map<string, HTMLCanvasElement>();
-  constructor(private ctx: CanvasRenderingContext2D) {
+  constructor(private ctx: CanvasRenderingContext2D, private trace?: PaintTrace) {
     this.bugDraw = createBugDraws(); this.pickupDraw = createPickupDraws();
     const tile = document.createElement("canvas"); tile.width = tile.height = 48;
     const c = tile.getContext("2d")!; c.fillStyle = "#0c1420"; c.fillRect(0, 0, 48, 48);
@@ -38,6 +41,7 @@ export class ArenaRenderer {
     }
   }
   draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS, globs: Glob[] = [], pickups: readonly Pickup[] = []) {
+    if (observing && this.trace) { this.trace.players = []; this.trace.bugs = []; this.trace.effects = []; this.trace.shots = []; this.trace.minimap = []; this.trace.hud = undefined; this.trace.hive = undefined; this.trace.hiveRewards = []; }
     this.time = tick * STEP_MS;
     this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
@@ -56,6 +60,7 @@ export class ArenaRenderer {
       const extent = BUG_DRAW[b.kind].extent(b);
       if (b.x < camera.x - extent || b.x > camera.x + worldWidth + extent || b.y < camera.y - extent || b.y > camera.y + worldHeight + extent) continue;
       this.bugDraw[b.kind](c, b, combatTime);
+      if (observing) this.trace?.bugs.push({ ...b });
     }
     c.lineCap = "round";
     for (const g of globs) {
@@ -67,20 +72,26 @@ export class ArenaRenderer {
       const length = Math.hypot(s.vx, s.vy), dx = s.vx / length * 22, dy = s.vy / length * 22;
       c.strokeStyle = "#ffc26055"; c.lineWidth = 9; c.beginPath(); c.moveTo(s.x - dx, s.y - dy); c.lineTo(s.x, s.y); c.stroke();
       c.strokeStyle = "#fff6c8"; c.lineWidth = 3; c.stroke();
+      if (observing) this.trace?.shots.push({ id: s.id, owner: s.owner });
     }
     // Robots and their names remain readable where the corner map overlaps
     // world feedback at a boundary; the map still overlays the swarm/floor.
-    c.restore(); drawMinimap(c, map, WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs);
+    c.restore(); drawMinimap(c, map, WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs, observing ? this.trace?.minimap : undefined);
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y);
     for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
       const age = now - e.at, duration = e.type === "kill" || e.type === "glob-pop" ? 700 : 180; if (age < 0 || age > duration) continue;
+      if (observing && e.x >= camera.x && e.x <= camera.x + worldWidth && e.y >= camera.y && e.y <= camera.y + worldHeight)
+        this.trace?.effects.push({ ...e } as CombatEvent & { at: number });
       c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "bounce" ? "#e9f8ff" : e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = e.type === "bounce" ? 3 : 2;
       c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = 8 + age / 22; c.moveTo(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r); c.lineTo(e.x + Math.cos(a) * (r + 7), e.y + Math.sin(a) * (r + 7)); } c.stroke();
       if (e.type !== "hit" && e.points > 0) { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
     }
-    this.hiveHud.world(c, now);
+    this.hiveHud.world(c, now, observing && this.trace ? reward => {
+      const x = (reward.x - camera.x) * scale, y = (reward.y - camera.y - 65 - (now - reward.at) / 35) * scale;
+      if (x >= 0 && x <= width && y >= 0 && y <= height) this.trace!.hiveRewards!.push({ ...reward });
+    } : undefined);
     c.restore();
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
       const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height, map.y + map.height + 24);
@@ -108,6 +119,7 @@ export class ArenaRenderer {
       }
       c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
+      if (observing && this.trace) this.trace.hud = { score: p.score, hits: p.hits, population, level };
     }
     if (local && "effects" in local) {
       const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
@@ -117,7 +129,8 @@ export class ArenaRenderer {
         if (remaining > 0) this.pickupDraw[kind].hud(c, 32 + index++ * 48, boss || visibleBoss ? 112 : 70, remaining);
       }
     }
-    this.hiveHud.draw(c, width, height, camera, scale, boss, visibleBoss, now, map.y + map.height + 24);
+    this.hiveHud.draw(c, width, height, camera, scale, boss, visibleBoss, now, map.y + map.height + 24,
+      observing && this.trace ? value => { this.trace!.hive = value; } : undefined);
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
       c.strokeStyle = "#ffffff55"; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, 60, 0, Math.PI * 2); c.stroke();
@@ -145,6 +158,7 @@ export class ArenaRenderer {
     if (p.x < camera.x - 70 || p.x > camera.x + width + 70 || p.y < camera.y - 70 || p.y > camera.y + height + 70) return;
     const c = this.ctx, colour = TEAM_COLOURS[p.team], r = PLAYER_RADIUS;
     const downed = combat.status === "downed";
+    if (observing) this.trace?.players.push({ ...combat, colour, reviveRing: downed && combat.reviveMs > 0 });
     if (downed || combat.immuneUntil > this.time && Math.floor(this.time / 100) % 2) c.globalAlpha = 0.4;
     c.drawImage(this.glows.get(p.team)!, p.x - 50, p.y - 50);
     if (combat.spawnProtectedUntil > this.time) {
