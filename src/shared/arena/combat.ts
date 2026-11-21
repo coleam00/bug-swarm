@@ -2,6 +2,9 @@ import { HEAT_CAPACITY, HEAT_COOLING, HEAT_GAIN, MUZZLE_OFFSET, OVERHEAT_MS, SHO
 import { BUGS } from "./bugs/registry";
 import type { ArenaState, Input } from "./types";
 import { recordMotion, motionFor } from "./motion";
+import { dropPickup } from "./pickups/lifecycle";
+import { PICKUPS, PICKUP_KINDS } from "./pickups/registry";
+const SINGLE_SHOT = [0] as const;
 // First entry of a relative segment into a circle, including initial overlap.
 export function circleEntry(x: number, y: number, dx: number, dy: number, radius: number): number | null {
   const c = x * x + y * y - radius * radius; if (c <= 0) return 0;
@@ -14,6 +17,10 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
   for (const b of state.bugs) recordMotion(b);
   for (const p of state.players.values()) {
     if (p.status === "out") continue;
+    let angles: readonly number[] = SINGLE_SHOT, rate = 1, heat = 1;
+    for (const kind of PICKUP_KINDS) if ((p.effects[kind] ?? 0) > time) {
+      const effect = PICKUPS[kind]; angles = effect.angles ?? angles; rate *= effect.fireRate ?? 1; heat *= effect.heatPerShot ?? 1;
+    }
     const firing = p.status === "active" && (inputs.get(p.id)?.fire ?? false);
     if (!firing) {
       p.heat = Math.max(0, p.heat - HEAT_COOLING * STEP_MS / 1000);
@@ -25,9 +32,12 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
     p.nextShotAt = Math.max(lockedUntil, p.nextShotAt);
     while (p.nextShotAt < end - 1e-8) {
       p.spawnProtectedUntil = 0;
-      const at = p.nextShotAt, dx = Math.cos(p.facing), dy = Math.sin(p.facing);
-      state.shots.push({ id: state.nextId++, owner: p.id, life: p.life, x: p.x - p.vx * (end - at) / 1000 + dx * MUZZLE_OFFSET, y: p.y - p.vy * (end - at) / 1000 + dy * MUZZLE_OFFSET, vx: dx * SHOT_SPEED, vy: dy * SHOT_SPEED, born: at });
-      p.heat += HEAT_GAIN; p.nextShotAt += 1000 / SHOT_RATE;
+      const at = p.nextShotAt;
+      for (const angle of angles) {
+        const dx = Math.cos(p.facing + angle), dy = Math.sin(p.facing + angle);
+        state.shots.push({ id: state.nextId++, owner: p.id, life: p.life, x: p.x - p.vx * (end - at) / 1000 + dx * MUZZLE_OFFSET, y: p.y - p.vy * (end - at) / 1000 + dy * MUZZLE_OFFSET, vx: dx * SHOT_SPEED, vy: dy * SHOT_SPEED, born: at });
+      }
+      p.heat += HEAT_GAIN * heat; p.nextShotAt += 1000 / (SHOT_RATE * rate);
       if (p.heat >= HEAT_CAPACITY - 1e-8) { p.overheatUntil = at + OVERHEAT_MS; p.nextShotAt = end; p.heat = Math.max(0, p.heat - HEAT_COOLING * (end - at) / 1000); break; }
     }
   }
@@ -60,7 +70,7 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
       const impact = Math.min(m.stop, (from - time) / 1000 + first);
       const event = { id: state.nextId++, tick: state.tick + 1, kind: b.kind, x: m.x + m.vx * impact, y: m.y + m.vy * impact };
       state.events.push(killed ? { ...event, type: "kill", points: points / 10 } : { ...event, type: "hit", points: 0 });
-      if (killed) state.bugs.splice(victim, 1);
+      if (killed) { dropPickup(state, b.kind, event.x, event.y, time); state.bugs.splice(victim, 1); }
       continue;
     }
     s.x += s.vx * boundary; s.y += s.vy * boundary;

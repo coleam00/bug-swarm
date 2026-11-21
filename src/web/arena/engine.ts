@@ -81,7 +81,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (local) camera = cameraFor(local.x, local.y, view.width, view.height);
     const combat = interpolation.combat(now);
     renderer.events(combat.events, now);
-    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest, interpolation.time);
+    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest, interpolation.time, combat.pickups);
     cost += performance.now() - start; frames++;
     if (now - sampleAt >= 1000) {
       const fps = frames * 1000 / (now - sampleAt), ms = cost / frames;

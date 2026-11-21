@@ -1,0 +1,40 @@
+import { expect, test } from "bun:test";
+import { createPolicy, policyInput, type Observation } from "./index";
+import { safePickup } from "./pickups";
+import { lifeDefaults, type Pickup } from "../types";
+import { createBug } from "../bugs/registry";
+const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+const pickup: Pickup = { id: 2, kind: "shield", x: 1200, y: 1400, expiresAt: 12000 };
+const observation = (): Observation => ({ players: [player], bugs: [createBug("crawler", 1, 1600, 1200)], pickups: [pickup], tick: 0 });
+test("aimer seeks safe pickups within 250, keeps independent leading aim/bursts, and allows refresh", () => {
+  const o = observation(), ordinary = policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79));
+  const input = policyInput("aimer", o, player, createPolicy(79));
+  expect(input.move).toEqual({ x: 0, y: 1 }); expect(input.aim).toBe(ordinary.aim); expect(input.fire).toBe(ordinary.fire);
+  expect(policyInput("aimer", o, { ...player, effects: { shield: 10000 } } as typeof player, createPolicy(79))).toEqual(input);
+  expect(policyInput("aimer", o, { ...player, heat: 12 }, createPolicy(79)).fire).toBe(false);
+  for (const x of [1450, 1450.001]) expect(!!safePickup({ ...o, bugs: [], pickups: [{ ...pickup, x, y: 1200 }] }, player)).toBe(x === 1450);
+  expect(safePickup({ ...o, pickups: [pickup, { ...pickup, id: 1, y: 1000 }] }, player)?.id).toBe(1);
+});
+test("pickup seeking abandons near bugs, blocked routes, committed corridors, expiry and removed targets", () => {
+  const o = observation();
+  expect(safePickup(o, player)).toBe(pickup);
+  const crawler = createBug("crawler", 3, 1200, 1400);
+  expect(safePickup({ ...o, bugs: [crawler] }, player)).toBeUndefined();
+  crawler.y = 1450; expect(safePickup({ ...o, bugs: [crawler] }, player)).toBeUndefined();
+  const dasher = createBug("dasher", 4, 950, 1300); Object.assign(dasher, { phase: "windup", phaseUntil: 700, facing: 0 });
+  expect(safePickup({ ...o, bugs: [dasher] }, player)).toBeUndefined();
+  Object.assign(dasher, { phase: "dash", phaseUntil: 450 }); expect(safePickup({ ...o, bugs: [dasher] }, player)).toBeUndefined();
+  const deadline = 200 / 180 * 1000 + 50;
+  expect(safePickup({ ...o, pickups: [{ ...pickup, expiresAt: deadline }] }, player)).toBeUndefined();
+  expect(safePickup({ ...o, pickups: [{ ...pickup, expiresAt: deadline + 1 }] }, player)).toBeDefined();
+  expect(safePickup({ ...o, pickups: [], tick: 240 }, player)).toBeUndefined();
+  expect(safePickup({ ...o, tick: 240 }, player)).toBeUndefined();
+});
+test("dodge and eligible rescue take priority; mover behavior is identical with pickups", () => {
+  const o = observation(), dasher = createBug("dasher", 3, 960, 1200); Object.assign(dasher, { phase: "windup", phaseUntil: 700 });
+  const dodge = { ...o, bugs: [dasher] };
+  expect(policyInput("aimer", dodge, player, createPolicy(79))).toEqual(policyInput("aimer", { ...dodge, pickups: [] }, player, createPolicy(79)));
+  const rescue = { ...o, players: [player, { ...player, id: "b", x: 1500, status: "downed" as const }] };
+  expect(policyInput("aimer", rescue, player, createPolicy(79))).toMatchObject({ move: { x: 1, y: 0 }, fire: false });
+  expect(policyInput("mover", o, player, createPolicy(79))).toEqual(policyInput("mover", { ...o, pickups: [] }, player, createPolicy(79)));
+});

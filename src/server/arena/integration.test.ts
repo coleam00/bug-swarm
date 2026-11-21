@@ -22,6 +22,29 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   }
   return { id, socket, messages, wait };
 }
+
+test("two real clients observe the same floor pickup, one collection winner, refresh and shield consumption", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "shield-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1000, y: 1000, spawnProtectedUntil: 0 }); Object.assign(q, { x: 1400, y: 1000 });
+    const floor = () => { const pickup = { id: room.state.nextId++, kind: "shield" as const, x: 1200, y: 1000, expiresAt: room.state.tick * 50 + 12000 }; room.state.pickups.push(pickup); return pickup; };
+    const pickup = floor(); app.arenas.tick(room);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.some(p => p.id === pickup.id));
+    p.x = q.x = 1200; app.arenas.tick(room);
+    const winner = p.id < q.id ? p : q, loser = winner === p ? q : p, until = winner.effects.shield!;
+    expect(until).toBeGreaterThan(room.state.tick * 50); expect(loser.effects).toEqual({});
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.pickups.some(p => p.id === pickup.id) && m.players.some(p => p.id === winner.id && p.effects.shield === until));
+    loser.x = 1600; floor(); app.arenas.tick(room); const refreshed = winner.effects.shield!; expect(refreshed).toBeGreaterThan(until);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.players.some(p => p.id === winner.id && p.effects.shield === refreshed));
+    winner.spawnProtectedUntil = winner.immuneUntil = 0; room.state.bugs = [createBug("crawler", room.state.nextId++, winner.x, winner.y)];
+    app.arenas.tick(room); expect(winner.effects).toEqual({}); expect(winner.hits).toBe(3);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.tick === room.state.tick && m.players.some(p => p.id === winner.id && !p.effects.shield && p.hits === 3));
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
 test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-combat-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });

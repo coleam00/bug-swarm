@@ -1,9 +1,10 @@
 import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANCE, DASHER_DODGE_FORCE, PLAYER_RADIUS, HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
-import type { Bug, Input, Player, Life } from "../types";
+import type { Bug, Input, Player, Life, Pickup } from "../types";
+import { safePickup } from "./pickups";
 export type Policy = "mover" | "aimer";
-export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[] }
+export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[]; pickups: readonly Pickup[]; tick: number }
 export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
@@ -86,6 +87,10 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
       const strength = closest > REVIVE_RADIUS ? Math.min(1, (closest - REVIVE_RADIUS + 1) / (PLAYER_SPEED * STEP_MS / 1000)) : 0;
       return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
     }
+  }
+  if (policy === "aimer" && !dodging) {
+    const pickup = safePickup(observation, p);
+    if (pickup) { const dx = pickup.x - p.x, dy = pickup.y - p.y, d = Math.hypot(dx, dy) || 1; x = dx / d; y = dy / d; }
   }
   const move = clampMove(x, y);
   if (policy === "mover") aim = Math.atan2(move.y, move.x);

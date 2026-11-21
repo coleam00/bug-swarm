@@ -49,7 +49,7 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
     const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
     const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
     for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
       players[0]!.score = score; c.paints.length = 0;
       // Interpolated membership is deliberately stale; connected dead players still count.

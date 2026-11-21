@@ -50,7 +50,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   receive({ v: 1, type: "welcome" }); base = clock;
   const own = { status: "active", life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
-  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: tick + 4, bugs: [],
+  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", pickups: [], arenaId: "room", tick, wave: tick + 4, bugs: [],
     shots: [{ id: 800, owner: own.id, life: 1, born: 0, x: 1200 + tick * 45, y: 1200, vx: 900, vy: 0 }], events,
     players: [{ ...own, x: ownX, ackSeq }, { ...remote, x: remoteX }] });
   snapshot(1, 1200, 1000, 0);

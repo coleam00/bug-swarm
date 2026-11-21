@@ -40,12 +40,12 @@ export class Interpolation {
         facing: p.facing + Math.atan2(Math.sin(q.facing - p.facing), Math.cos(q.facing - p.facing)) * fraction };
     });
   }
-  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "events"> {
-    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], events: [] };
+  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "events" | "pickups"> {
+    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], events: [], pickups: [] };
     // One monotonic clock owns births, movement, removals and their kill effects.
     const target = this.combatTick = Math.max(this.combatTick,
       Math.min(latest.snapshot.tick, latest.snapshot.tick + (now - latest.at - INTERPOLATION_MS) / STEP_MS));
-    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [] };
+    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [], pickups: [] };
     let a = this.samples[0]!, b = a;
     for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
     const offset = target - a.snapshot.tick, events: CombatEvent[] = [];
@@ -55,7 +55,7 @@ export class Interpolation {
         events.push(event); this.lastEvent = event.id;
       }
     }
-    return { bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
+    return { pickups: a.snapshot.pickups, bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
   }
   private entities<K extends "bugs" | "shots">(kind: K, a: Snapshot, b: Snapshot, offset: number): Snapshot[K] {
     const visible: (Bug | Shot)[] = [];
