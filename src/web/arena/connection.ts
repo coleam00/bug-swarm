@@ -13,7 +13,7 @@ interface Dependencies {
   pageBuild: string;
 }
 export function connectArena(identity: Identity, touch: boolean, receive: (message: ServerMessage) => void, status: (message: string) => void, disconnected: () => void, dependencies: Partial<Dependencies> = {}) {
-  const deps: Dependencies = { socket: url => new WebSocket(url), schedule: setTimeout, cancel: clearTimeout, reload: () => location.reload(), store: resumeStore,
+  const deps: Dependencies = { socket: url => new WebSocket(url), schedule: setTimeout.bind(globalThis), cancel: clearTimeout.bind(globalThis), reload: () => location.reload(), store: resumeStore,
     pageBuild: typeof __ARENA_BUILD_ID__ === "undefined" ? "development" : __ARENA_BUILD_ID__, ...dependencies };
   let socket: WebSocket | undefined, state: State = "connecting", retryTeam = false;
   let timer: ReturnType<typeof setTimeout> | undefined, backoff = 500, buildId = deps.pageBuild, restartStatus = "";
