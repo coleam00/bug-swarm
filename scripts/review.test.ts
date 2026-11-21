@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { countEvents, finishRun, getRun, leaderboard, openDb, startRun, teamTotals } from "../src/server/db";
 import { report } from "./stats";
+import { finishArenaLife } from "../src/server/arena/lives";
 
 test("review and approve package scripts use separate processes, retain history and respect hide", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-review-")), home = join(dir, "home"); mkdirSync(home);
@@ -30,6 +31,12 @@ test("review and approve package scripts use separate processes, retain history 
       return started.runId;
     };
     const late = add("Robot", 300002), early = add("Hidden Robot", 300001), blocked = add("admin", 300003);
+    const arenaPlayer = (db.query("SELECT player_id FROM runs WHERE id = ?").get(early) as any).player_id;
+    const arenaRun = crypto.randomUUID();
+    finishArenaLife(db, { runId: arenaRun, playerId: arenaPlayer, team: "spaces", started: 0, ended: 1,
+      result: { playerId: arenaPlayer, life: 1, score: 9001, kills: 0, seconds: 0, touch: true } });
+    expect(getRun(db, arenaRun)).toMatchObject({ held: 0, mode: "arena" });
+    expect(run("review").out).not.toContain(arenaRun);
     const pending = add("Pending", 0, false);
     expect(run("hide", ["Hidden Robot"]).code).toBe(0);
     // Escaping protects operator rows even if legacy data predates the name gate.

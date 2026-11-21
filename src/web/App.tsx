@@ -9,7 +9,7 @@ import { SteeringHint } from "./game/steering-hint";
 import { arenaForViewport } from "./game/arena";
 import { UPGRADE_NAMES, nextPickDescription } from "../shared/upgrades";
 import type { SessionView } from "./game/session";
-import { TEAMS, TEAM_NAMES, TEAM_COLOURS } from "../shared/teams";
+import { PersonalStanding, TeamRace } from "./results/Results";
 import { exactScore } from "./format";
 import "./style.css";
 
@@ -88,10 +88,10 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
         }}>
         <div className="over-summary">
           <h1>Game over</h1><p className="final-score">Score {exactScore(view.score)}</p>
-          <TeamRace view={view} />
+          <TeamRace status={view.teamsStatus} totals={view.teamTotals} />
           <p role="status">{view.save === "rate-limited" ? "Too many runs right now. Your next run will save." : view.save === "failed" ? "couldn't save your score" : view.save === "held" ? "Under review" : view.save === "saved" ? "Score saved" : "Saving score…"}</p>
           <p>Best: {view.bestStatus === "loading" ? "Loading…" : view.bestStatus === "failed" ? "Unavailable" : view.best === null ? "No saved runs yet" : exactScore(view.best)}</p>
-          <PersonalStanding view={view} />
+          <PersonalStanding status={view.standingStatus} standing={view.standing} />
           <div className="restart-controls" style={{ visibility: view.restartReady ? "visible" : "hidden" }} aria-hidden={!view.restartReady}>
             <p className="restart">Tap or press a key to play again</p>
             <button type="button" tabIndex={view.restartReady ? 0 : -1} onClick={(event) => {
@@ -109,29 +109,6 @@ function Game({ identity, initialTouch, onIdentity }: { identity: Identity; init
     </div>
     <footer>Drag · WASD / arrows · mouse <span>{debug || "F: frame readout"}</span></footer>
   </main>;
-}
-
-function PersonalStanding({ view }: { view: SessionView }) {
-  if (view.standingStatus === "loading") return <p>Loading ranking…</p>;
-  if (view.standingStatus === "failed" || !view.standing) return <p>Ranking unavailable</p>;
-  const { rank, total, next } = view.standing;
-  if (rank === null) return <p>Not ranked</p>;
-  return <div className="personal-standing">
-    <p>Your best is #{exactScore(rank)} of {exactScore(total)}</p>
-    {rank <= 10 ? <p>You're in the top 10!</p> : next &&
-      <p>{exactScore(next.pointsToBeat)} {next.pointsToBeat === 1 ? "point" : "points"} to beat #{exactScore(next.rank)}</p>}
-  </div>;
-}
-
-function TeamRace({ view }: { view: SessionView }) {
-  if (view.teamsStatus === "loading") return <p role="status">Loading team totals…</p>;
-  if (view.teamsStatus === "failed" || !view.teamTotals) return <p role="status">Couldn't load team totals</p>;
-  const totals = view.teamTotals, sum = totals.tabs + totals.spaces;
-  return <div className="team-race" aria-label="Tabs vs Spaces">
-    <div className="team-labels">{TEAMS.map(team => <span key={team} style={{ color: TEAM_COLOURS[team] }}>{TEAM_NAMES[team]} <strong>{exactScore(totals[team])}</strong></span>)}</div>
-    <div className={`race-bar${sum ? "" : " empty"}`} aria-hidden="true">{TEAMS.map(team => <span key={team} style={{ width: `${sum ? totals[team] / sum * 100 : 50}%`, background: sum ? TEAM_COLOURS[team] : "#7f91a9" }} />)}</div>
-    {!sum && <p>No team scores yet</p>}
-  </div>;
 }
 
 function ChoiceDialog({ session, view, restoreFocus }: { session: Session; view: SessionView; restoreFocus: () => void }) {

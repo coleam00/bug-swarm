@@ -6,7 +6,10 @@ import { validateName } from "../../server/rules";
 import { loadIdentity, storeIdentity } from "../game/identity";
 import { mountArena } from "./engine";
 import { consumeResume, resumeStore } from "./resume";
-import type { LifeOver } from "../../shared/arena/protocol";
+import { ArenaResults, type ResultsView } from "./results";
+import { api } from "../game/api";
+import { PersonalStanding, TeamRace } from "../results/Results";
+import { exactScore } from "../format";
 import "./arena.css";
 function saved() { try { return loadIdentity(localStorage); } catch { return null; } }
 export function Arena() {
@@ -34,13 +37,33 @@ export function Arena() {
   </form></main>;
 }
 function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identity; touch: boolean; onAccepted: () => void; onError: (message: string, team?: Team, code?: string) => void }) {
-  const [life, setLife] = useState<{ result: LifeOver; respawn: (touch: boolean) => void } | null>(null);
+  const [life, setLife] = useState<ResultsView | null>(null);
+  const replay = useRef<(touch: boolean) => void>(() => {});
+  const press = useRef<{ id: number; x: number; y: number; life: ResultsView } | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null), error = useRef(onError), accepted = useRef(onAccepted), [status, setStatus] = useState("Connecting…");
   error.current = onError; accepted.current = onAccepted;
-  useEffect(() => mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current(),
-    (result, respawn) => setLife(result ? { result: { ...result }, respawn } : null)), [identity.playerId]);
+  useEffect(() => {
+    const results = new ArenaResults(identity.playerId, api, setLife);
+    const unmount = mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current(),
+      (result, respawn) => { press.current = null; replay.current = respawn; results.show(result); });
+    const clear = () => { press.current = null; };
+    window.addEventListener("blur", clear); document.addEventListener("visibilitychange", clear);
+    return () => { unmount(); results.dispose(); window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", clear); };
+  }, [identity.playerId]);
   return <main className="arena-game"><canvas ref={canvas} aria-label="Shared arena" tabIndex={0} />{status && <p role="status" className="arena-status">{status}</p>}
-    {life && <div className="arena-life" role="dialog" aria-label="Life over" onPointerDown={event => { event.preventDefault(); life.respawn(event.pointerType === "touch"); }}><h1>Life over</h1><strong>{life.result.score.toLocaleString()}</strong><p>{life.result.save === "saved" ? "Score saved" : life.result.save === "failed" ? "Save failed" : "Saving score…"}</p>
-      <button onClick={event => { if (event.detail === 0) life.respawn(false); }}>Play again</button></div>}
+    {life && <div className="arena-life" role="dialog" aria-label="Life over"
+      onPointerDown={event => { press.current = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY, life } : null; }}
+      onPointerMove={event => { const start = press.current; if (start?.id === event.pointerId && Math.hypot(event.clientX - start.x, event.clientY - start.y) >= 10) press.current = null; }}
+      onPointerCancel={() => { press.current = null; }}
+      onPointerUp={event => {
+        const start = press.current; press.current = null;
+        if (start?.id === event.pointerId && start.life.result.life === life.result.life && Math.hypot(event.clientX - start.x, event.clientY - start.y) < 10) replay.current(event.pointerType === "touch");
+      }}>
+      <div className="arena-life-content"><div><h1>Life over</h1><strong className="life-score">Score {exactScore(life.result.score)}</strong>
+        <p role="status">{life.result.save === "saved" ? "Score saved" : life.result.save === "failed" ? "Save failed" : "Saving score…"}</p>
+        <p>Best: {life.bestStatus === "loading" ? "Loading…" : life.bestStatus === "failed" ? "Unavailable" : life.best === null ? "No saved runs yet" : exactScore(life.best)}</p>
+      </div><div><PersonalStanding status={life.standingStatus} standing={life.standing} showNextInTopTen />
+        <TeamRace status={life.teamsStatus} totals={life.teamTotals} />
+      </div><button onClick={event => { if (event.detail === 0) replay.current(false); }}>Play again</button></div></div>}
   </main>;
 }

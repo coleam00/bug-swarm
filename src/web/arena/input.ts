@@ -41,7 +41,7 @@ export class ArenaInput {
     return { move: clampMove(x, y), aim: this.aim, fire: this.fire || this.keys.has("Space") || touchFire };
   }
 }
-const controlKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"]);
+const controlKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Enter"]);
 export function bindInput(canvas: HTMLCanvasElement, input: ArenaInput, aim: (x: number, y: number) => number, toggle: () => void, reset: () => void, intercept: (touch: boolean) => boolean = () => false) {
   input.resolveAim = aim;
   input.releaseCapture = id => { if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id); };
@@ -56,7 +56,7 @@ export function bindInput(canvas: HTMLCanvasElement, input: ArenaInput, aim: (x:
     }
     if (event.code === "KeyF" && !event.repeat) toggle();
   }, options);
-  window.addEventListener("keyup", event => { input.keys.delete(event.code); input.blockedKeys.delete(event.code); }, options);
+  window.addEventListener("keyup", event => { if (controlKeys.has(event.code)) event.preventDefault(); input.keys.delete(event.code); input.blockedKeys.delete(event.code); }, options);
   canvas.addEventListener("pointerdown", event => {
     if (intercept(event.pointerType === "touch")) return;
     const rect = canvas.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top;

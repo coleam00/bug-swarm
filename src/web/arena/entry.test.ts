@@ -15,11 +15,15 @@ let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
 mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
   mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
+globalThis.window = new EventTarget(); globalThis.document = new EventTarget();
+const { api } = await import(${moduleUrl("../game/api.ts")});
+api.best = async () => ({ best: 60 }); api.standing = async () => ({ rank: 2, total: 12, next: { rank: 1, pointsToBeat: 9 } });
+api.teams = async () => ({ tabs: 80, spaces: 100 });
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
 const { Arena } = await import(${moduleUrl("Arena.tsx")});
 const { HIDDEN_IDENTITY_MESSAGE } = await import(${moduleUrl("../../shared/arena/protocol.ts")});
-const unavailable = "That name is unavailable. Pick another.";
+const unavailable = "That name isn't allowed.";
 const alertText = () => tree.root.findByProps({ role: "alert" }).children.join("");
 let tree;
 for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "spaces"]) {
@@ -69,11 +73,29 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   }
   act(() => onStatus("")); assert.equal(tree.root.findAllByProps({ role: "status" }).length, 0);
   if (kind === "new" && team === "tabs") {
-    const respawns = []; let prevented = false;
-    act(() => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));
-    act(() => tree.root.findByProps({ role: "dialog" }).props.onPointerDown({ pointerType: "touch", preventDefault() { prevented = true; } }));
-    assert.deepEqual(respawns, [true], "A touch on the actual life-over overlay must request a touch-attributed respawn");
-    assert.equal(prevented, true);
+    const respawns = [];
+    await act(async () => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));
+    const text = () => JSON.stringify(tree.toJSON());
+    assert.ok(text().includes("Your best is #")); assert.ok(text().includes("points"));
+    assert.ok(text().includes("60")); assert.ok(text().includes("80"));
+    const overlay = () => tree.root.findByProps({ role: "dialog" });
+    const down = { pointerType: "touch", button: 0, pointerId: 1, clientX: 20, clientY: 20 };
+    act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerDown(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerCancel()); act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerDown(down));
+    act(() => overlay().props.onPointerMove({ ...down, clientY: 50 }));
+    act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, [], "Scrolling back must not replay");
+    act(() => overlay().props.onPointerDown(down)); act(() => overlay().props.onPointerUp(down));
+    assert.deepEqual(respawns, [true], "A fresh tap must retain touch attribution");
+    act(() => tree.root.findByType("button").props.onClick({ detail: 1 })); assert.deepEqual(respawns, [true]);
+    act(() => tree.root.findByType("button").props.onClick({ detail: 0 })); assert.deepEqual(respawns, [true, false], "Accessible activation works");
+    api.best = async () => ({ best: null });
+    await act(async () => onLife({ life: 2, score: 0, save: "pending" }, touch => respawns.push(touch)));
+    assert.ok(text().includes("Saving score")); assert.ok(text().includes("Loading"));
+    await act(async () => onLife({ life: 2, score: 0, save: "failed" }, touch => respawns.push(touch)));
+    assert.ok(text().includes("Save failed")); assert.ok(text().includes("No saved runs yet"));
+    api.best = async () => ({ best: 60 });
     act(() => onLife(null, () => {})); assert.equal(tree.root.findAllByProps({ role: "dialog" }).length, 0);
   }
   const restoredTeam = team === "tabs" ? "spaces" : "tabs";

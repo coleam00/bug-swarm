@@ -13,11 +13,6 @@ button { background: #86ded1; color: #101923; border: 0; cursor: pointer; font-w
 .game, .choices { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 input { width: 100%; border: 1px solid #7f91a9; background: #141e2b; margin-top: 10px; }
 h1 { font-size: 1.8rem; } h2 { font-size: 1.2rem; }
-.team-race { max-width: 420px; margin: 12px auto; }
-.team-labels { display: flex; justify-content: space-between; gap: 12px; }
-.team-labels span { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 6px; min-width: 0; }
-.race-bar { display: flex; height: 14px; margin-top: 6px; border-radius: 7px; overflow: hidden; }
-.race-bar.empty { opacity: 0.4; }
 /* Inset the shell once; HUD, canvas and results share its safe rectangle. */
 .game { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .hud { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; padding: 12px 16px; }

@@ -3,7 +3,7 @@ import { isTeam, type Team } from "../teams";
 import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, CRAWLER_SPEED, HEAT_CAPACITY, PLAYER_SPEED } from "./constants";
 import type { Input, CombatPlayer, Bug, Shot, KillEvent, LifeResult } from "./types";
 export const VERSION = 1;
-export const HIDDEN_IDENTITY_MESSAGE = "This identity cannot rejoin because its name is hidden. Saved names are permanent.";
+export const HIDDEN_IDENTITY_MESSAGE = "That name isn't allowed.";
 export interface Hello { v: 1; type: "hello"; playerId: string; name: string; team: Team; touch: boolean; buildId: string }
 export interface InputMessage extends Input { v: 1; type: "input"; seq: number; life: number; touch: boolean }
 export interface Respawn { v: 1; type: "respawn"; life: number; touch: boolean }
