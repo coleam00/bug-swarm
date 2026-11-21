@@ -9,8 +9,10 @@ const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!
 const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot-${i}`, team: i % 2 ? "tabs" as const : "spaces" as const, x: 850 + i % 5 * 130, y: 900 + Math.floor(i / 5) * 130, vx: 0, vy: 0, facing: i }));
 const windupOnly = new URLSearchParams(location.search).has("windup");
 const bugs = Array.from({ length: MAX_BUGS }, (_, i) => {
-  const b = createBug(i < 12 ? "spitter" : i % 5 === 0 && !windupOnly ? "crawler" : "dasher", i, 650 + i % 15 * 70, 750 + Math.floor(i / 15) * 65);
+  const b = createBug(i < 10 && !windupOnly ? "beetle" : i >= 10 && i < 22 ? "spitter" : i % 5 === 0 && !windupOnly ? "crawler" : "dasher", i, 650 + i % 15 * 70, 750 + Math.floor(i / 15) * 65);
   if (b.kind === "dasher") { b.phase = windupOnly ? "windup" : ["approach", "windup", "dash", "recovery"][i % 4]; b.phaseUntil = 700; b.facing = i * 0.7; }
+  // Keep all ten armoured bodies inside even the narrow portrait camera.
+  if (b.kind === "beetle") { b.hp = i % 5 + 1; b.facing = i * 0.6; b.x = 1040 + i % 5 * 80; b.y = 1090 + Math.floor(i / 5) * 120; }
   if (b.kind === "spitter") { b.phase = "swell"; b.phaseUntil = 500; }
   return b;
 });
@@ -26,7 +28,7 @@ let count = 0, start = performance.now(), cost = 0, lastBurst = 0, eventId = 1;
 function frame(now: number) {
   const begin = performance.now(), width = canvas.clientWidth, height = canvas.clientHeight;
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-  if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, ...(i % 3 === 0 ? { type: "glob-pop" as const, points: 5 as const } : i % 2 ? { kind: "dasher" as const, type: "kill" as const, points: 30 } : { kind: "dasher" as const, type: "hit" as const, points: 0 as const }) })), now); lastBurst = now; }
+  if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, ...(i % 4 === 0 ? { type: "glob-pop" as const, points: 5 as const } : i % 4 === 1 ? { kind: "beetle" as const, type: "bounce" as const, points: 0 as const } : i % 4 === 2 ? { kind: "dasher" as const, type: "kill" as const, points: 30 } : { kind: "dasher" as const, type: "hit" as const, points: 0 as const }) })), now); lastBurst = now; }
   const view = worldView(width, height);
   if (rescue) for (const p of players) if (p.status === "downed") p.downedUntil = now + 10000 - now % 10000;
   renderer.draw(width, height, cameraFor(1200, 1200, view.width, view.height), players, players[0]!, input, bugs, shots, 6, now / 50, now, view.scale, undefined, now % 500, globs);

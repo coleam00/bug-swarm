@@ -18,7 +18,7 @@ export interface Bug { id: number; kind: BugKind; x: number; y: number; vx: numb
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }
 export interface Glob { id: number; x: number; y: number; vx: number; vy: number; born: number }
 export type CombatEvent = { id: number; tick: number; x: number; y: number } &
-  ({ type: "hit"; kind: BugKind; points: 0 } | { type: "kill"; kind: BugKind; points: number } | { type: "glob-pop"; points: 5; kind?: never });
+  ({ type: "hit" | "bounce"; kind: BugKind; points: 0 } | { type: "kill"; kind: BugKind; points: number } | { type: "glob-pop"; points: 5; kind?: never });
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; players: Map<string, CombatPlayer>; slots: Map<string, number>;
   wave: number; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }

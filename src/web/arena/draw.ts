@@ -63,10 +63,10 @@ export class ArenaRenderer {
     for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
-      const age = now - e.at, duration = e.type === "hit" ? 180 : 700; if (age < 0 || age > duration) continue;
-      c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = 2;
+      const age = now - e.at, duration = e.type === "kill" || e.type === "glob-pop" ? 700 : 180; if (age < 0 || age > duration) continue;
+      c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "bounce" ? "#e9f8ff" : e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = e.type === "bounce" ? 3 : 2;
       c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = 8 + age / 22; c.moveTo(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r); c.lineTo(e.x + Math.cos(a) * (r + 7), e.y + Math.sin(a) * (r + 7)); } c.stroke();
-      if (e.type !== "hit") { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
+      if (e.type === "kill" || e.type === "glob-pop") { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
     }
     c.restore();
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
