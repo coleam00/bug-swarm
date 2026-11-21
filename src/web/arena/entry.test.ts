@@ -88,6 +88,28 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   assert.equal(tree.root.findByType("input").props.readOnly, true);
   act(() => tree.unmount());
 }
+const { resumeStore } = await import(${moduleUrl("resume.ts")});
+let resumeRaw = null;
+globalThis.sessionStorage = { getItem: () => resumeRaw, setItem: (key, value) => { resumeRaw = value; } };
+const resumed = { playerId: crypto.randomUUID(), name: "Resumed", team: "spaces" };
+resumeStore.write({ identity: resumed, touch: true, target: "new-build", attempted: ["new-build"], resume: true });
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
+assert.equal(tree.root.findAllByType("canvas").length, 1, "Reload must enter the play view without Join");
+assert.deepEqual(joined, { identity: resumed, touch: true });
+assert.equal(JSON.parse(resumeRaw).resume, false);
+act(() => tree.unmount());
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
+assert.equal(tree.root.findAllByType("canvas").length, 0, "An ordinary later visit still uses Join");
+act(() => tree.unmount());
+globalThis.history = { state: {}, replaceState(value) { this.state = value; } };
+globalThis.sessionStorage = { getItem() { throw Error("blocked"); }, setItem() { throw Error("blocked"); } };
+const envelope = { identity: resumed, touch: true, target: "fallback", attempted: ["fallback"], resume: true };
+assert.equal(resumeStore.write(envelope), true); assert.deepEqual(resumeStore.read(), envelope);
+globalThis.history.state = { "bug-swarm-arena-reload-v1": { ...envelope, identity: { ...resumed, playerId: "invalid" } } };
+assert.equal(resumeStore.read(), null, "Invalid stored identities cannot resume");
+globalThis.history.replaceState = () => { throw Error("blocked"); };
+const originalError = console.error; console.error = () => {};
+assert.equal(resumeStore.write(envelope), false); console.error = originalError;
 `;
   try {
     const child = Bun.spawnSync([process.execPath, "--eval", probe], { cwd: scratch, env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home }, stdout: "pipe", stderr: "pipe", timeout: 10000 });
