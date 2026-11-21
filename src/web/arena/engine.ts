@@ -19,11 +19,9 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   const respawn = (usedTouch: boolean) => { if (ready && deadLife) { input.clear(); connection.send({ v: 1, type: "respawn", life: deadLife, touch: usedTouch }); } };
   const showLife = (result: LifeOver) => {
     if (result.reason === "restart") {
-      if (result.playerId === identity.playerId.toLowerCase() && result.life === prediction.player?.life) {
-        // The server is frozen while its bounded persistence drain runs. Stop
-        // prediction and the snapshot timeout, keeping the socket for its receipt.
-        pause(); status("Reconnecting...");
-      }
+      // Restart shuts down this connection, even if its terminal life leads
+      // prediction (e.g. respawn accepted before the replacement snapshot).
+      pause(); status("Reconnecting...");
       return;
     }
     if (result.life !== prediction.player?.life || prediction.player.hits || shownLife === result.life && shownSave === result.save) return;

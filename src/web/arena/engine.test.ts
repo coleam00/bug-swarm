@@ -37,10 +37,16 @@ const mouse = (type, x, y) => (type === "pointerup" ? window : canvas).dispatchE
 const send = () => timers.values().next().value();
 const frame = at => { clock = at; const [id, fn] = frames.entries().next().value; frames.delete(id); fn(clock); return draws.at(-1); };
 for (let cycle = 0; cycle < 2; cycle++) {
-  const base = clock, cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result);
+  let base = clock;
+  const cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result);
   assert.equal(timers.size, 1); assert.equal(frames.size, 1); assert.equal(observers, 1);
   receive({ v: 1, type: "welcome" });
-  assert.equal(admissions, cycle * 2 + 1);
+  assert.equal(admissions, cycle * 3 + 1);
+  // Shutdown may arrive before prediction has received even its first snapshot.
+  receive({ v: 1, type: "life_over", reason: "restart", life: 1, playerId: identity.playerId, score: 0, save: "pending" });
+  const beforeInitialSnapshot = inputs.length; clock += 3500; send();
+  assert.equal(inputs.length, beforeInitialSnapshot); assert.equal(reconnects, cycle, "Missing prediction must not prevent waiting for the restart receipt");
+  receive({ v: 1, type: "welcome" }); base = clock;
   const own = { life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
   const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, bugs: [], shots: [], events,
@@ -104,9 +110,9 @@ for (let cycle = 0; cycle < 2; cycle++) {
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
   key("Space", "keyup"); key("KeyW", "keyup");
   key("KeyD");
-  receive({ v: 1, type: "life_over", reason: "restart", life: 1, playerId: own.id, score: 42, save: "pending" });
-  const beforeOldResult = inputs.length; send(); assert.equal(inputs.length, beforeOldResult + 1, "An old-life restart result must not pause the replacement life");
-  receive({ v: 1, type: "life_over", reason: "restart", life: 2, playerId: own.id, score: 42, save: "pending" });
+  receive({ v: 1, type: "life_over", reason: "death", life: 1, playerId: own.id, score: 42, save: "pending" });
+  const beforeOldResult = inputs.length; send(); assert.equal(inputs.length, beforeOldResult + 1, "An old ordinary death result must not pause the replacement life");
+  receive({ v: 1, type: "life_over", reason: "restart", life: 3, playerId: own.id, score: 42, save: "pending" });
   assert.equal(lifePanel, null, "Restart result must not open the death panel while prediction is alive");
   const pendingScene = draws.length, pendingInputs = inputs.length, pendingReconnects = reconnects;
   frame(clock + 3500); send();
