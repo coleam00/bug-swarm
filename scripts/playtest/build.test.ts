@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, realpathSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { scratchEnv } from "./options";
@@ -33,6 +33,8 @@ test("built and served production client has no hook; explicitly instrumented cl
     }));
     const builds = results.map(result => { if (result.status === "rejected") throw result.reason; return result.value; });
     await browser.start(root);
+    // Linux's short socket-path alias must still resolve inside this run.
+    expect(realpathSync((browser.metadata as { tempDirectory: string }).tempDirectory)).toBe(realpathSync(join(root, "tmp")));
     for (const { mode, dir, assets, env } of builds) {
       const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(dir, "data"), assets, env }); apps.push(app);
       const page = await browser.page(app.server.url.origin), player = new Player(browser, page, mode === "playtest" ? "Instrumented" : "Production", "tabs");

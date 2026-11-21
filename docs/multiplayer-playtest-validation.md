@@ -74,3 +74,13 @@ Focused Chrome evidence after the merge:
 The boss run painted all three human rewards (183, 146 and 93 points, including a replacement life). Mean page FPS was 59.91–59.93, mean instrumented frame cost 0.604–0.704 ms and live server tick p95 2.2265 ms with five participants. These are total costs for this encounter, not an overhead delta or a full-arena benchmark. Body, arrow and reward screenshots were inspected. Earlier failed plan-development runs are retained alongside this passing evidence.
 
 `bun run check` passed **530 tests** across 71 files (210.50 seconds), and `bun run build` passed. The final additional body-visibility fixture passed separately, as did a fresh TypeScript check. It rejects ring-only draw dispatch, clipping, HUD occlusion and minimap occlusion. Normal built JS contains none of `__arenaDebug`, `hiveRewards`, `reviveRing`, `receivedAt` or `observedAt`. Logs: `.evidence/86/merge-fix/`. The full browser suite remains the factory's product check.
+
+## Linux Chrome startup after the merge
+
+The first automatic host check of the merged head passed on Windows but failed on Ubuntu: Chrome exited before creating its debugging port. A Linux Chrome reproduction with all scratch files beneath this deep checkout confirmed that the temporary Unix-socket path exceeded Linux's 108-byte limit. Keeping the same directory open and passing its short `/proc/<parent-pid>/fd/<directory-fd>` alias as Chrome's `TMPDIR` starts successfully. The handle stays open until the owned Chrome process exits; the real files remain in the run's scratch directory. Windows and macOS keep their existing paths.
+
+The Linux probe used Chrome 143 and Bun 1.4.5, checked the alias's resolved containment, opened an isolated 1280×720 page, captured a screenshot and closed the owned process without browser errors. Its logs and screenshot are under `.evidence/86/linux/`. On WSL's Windows filesystem, the probe used an isolated mount namespace with a temporary filesystem mounted onto the checkout's scratch path to provide Linux socket permissions; the mount vanished when the probe exited. No system temporary directory or existing browser/server was used.
+
+The existing built-client test now also checks the resolved temporary-directory containment. A new early-exit fixture verifies immediate startup failure with stderr rather than a 25-second timeout; it passes on Windows and Linux. The production/instrumented built-client test passes on Windows. Logs: `.evidence/86/merge-fix/chrome-startup-tests.log`.
+
+`bun run check` passed **532 tests** across 73 files, including type checking (168.51 seconds). Log: `.evidence/86/merge-fix/check-linux-startup-fix.log`.

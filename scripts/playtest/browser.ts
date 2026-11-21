@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, openSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import { scratchEnv } from "./options";
 
@@ -27,17 +27,36 @@ export class Browser {
   private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   private socket?: WebSocket;
   private process?: Bun.Subprocess;
+  private tempDirectory?: number;
   readonly errors: { session?: string; error: unknown }[] = [];
   private pageEnables: { session: string; ms: number }[] = [];
   metadata: unknown;
   async start(root: string) {
     const executable = chromeExecutable();
+    const env = scratchEnv(root);
+    if (process.platform === "linux") {
+      // Chrome appends a private directory and SingletonSocket to TMPDIR.
+      // AF_UNIX paths are limited to 108 bytes, even in a deep checkout. This
+      // short kernel alias resolves to our owned scratch directory; no files
+      // are put in the system temp folder. Keep the parent handle until exit.
+      this.tempDirectory = openSync(join(root, "tmp"), "r");
+      env.TMPDIR = `/proc/${process.pid}/fd/${this.tempDirectory}`;
+    }
     const flags = ["--headless=new", "--no-sandbox", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${join(root, "p").replaceAll("\\", "/")}`, "--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows", "about:blank"];
-    this.process = Bun.spawn([executable, ...flags], { env: scratchEnv(root), stdout: "ignore", stderr: Bun.file(join(root, "chrome.log")) });
-    await until(async () => existsSync(join(root, "p", "DevToolsActivePort")), Boolean, 25000, "Chrome startup");
+    const log = join(root, "chrome.log");
+    this.process = Bun.spawn([executable, ...flags], { env, stdout: "ignore", stderr: Bun.file(log) });
+    try {
+      await until(async () => {
+        if (this.process!.exitCode !== null) throw Error(`Chrome exited during startup (${this.process!.exitCode})`);
+        return existsSync(join(root, "p", "DevToolsActivePort"));
+      }, Boolean, 25000, "Chrome startup");
+    } catch (error) {
+      const diagnostic = existsSync(log) ? readFileSync(log, "utf8").slice(-4000) : "No Chrome stderr";
+      throw Error(`${String(error)}\n${diagnostic}`);
+    }
     const port = readFileSync(join(root, "p", "DevToolsActivePort"), "utf8").split("\n")[0];
     const version = await (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(5000) })).json() as { webSocketDebuggerUrl: string };
-    this.metadata = { executable, flags, version, pageEnables: this.pageEnables };
+    this.metadata = { executable, flags, version, tempDirectory: env.TMPDIR, pageEnables: this.pageEnables };
     const socket = this.socket = new WebSocket(version.webSocketDebuggerUrl);
     socket.onmessage = event => {
       const m = JSON.parse(String(event.data)), p = this.pending.get(m.id);
@@ -81,12 +100,16 @@ export class Browser {
   }
   async screenshot(session: string, path: string) { const r = await this.call("Page.captureScreenshot", { format: "png" }, session); writeFileSync(path, Buffer.from(r.data, "base64")); }
   async close() {
-    if (this.socket?.readyState === WebSocket.OPEN) await this.call("Browser.close").catch(() => {});
-    this.socket?.close();
-    if (this.process) {
-      await bounded(this.process.exited, 2000, "Chrome exit").catch(() => {});
-      if (this.process.exitCode === null) this.process.kill();
-      await this.process.exited;
+    try {
+      if (this.socket?.readyState === WebSocket.OPEN) await this.call("Browser.close").catch(() => {});
+      this.socket?.close();
+      if (this.process) {
+        await bounded(this.process.exited, 2000, "Chrome exit").catch(() => {});
+        if (this.process.exitCode === null) this.process.kill();
+        await this.process.exited;
+      }
+    } finally {
+      if (this.tempDirectory !== undefined) { closeSync(this.tempDirectory); this.tempDirectory = undefined; }
     }
   }
 }
