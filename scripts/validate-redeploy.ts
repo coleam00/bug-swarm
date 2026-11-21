@@ -198,13 +198,14 @@ try {
   latest = undefined; app = await server(changed, port);
   await until(() => latest?.players.some((p: any) => p.id === browserId && p.hits > 0), "landscape rejoin");
   await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
-  // A fresh page verifies release 1 remains usable and can start a run.
+  // A fresh root visit requires Play, then joins the authoritative arena.
   await send("Page.navigate", { url: origin + "/" });
-  await until(() => evaluate("document.body.textContent.includes('Bug Swarm') && !!document.querySelector('button')"), "release 1 entry");
-  await screenshot("release1-entry"); log("release1-smoke", { text: await evaluate("document.body.innerText") });
+  await until(() => evaluate("document.body.textContent.includes('Bug Swarm') && !!document.querySelector('button')"), "root entry");
+  await screenshot("root-entry"); log("root-smoke", { text: await evaluate("document.body.innerText") });
+  latest = undefined;
   await evaluate("document.querySelector('button').click()");
-  await until(() => evaluate("!!document.querySelector('canvas')"), "release 1 plays");
-  await screenshot("release1-playing");
+  await until(() => latest?.players.some((p: any) => p.id === browserId && p.hits > 0), "root arena plays");
+  await screenshot("root-playing");
   assert(!events.some(e => e.type === "browser-exception"), "Browser exceptions during validation");
   await app!.stop("cleanup"); app = undefined;
   await send("Browser.close").catch(() => {}); await chrome.exited;

@@ -105,6 +105,7 @@ try {
     if(touchMode)await touch(p.session,'touchEnd',[]);else{await key(p.session,'KeyD',false);await mouse(p.session,100,100,false);}
     await key(p.session,'KeyF',true);await key(p.session,'KeyF',false);await pause(1200);
     const sample=await stats(p.session);assert(!sample.overflow);assert(sample.own.hits>0);
+    assert(Number(sample.frame.fps)>=58 && Number(sample.frame.frameMs)<1000/60);
     await shot(p.session,label+'-full-room-F');
     await call('Page.reload',{},p.session);
     const returning=await entry(p,label+'-return');assert.equal(returning.buttons.length,1);assert.equal(returning.buttons[0].text,'Play');
@@ -132,7 +133,7 @@ try {
   // Same owned production server serves fixture bytes through a dedicated CDP response.
   const bench=await page(1280,720,origin);await call('Page.setDocumentContent',{frameId:(await call('Page.getFrameTree',{},bench.session)).frameTree.frame.id,html:'<style>body{margin:0}canvas{width:100vw;height:100vh}</style><canvas></canvas>'},bench.session);
   await evaluate(bench.session,await bundle.outputs[0]!.text());await pause(4000);report.bound=await evaluate(bench.session,`({...document.querySelector('canvas').dataset})`);await shot(bench.session,'renderer-bound');await dispose(bench);
-  if(!process.argv.includes('--skip-capacity')){console.log('Running 200 bots for 120 seconds');report.capacity=await runBots({url:origin,count:200,seconds:120,policy:'aimer'});assert(report.capacity.errors===0);}
+  if(!process.argv.includes('--skip-capacity')){console.log('Running 200 bots for 120 seconds');report.capacity=await runBots({url:origin,count:200,seconds:120,policy:'aimer'});assert(report.capacity.errors===0);assert(report.capacity.tick.p95Ms<10);}
   assert.equal(report.legacyPosts.length,0);assert.equal(report.errors.length,0);
   console.log(JSON.stringify({browser:report.browser,layouts:report.layouts.length,bound:report.bound,capacity:report.capacity},null,2));
   }

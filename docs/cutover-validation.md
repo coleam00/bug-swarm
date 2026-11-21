@@ -12,13 +12,15 @@ Automated first-entry timings (including local page load, screenshot and name en
 
 `chrome-kjer1A/` adds production screenshots and assertions for a hidden fresh name remaining editable and unpersisted, a returning duplicate identity displaying an error beside one Play button, authoritative team restoration, and play with unavailable localStorage. The storage scenario logged the expected identity/hint failures and continued playing.
 
+`redeploy-WlMjPm/` records production `main.ts` restarts at `/`: same-build reconnect, changed-build automatic reload/resume, rollback, another redeploy, a delayed save, and portrait/landscape touch continuity. All five recorded save/rejoin scenarios passed, with no browser exceptions. Windows validation invokes the registered SIGTERM handler through an owned stdin harness; actual Unix OS-signal behavior remains covered by CI. Reproduce from a clean committed checkout with `bun scripts/validate-redeploy.ts`.
+
 Full-room F samples reported **60.0 FPS, 0.285–0.473 ms/frame** across the six layouts. The retained renderer fixture simultaneously drew 20 players, 150 bugs, 140 shots and 140 kill effects at **60.0 FPS, 1.083 ms/frame** on 1280 × 720. This is factory desktop Chrome emulation evidence.
 
 The 200-aimer-bot/120-second capacity run joined all 200 players across ten rooms with **zero errors**, tick p50 **1.049 ms**, p95 **1.690 ms** (6,313 samples). Scheduler lateness p95 was 85.75 ms: this reproduction runs clients and server in the same Bun process and includes their scheduling contention. Tick cost meets the 10 ms target; this does not claim independent production-client scheduling latency.
 
 ## Bundle comparison
 
-Baseline: `97f91a2a0bb2592ed445455922f84ea4b14f858a`. `bundle-before.json` and `bundle-after.json` enumerate every emitted JS/CSS file. Totals sum raw bytes and each file independently compressed with Node zlib's default gzip settings; HTML, build manifest and generated share images are excluded consistently.
+Baseline: `97f91a2a0bb2592ed445455922f84ea4b14f858a`. `bundle-before.json` and `bundle-after.json` enumerate every emitted JS/CSS file, measured with the same embedded build identifier. Totals sum raw bytes and each file independently compressed with Node zlib's default gzip settings; HTML, build manifest and generated share images are excluded consistently.
 
 | Emitted JS/CSS | Before raw | After raw | Before gzip | After gzip |
 | --- | ---: | ---: | ---: | ---: |
