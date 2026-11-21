@@ -4,6 +4,14 @@ This delivery includes **spread, rapid and shield**. Spread fires three shots in
 
 All evidence, scratch homes, temporary files, databases and browser profiles stay under `.evidence/79/`. Run `bun run build` then `bun scripts/validate-pickups.ts` (`CHROME_PATH` can select Chrome). The driver starts its own ephemeral loopback production server and closes all owned clients, servers and processes. It exposes no debug endpoint.
 
+## Recording-canvas fixture repair
+
+The shared recording canvas now clears retained artwork, the current path and saved context state when either dimension is assigned, including same-size and zero assignments. Drawing styles and transforms return to defaults. Two fixture tests cover both dimensions. Existing pickup assertions still inspect the retained sprites actually blitted; the allowance for fully transparent achromatic gradient endpoints is unchanged.
+
+The reported initialization-order mutation was reproduced only in scratch: moving pickup canvas sizing after painting passed all five presentation tests with the old fixture, but fails four with the repaired fixture. Correctly initialized artwork passes all five. Other cached-canvas producers were audited and already size before painting. No production code changed.
+
+Evidence is in `.evidence/79/fixture-return/`: `mutation-before.log` and `mutation-after.log` record the expected mutation results; `web.log` records all 101 web tests passing. `bun run check` passes TypeScript and **523 tests across 68 files** (`check-final.log`), and the production build passes (`build.log`). The earlier production browser, full skill and warmed frame comparisons below remain applicable and were not rerun for this test-only repair.
+
 ## Owner send-back: current main and cached artwork
 
 Merged current main (`afeaba9`) in `7c637f6`, preserving the existing beetle, spitter and compact-snapshot integration, personal-level HUD, copy polish and console views. The import conflict retained both pickup drawing and personal levels; the new main HUD fixture now supplies the required pickup collection. No shared arena simulation, policy, timing, drop chance or transport code changed in this return, so the complete skill/fairness observations below remain applicable.
