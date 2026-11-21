@@ -6,11 +6,12 @@ import { createBug } from "../bugs/registry";
 const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
 const pickup: Pickup = { id: 2, kind: "shield", x: 1200, y: 1400, expiresAt: 12000 };
 const observation = (): Observation => ({ players: [player], bugs: [createBug("crawler", 1, 1600, 1200)], pickups: [pickup], tick: 0 });
-test("aimer seeks safe pickups within 250, keeps independent leading aim/bursts, and allows refresh", () => {
-  const o = observation(), ordinary = policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79));
+test.each(["shield", "spread", "rapid"] as const)("aimer seeks safe %s within 250, keeps independent leading aim/bursts, and allows refresh", kind => {
+  const o = observation(); o.pickups = [{ ...pickup, kind }];
+  const ordinary = policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79));
   const input = policyInput("aimer", o, player, createPolicy(79));
   expect(input.move).toEqual({ x: 0, y: 1 }); expect(input.aim).toBe(ordinary.aim); expect(input.fire).toBe(ordinary.fire);
-  expect(policyInput("aimer", o, { ...player, effects: { shield: 10000 } } as typeof player, createPolicy(79))).toEqual(input);
+  expect(policyInput("aimer", o, { ...player, effects: { [kind]: 10000 } } as typeof player, createPolicy(79))).toEqual(input);
   expect(policyInput("aimer", o, { ...player, heat: 12 }, createPolicy(79)).fire).toBe(false);
   for (const x of [1450, 1450.001]) expect(!!safePickup({ ...o, bugs: [], pickups: [{ ...pickup, x, y: 1200 }] }, player)).toBe(x === 1450);
   expect(safePickup({ ...o, pickups: [pickup, { ...pickup, id: 1, y: 1000 }] }, player)?.id).toBe(1);

@@ -23,6 +23,27 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   return { id, socket, messages, wait };
 }
 
+test("two real clients collect all three kinds and receive the combined boosted fan through compact transport", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "weapon-pickup-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1000, y: 1200 }); Object.assign(q, { x: 1800, y: 1200 });
+    room.state.pickups = (["shield", "spread", "rapid"] as const).map(kind => ({ id: room.state.nextId++, kind, x: 1200, y: 1200, expiresAt: room.state.tick * 50 + 12000 }));
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.length === 3);
+    p.x = 1200; app.arenas.tick(room);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.length === 0 && m.players.some(p => p.id === a.id && p.effects.spread && p.effects.rapid && p.effects.shield));
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
+    for (const c of [a, b]) {
+      const s = await c.wait((m): m is Snapshot => m.type === "snapshot" && m.shots.filter(s => s.owner === a.id).length === 3);
+      const shots = s.shots.filter(s => s.owner === a.id), angles = shots.map(s => Math.atan2(s.vy, s.vx)).sort((a,b) => a-b);
+      expect(angles[2]! - angles[0]!).toBeCloseTo(Math.PI / 9, 4); expect(s.players.find(p => p.id === a.id)!.heat).toBe(1.5);
+    }
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
 test("two real clients observe the same floor pickup, one collection winner, refresh and shield consumption", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "shield-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });

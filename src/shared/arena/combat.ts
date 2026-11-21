@@ -37,7 +37,7 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
         const dx = Math.cos(p.facing + angle), dy = Math.sin(p.facing + angle);
         state.shots.push({ id: state.nextId++, owner: p.id, life: p.life, x: p.x - p.vx * (end - at) / 1000 + dx * MUZZLE_OFFSET, y: p.y - p.vy * (end - at) / 1000 + dy * MUZZLE_OFFSET, vx: dx * SHOT_SPEED, vy: dy * SHOT_SPEED, born: at });
       }
-      p.heat += HEAT_GAIN * heat; p.nextShotAt += 1000 / (SHOT_RATE * rate);
+      p.heat = Math.min(HEAT_CAPACITY, p.heat + HEAT_GAIN * heat * angles.length); p.nextShotAt += 1000 / (SHOT_RATE * rate);
       if (p.heat >= HEAT_CAPACITY - 1e-8) { p.overheatUntil = at + OVERHEAT_MS; p.nextShotAt = end; p.heat = Math.max(0, p.heat - HEAT_COOLING * (end - at) / 1000); break; }
     }
   }

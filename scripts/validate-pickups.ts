@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
-import type { ArenaState } from '../src/shared/arena/types';
+import type { ArenaState, PickupKind } from '../src/shared/arena/types';
 const repo = process.cwd();
 const chromePath = process.env.CHROME_PATH ?? [
   join(process.env.ProgramFiles ?? 'C:/Program Files', 'Google/Chrome/Application/chrome.exe'),
@@ -65,7 +65,7 @@ try {
     if (p) { clearTimeout(p.timer); pending.delete(m.id); m.error ? p.reject(new Error(JSON.stringify(m.error))) : p.resolve(m.result); }
   };
   const desktop = await page(1280, 800, origin + '/'), phone = await page(390, 844, origin + '/', true);
-  await joinPage(desktop, 'Shield Pilot', 1); await joinPage(phone, 'Bubble Pilot', 0);
+  await joinPage(desktop, 'Pickup Pilot', 1); await joinPage(phone, 'Boost Pilot', 0);
   const desktopId = await evaluate(desktop.session, 'window.evidence.id'), phoneId = await evaluate(phone.session, 'window.evidence.id');
   const room = app.arenas.active.get(desktopId)!.room!, state: ArenaState = room.state;
   const p = state.players.get(desktopId)!, q = state.players.get(phoneId)!;
@@ -82,7 +82,7 @@ try {
   const natural = structuredClone(state.pickups[0]!); report.naturalDrop = { pickup: natural, snapshot: structuredClone(app.arenas.snapshot(room)) };
   Object.assign(p, { x: Math.max(450, Math.min(1950, natural.x - 100)), y: Math.max(450, Math.min(1950, natural.y)) });
   await pause(250); await shot(desktop.session, 'natural-drop-observer-moved');
-  report.assertions.push('A shield rolled naturally from a bot kill; observer repositioned for the screenshot.');
+  report.assertions.push('A ' + natural.kind + ' rolled naturally from a bot kill; observer repositioned for the screenshot.');
   // Controlled visual scenes are separate from natural frame/tick and load measurements.
   function clearThreats() {
     state.bugs = []; state.shots = [];
@@ -92,7 +92,7 @@ try {
   Object.assign(p, { x: 1200, y: 1200, immuneUntil: 0, spawnProtectedUntil: 0, effects: {} });
   Object.assign(q, { x: 1320, y: 1400, immuneUntil: 0, spawnProtectedUntil: state.tick * 50 + 2000, effects: {} });
   assert.equal(p.status, 'active'); assert.equal(q.status, 'active');
-  function drop(x: number, y: number, remaining = 12000) { const pickup = { id: state.nextId++, kind: 'shield' as const, x, y, expiresAt: state.tick * 50 + remaining }; state.pickups.push(pickup); return pickup; }
+  function drop(x: number, y: number, remaining = 12000, kind: PickupKind = 'shield') { const pickup = { id: state.nextId++, kind, x, y, expiresAt: state.tick * 50 + remaining }; state.pickups.push(pickup); return pickup; }
   const pickup = drop(p.x + 120, p.y); await pause(300);
   report.floor = structuredClone(app.arenas.snapshot(room));
   await shot(desktop.session, 'desktop-floor-and-spawn-arcs'); await shot(phone.session, 'portrait-floor');
@@ -129,6 +129,37 @@ try {
   assert(report.landscapeTwin.fire && report.landscapeTwin.move.x > 0 && report.landscapeTwin.touch);
   report.landscapeActive = structuredClone(app.arenas.snapshot(room));
   await shot(phone.session, 'landscape-active-twin-sticks'); await touch(phone.session, 'touchEnd', []);
+  report.weapons = {};
+  for (const kind of ['spread', 'rapid'] as const) {
+    clearThreats(); state.pickups = [];
+    Object.assign(p, { x: 1200, y: 1200, effects: {}, heat: 0, nextShotAt: state.tick * 50, overheatUntil: 0, immuneUntil: 0, spawnProtectedUntil: 0 });
+    Object.assign(q, { x: 1320, y: 1400, effects: {}, heat: 0, nextShotAt: state.tick * 50, overheatUntil: 0, immuneUntil: 0, spawnProtectedUntil: 0 });
+    await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, phone.session);
+    const floor = drop(p.x + 100, p.y, 12000, kind); await pause(250);
+    const scene: any = report.weapons[kind] = { floor: structuredClone(app.arenas.snapshot(room)) };
+    await shot(desktop.session, kind + '-desktop-floor'); await shot(phone.session, kind + '-portrait-floor');
+    await key(desktop.session, 'KeyD', true); await until(() => !!p.effects[kind]); await key(desktop.session, 'KeyD', false);
+    const deadline = p.effects[kind]!;
+    clearThreats(); drop(q.x, q.y, 12000, kind); await until(() => !!q.effects[kind]);
+    await key(desktop.session, 'Space', true); await pause(150); await key(desktop.session, 'Space', false); await pause(100);
+    assert(!state.pickups.some(p => p.id === floor.id));
+    scene.active = structuredClone(app.arenas.snapshot(room));
+    assert(scene.active.shots.some((s: any) => s.owner === p.id));
+    await shot(desktop.session, kind + '-desktop-active'); await shot(phone.session, kind + '-portrait-active');
+    await call('Emulation.setDeviceMetricsOverride', { width: 844, height: 390, deviceScaleFactor: 1, mobile: true }, phone.session);
+    await touch(phone.session, 'touchStart', [{ id: 7, x: 120, y: 270 }, { id: 8, x: 700, y: 270 }]);
+    await touch(phone.session, 'touchMove', [{ id: 7, x: 165, y: 270 }, { id: 8, x: 760, y: 270 }]); await pause(200);
+    const input = await evaluate(phone.session, 'window.evidence.inputs.at(-1)'); assert(input.fire && input.move.x > 0 && input.touch);
+    scene.touch = input; await shot(phone.session, kind + '-landscape-twin-sticks'); await touch(phone.session, 'touchEnd', []);
+    await pause(1000); clearThreats(); drop(p.x + 65, p.y, 12000, kind);
+    await key(desktop.session, 'KeyD', true); await until(() => p.effects[kind]! > deadline); await key(desktop.session, 'KeyD', false);
+    await pause(200); scene.refreshed = structuredClone(app.arenas.snapshot(room)); await shot(desktop.session, kind + '-refreshed');
+    // Prevent contacts from clearing effects before their actual deadline during the expiry capture.
+    const refreshed = p.effects[kind]!; p.immuneUntil = q.immuneUntil = state.tick * 50 + 12000;
+    await until(() => state.tick * 50 >= refreshed, 10000); assert.equal(p.effects[kind], undefined); assert.equal(p.status, 'active');
+    await pause(200); scene.expired = structuredClone(app.arenas.snapshot(room)); await shot(desktop.session, kind + '-expired');
+    report.assertions.push(kind + ': floor, collection, firing, both robot overlays/HUDs, refresh, eight-second expiry and twin sticks passed.');
+  }
   for (const browserPage of [desktop, phone]) {
     const result = await stats(browserPage.session); assert(!result.overflow); assert.deepEqual(result.errors, []);
     await call('Target.disposeBrowserContext', { browserContextId: browserPage.browserContextId });
@@ -147,7 +178,7 @@ try {
     await call('Target.disposeBrowserContext', { browserContextId: fixture.browserContextId });
   }
   await vite.close(); vite = undefined;
-  console.log('Production Chrome scenes passed; starting 200 bots / 120 seconds');
+  console.log('All three production pickup scenes passed; starting 200 bots / 120 seconds');
   // Exercise the actual CLI in its own process, as real clients run separately from the server.
   loadProcess = Bun.spawn([process.execPath, 'run', 'bots', '--', '--url', origin, '--count', '200', '--seconds', '120', '--policy', 'aimer'],
     { stdout: Bun.file(join(evidence, 'bots.json')), stderr: Bun.file(join(evidence, 'bots.stderr.log')) });

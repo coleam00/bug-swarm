@@ -65,7 +65,15 @@ export const BUG_SPAWN_MAX = 900;
 export const MAX_VIEW = 900;
 export const VISIBILITY_PADDING = 64;
 export const THREAT_CURVE = [[0, 0.1], [60, 4.25], [120, 5], [240, 6]] as const;
-export const MAX_SHOTS = MAX_PLAYERS * (Math.ceil(SHOT_RATE * SHOT_LIFETIME_MS / 1000) + 1);
+export const SPREAD_MS = 8000;
+export const SPREAD_SHOTS = 3;
+export const SPREAD_FAN_DEGREES = 20;
+export const RAPID_MS = 8000;
+export const RAPID_FIRE_RATE = 1.8;
+export const RAPID_HEAT_PER_SHOT = 0.5;
+// A volley every 92.593 ms, three projectiles each, including the arriving volley.
+// Impacts replace shots with events, so their combined count has this same bound.
+export const MAX_SHOTS = MAX_PLAYERS * (Math.ceil(SHOT_RATE * RAPID_FIRE_RATE * SHOT_LIFETIME_MS / 1000) + 1) * SPREAD_SHOTS;
 export const MAX_EVENTS = MAX_SHOTS;
 export const MAX_PICKUPS = 6;
 export const PICKUP_LIFETIME_MS = 12000;

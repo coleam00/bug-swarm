@@ -22,8 +22,8 @@ globalThis.document = new EventTarget();
 const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight: 844, dataset: {}, getContext: () => ({ setTransform() {} }),
   getBoundingClientRect: () => ({ left: 20, top: 30 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
-mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local, input, bugs, shots, wave, tick, now, scale) {
-  draws.push(structuredClone({ width, height, camera, players, local, shots, wave, tick, scale }));
+mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local, input, bugs, shots, wave, tick, now, scale, snapshot, combatTime, pickups) {
+  draws.push(structuredClone({ width, height, camera, players, local, shots, pickups, wave, tick, scale }));
 } } }));
 mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, touch, got, status, gone) => {
   receive = got; disconnected = gone;
@@ -50,7 +50,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   receive({ v: 1, type: "welcome" }); base = clock;
   const own = { status: "active", life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
-  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", pickups: [], arenaId: "room", tick, wave: tick + 4, bugs: [],
+  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", pickups: [{ id: 801, kind: "shield", x: 1250, y: 1200, expiresAt: 12050 }], arenaId: "room", tick, wave: tick + 4, bugs: [],
     shots: [{ id: 800, owner: own.id, life: 1, born: 0, x: 1200 + tick * 45, y: 1200, vx: 900, vy: 0 }], events,
     players: [{ ...own, x: ownX, ackSeq }, { ...remote, x: remoteX }] });
   snapshot(1, 1200, 1000, 0);
@@ -71,6 +71,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   draw = frame(base + 150);
   assert.equal(draw.wave, 7, "Changing wave must reach the renderer exactly");
   assert.equal(draw.tick, 3, "Changing authoritative ticks must reach the renderer exactly");
+  assert.deepEqual(draw.pickups, [{ id: 801, kind: "shield", x: 1250, y: 1200, expiresAt: 12050 }], "Floor pickup membership and coordinates must reach drawing on the delayed timeline");
   assert.equal(draw.shots[0].x, 1290, "Travelling shots must reach the renderer after the delay");
   assert.ok(Math.abs(draw.local.x - 1203) < 1, "Acknowledgement must retire prediction and reconcile to authority");
   assert.equal(draw.camera.x, draw.local.x - 195); assert.equal(draw.camera.y, draw.local.y - 422);

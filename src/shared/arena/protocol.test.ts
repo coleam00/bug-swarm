@@ -7,6 +7,25 @@ import { createBug } from "./bugs/registry";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
 
+test("compact combat records preserve identities, life, velocity, phase, timings and event type; malformed tuples are rejected", () => {
+  const a = createArena(79), p = joinPlayer(a, { id: hello.playerId, name: "Pilot", team: "tabs" })!;
+  const dasher = createBug("dasher", 4, 800, 800); Object.assign(dasher, { phase: "windup", phaseUntil: 750 });
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "wire", tick: 1, wave: 1, players: [{ ...p, x: 1200, y: 1200, ackSeq: 0 }],
+    pickups: [], bugs: [createBug("crawler", 1, 500, 500), dasher],
+    shots: [{ id: 2, owner: p.id, life: 1, x: 1234.125, y: 1200, vx: 900, vy: 0, born: 25.125 }],
+    events: [{ id: 3, tick: 1, x: 100, y: 200, type: "hit", kind: "crawler", points: 0 }] };
+  const parsed = parseServer(serializeSnapshot(s)) as Snapshot;
+  expect(parsed).toEqual(s);
+  for (const field of ["bugs", "shots", "events"] as const) for (const size of [0, 1, 11]) {
+    const bad = JSON.parse(serializeSnapshot(s)); bad[field][0].length = size; expect(parseServer(JSON.stringify(bad))).toBeNull();
+  }
+  for (const [index, value] of [[1, -1], [1, 1], [1, "0"], [2, 2], [5, 1000], [7, "0"], [7, -50], [7, 100]] as const) {
+    const bad = JSON.parse(serializeSnapshot(s)); bad.shots[0][index] = value; expect(parseServer(JSON.stringify(bad))).toBeNull();
+  }
+  const bad = structuredClone(s); bad.shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ ...s.shots[0]!, id: 10 + i }));
+  expect(parseServer(serializeSnapshot(bad))).toBeNull(); // One impact exceeds the shared budget.
+});
+
 test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
   const bug = createBug("crawler", 1, 1200, 1200);
   const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], events: [] };
@@ -65,12 +84,18 @@ test("directional protocol accepts validated envelopes and full-room snapshots o
 test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/results", () => {
   const arena = createArena(2);
   for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: "WideWWWWWWWWWWWW", team: "tabs" });
-  const players = [...arena.players.values()].map(p => ({ ...p, effects: { shield: 500019950 }, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, spawnProtectedUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
-  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: "shield", x: 1234.56789, y: 1234.56789, expiresAt: 500011950 })), arenaId: crypto.randomUUID(), tick: 9999999, wave: 9999, players,
+  const players = [...arena.players.values()].map(p => ({ ...p, effects: { shield: 500019950, spread: 500007950, rapid: 500007950 }, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, spawnProtectedUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
+  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 1234.56789, y: 1234.56789, expiresAt: 500011950 })), arenaId: crypto.randomUUID(), tick: 9999999, wave: 9999, players,
     bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: "dasher", hp: 2, facing: 2.356, phase: "recovery", phaseUntil: 500000950, x: 1234.56789, y: 1234.56789, vx: -24.748737, vy: 24.748737 })),
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
-    events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 75, type: "kill" as const, kind: "dasher" as const })) };
+    events: [] };
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  // Every split of the shared shot/impact budget, including simultaneous boosts.
+  for (const impacts of [1, 60, 330, 600, MAX_EVENTS]) {
+    const mix = structuredClone(snapshot); mix.shots = mix.shots.slice(impacts);
+    mix.events = Array.from({ length: impacts }, (_, i) => ({ id: 3000 + i, tick: mix.tick, x: 1234.56789, y: 1234.56789, points: 75, type: "kill", kind: "dasher" }));
+    const wire = serializeSnapshot(mix); expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+  }
   // Downed/out owners cancel their shots, while other owners can still fill
   // their per-player projectile bounds. Check every population split.
   for (const status of ["downed", "out"] as const) for (let count = 1; count <= MAX_PLAYERS; count++) {
@@ -81,8 +106,12 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
       else p.result = { v: 1, type: "life_over", playerId: p.id, life: p.life, score: p.score, kills: p.kills, seconds: 9999999.999, touch: false, save: "pending", reason: "restart" };
     }
     split.shots = split.shots.filter(s => split.players.find(p => p.id === s.owner)!.status === "active");
-    const wire = serializeSnapshot(split);
-    expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+    for (const impacts of [0, MAX_EVENTS]) {
+      const variant = structuredClone(split);
+      if (impacts) { variant.shots = []; variant.events = Array.from({ length: impacts }, (_, i) => ({ id: 3000 + i, tick: variant.tick, x: 1234.56789, y: 1234.56789, kind: "dasher", type: "kill", points: 75 })); }
+      const wire = serializeSnapshot(variant);
+      expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+    }
   }
   const corrupt = JSON.parse(raw); corrupt.players[0].result = null; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
   for (const value of [undefined, -1, "2000", null]) {

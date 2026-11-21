@@ -17,10 +17,11 @@ function grant(f: ReturnType<typeof setup>) {
 }
 test.each(["crawler", "dasher"] as const)("shield absorbs one eligible %s contact, preserves life/score/streak and grants hit immunity", kind => {
   const f = setup(), { arena, p } = f; grant(f);
+  p.effects.spread = p.effects.rapid = 8000;
   p.points = 100; p.score = 10; p.streak = 7;
   arena.bugs.push(createBug(kind, arena.nextId++, p.x, p.y), createBug("crawler", arena.nextId++, p.x, p.y));
   stepArena(arena, new Map());
-  expect(p.effects).toEqual({}); expect(p.hits).toBe(3); expect(p.immuneUntil).toBe(1050);
+  expect(p.effects).toEqual({ spread: 8000, rapid: 8000 }); expect(p.hits).toBe(3); expect(p.immuneUntil).toBe(1050);
   expect(p).toMatchObject({ status: "active", life: 1, score: 10, streak: 7, kills: 0 });
   for (let i = 0; i < 19; i++) stepArena(arena, new Map());
   expect(p.hits).toBe(3); stepArena(arena, new Map()); expect(p.hits).toBe(2);
@@ -56,7 +57,7 @@ test("collection participates in the same step's firing and contact without paus
   expect(p.hits).toBe(3); expect(p.effects).toEqual({}); expect(p.immuneUntil).toBe(1000); expect(p.score).toBe(0);
 });
 test("downing, termination, departure and respawn clear effects; revival does not restore them", () => {
-  const f = setup(); grant(f); downPlayer(f.arena, f.p); expect(f.p.effects).toEqual({});
+  const f = setup(); grant(f); f.p.effects.spread = f.p.effects.rapid = 8000; downPlayer(f.arena, f.p); expect(f.p.effects).toEqual({});
   const helper = joinPlayer(f.arena, { id: "b", name: "Helper", team: "spaces" })!;
   Object.assign(helper, { x: f.p.x, y: f.p.y });
   for (let i = 0; i < 40; i++) stepArena(f.arena, new Map());

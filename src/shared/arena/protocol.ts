@@ -72,6 +72,7 @@ export function parseServer(raw: unknown): ServerMessage | null {
     for (const [kind, until] of Object.entries(p.effects)) if (!isPickupKind(kind) || p.status !== "active" || !finite(until) || until <= v.tick * STEP_MS || until > v.tick * STEP_MS + PICKUPS[kind].duration + 0.001) return null;
     ids.add(p.id);
   }
+  if (!expandCombat(v)) return null;
   const entityIds = new Set<number>();
   for (const [entities, cap, speed] of [[v.bugs, MAX_BUGS, Infinity], [v.shots, MAX_SHOTS, SHOT_SPEED]] as const) {
     if (!Array.isArray(entities) || entities.length > cap) return null;
@@ -97,5 +98,37 @@ export function parseServer(raw: unknown): ServerMessage | null {
 function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type === "life_over" && isId(v.playerId) && integer(v.life) && v.life > 0 && integer(v.score) && integer(v.kills) && finite(v.seconds) && v.seconds >= 0 && typeof v.touch === "boolean" && ["pending", "saved", "failed"].includes(v.save) && (v.reason === undefined || ["death", "disconnect", "restart"].includes(v.reason)); }
 /** Quantize the wire only. The authoritative simulation keeps full precision. */
 export function serializeSnapshot(snapshot: Snapshot): string {
-  return JSON.stringify(snapshot, (_key, value) => typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+  const time = snapshot.tick * STEP_MS;
+  const wire = { ...snapshot,
+    bugs: snapshot.bugs.map(b => b.phase === undefined && b.phaseUntil === undefined ?
+      [b.id, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing] :
+      [b.id, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing, b.phase, b.phaseUntil]),
+    shots: snapshot.shots.map(s => [s.id, snapshot.players.findIndex(p => p.id === s.owner), s.life, s.x, s.y, s.vx, s.vy, time - s.born]),
+    events: snapshot.events.map(e => [e.id, snapshot.tick - e.tick, e.x, e.y, e.kind, e.type, e.points]),
+  };
+  return JSON.stringify(wire, (_key, value) => typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+}
+/** Compact combat tuples keep combined spread/rapid volleys within 64 KiB.
+ * Runtime state and consumers still use named fields. Existing object fixtures are also validated.
+ * A projectile either survives or becomes an impact event, never both in one snapshot. */
+function expandCombat(v: RecordValue): boolean {
+  if (!Array.isArray(v.bugs) || v.bugs.length > MAX_BUGS || !Array.isArray(v.shots) || v.shots.length > MAX_SHOTS ||
+    !Array.isArray(v.events) || v.events.length > MAX_EVENTS || v.shots.length + v.events.length > MAX_SHOTS) return false;
+  for (let i = 0; i < v.bugs.length; i++) {
+    const b = v.bugs[i]; if (!Array.isArray(b)) continue;
+    if (b.length !== 8 && b.length !== 10) return false;
+    v.bugs[i] = { id: b[0], kind: b[1], x: b[2], y: b[3], vx: b[4], vy: b[5], hp: b[6], facing: b[7],
+      ...(b.length === 10 ? { phase: b[8], phaseUntil: b[9] } : {}) };
+  }
+  for (let i = 0; i < v.shots.length; i++) {
+    const s = v.shots[i]; if (!Array.isArray(s)) continue;
+    if (s.length !== 8 || !integer(s[1]) || s[1] >= v.players.length || !finite(s[7])) return false;
+    v.shots[i] = { id: s[0], owner: v.players[s[1]].id, life: s[2], x: s[3], y: s[4], vx: s[5], vy: s[6], born: v.tick * STEP_MS - s[7] };
+  }
+  for (let i = 0; i < v.events.length; i++) {
+    const e = v.events[i]; if (!Array.isArray(e)) continue;
+    if (e.length !== 7 || !integer(e[1])) return false;
+    v.events[i] = { id: e[0], tick: v.tick - e[1], x: e[2], y: e[3], kind: e[4], type: e[5], points: e[6] };
+  }
+  return true;
 }
