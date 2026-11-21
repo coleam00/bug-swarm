@@ -3,6 +3,7 @@ data/
 dist/
 .git/
 .archon/
+.evidence/
 .env
 .env.*
 *.log

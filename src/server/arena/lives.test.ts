@@ -5,6 +5,83 @@ import { LifeWriter, finishArenaLife, startArenaLife, type LifeRecord } from "./
 import { RoomManager } from "./rooms";
 import { endLife } from "../../shared/arena/simulation";
 import { report } from "../../../scripts/stats";
+import { Database } from "bun:sqlite";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+test("shutdown freezes all rooms, rejects admission/respawn, commits once before restart notices and survives a close during drain", async () => {
+  const db = openDb(":memory:"), manager = new RoomManager(db, "build", { seed: () => 1 });
+  const clients = Array.from({ length: 22 }, (_, i) => {
+    const messages: any[] = [], order: string[] = [];
+    const c = manager.open({ send: raw => { const m = JSON.parse(raw); messages.push(m); order.push(`${m.type}:${m.save ?? ""}`); },
+      close: code => { order.push(`close:${code}`); }, getBufferedAmount: () => 0 });
+    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: `Pilot-${i}`, team: i % 2 ? "tabs" : "spaces", touch: true, buildId: "build" }));
+    const p = c.room!.state.players.get(c.id!)!; p.score = 100 + i; p.kills = 8; p.startedTick = 0; c.room!.state.tick = 123;
+    return { c, messages, order, expected: { score: 100 + i, squashes: 8, seconds: 6, touch: 1, team: p.team, held: 0 } };
+  });
+  try {
+    const dead = clients[0]!.c, result = endLife(dead.room!.state, dead.id!)!;
+    // Normal death was queued before restart and must keep its original reason.
+    (manager as any).finishLife(dead, result);
+    const stopping = manager.stop(), repeated = manager.stop(); expect(manager.accepting).toBe(false);
+    manager.message(dead, JSON.stringify({ v: 1, type: "respawn", life: 1, touch: false }));
+    manager.leave(clients[20]!.c);
+    const refused: any[] = []; manager.open({ send: raw => refused.push(JSON.parse(raw)), close() {}, getBufferedAmount: () => 0 });
+    expect(refused.at(-1).code).toBe("restarting"); expect(await stopping).toBe(true); expect(await repeated).toBe(true);
+    const rows = db.query("SELECT * FROM runs").all() as any[];
+    expect(rows).toHaveLength(22); expect(rows.filter(r => r.end_reason === "restart")).toHaveLength(21);
+    for (const { c, messages, order, expected } of clients) {
+      const row = getRun(db, c.record!.runId)!;
+      expect(row).toMatchObject(expected);
+      if (c === clients[20]!.c) continue;
+      const restart = messages.find(m => m.type === "server_restart");
+      expect(restart).toBeDefined();
+      if (c === dead) expect(restart.result).toBeUndefined();
+      else expect(restart.result).toMatchObject({ reason: "restart", save: "saved", score: expected.score });
+      expect(order.indexOf("server_restart:")).toBeLessThan(order.indexOf("close:1012"));
+      expect(order.indexOf("life_over:saved")).toBeLessThan(order.indexOf("server_restart:"));
+    }
+    expect(countEvents(db)).toMatchObject({ run_started: 22, run_ended: 22 });
+    finishArenaLife(db, { ...dead.record!, reason: "restart", result: { ...dead.record!.result!, score: 999 } });
+    expect(getRun(db, dead.record!.runId)).toMatchObject({ end_reason: "death", score: 100 });
+  } finally { await manager.stop(); db.close(); }
+});
+
+test("drain retries a lock without blocking the event loop, restores ordinary timeout and expires at its deadline", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "life-lock-")), db = openDb(join(dir, "app.db")), lock = new Database(join(dir, "app.db"));
+  const log = spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const id = crypto.randomUUID(); registerArenaPlayer(db, id, "Pilot", "tabs");
+    const make = (): LifeRecord => ({ runId: crypto.randomUUID(), playerId: id, team: "tabs", started: 0, ended: 1000, reason: "restart", result: { playerId: id, life: 1, score: 9, kills: 0, seconds: 1, touch: false } });
+    const writer = new LifeWriter(db), record = make();
+    lock.exec("BEGIN IMMEDIATE"); writer.enqueue(record); const start = performance.now(); writer.flush();
+    expect(performance.now() - start).toBeLessThan(200); expect(db.query("PRAGMA busy_timeout").get()).toEqual({ timeout: 5000 });
+    const release = setTimeout(() => lock.exec("ROLLBACK"), 40);
+    try { expect(await writer.drain(performance.now() + 1000)).toBe(true); } finally { clearTimeout(release); }
+    expect(getRun(db, record.runId)).toMatchObject({ score: 9, end_reason: "restart" });
+    lock.exec("BEGIN IMMEDIATE"); const lost = make(), notices: boolean[] = []; writer.enqueue(lost, ok => notices.push(ok));
+    const deadline = performance.now() + 60; expect(await writer.drain(deadline)).toBe(false);
+    expect(performance.now() - deadline).toBeLessThan(150); expect(notices).toEqual([false]); expect(getRun(db, lost.runId)).toBeNull();
+    lock.exec("ROLLBACK"); expect(log).toHaveBeenCalled();
+  } finally { log.mockRestore(); lock.close(); db.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("permanent failures report failed restart results; throwing notification callbacks cannot change a committed save", async () => {
+  const db = openDb(":memory:"), manager = new RoomManager(db, "test"), log = spyOn(console, "error").mockImplementation(() => {});
+  const messages: any[] = [];
+  try {
+    const c = manager.open({ send: raw => { const m = JSON.parse(raw); messages.push(m); if (m.type === "life_over") throw Error("transport"); }, close() { throw Error("close"); }, getBufferedAmount: () => 0 });
+    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Pilot", team: "tabs", touch: false, buildId: "test" }));
+    db.exec("CREATE TRIGGER fail_end BEFORE INSERT ON events WHEN NEW.type = 'run_ended' BEGIN SELECT RAISE(FAIL, 'offline'); END;");
+    expect(await manager.stop()).toBe(false); expect(messages.at(-1)).toMatchObject({ type: "server_restart", result: { save: "failed", reason: "restart" } });
+    expect(getRun(db, c.record!.runId)).toBeNull(); db.exec("DROP TRIGGER fail_end;");
+    const writer = new LifeWriter(db); writer.enqueue(c.record!, () => { throw Error("notify"); });
+    expect(await writer.drain(performance.now() + 100)).toBe(true); expect(getRun(db, c.record!.runId)!.score).toBe(0);
+    writer.enqueue({ ...c.record!, runId: crypto.randomUUID() }); expect(await writer.drain(performance.now() - 1)).toBe(false);
+    expect(countEvents(db).run_ended).toBe(1);
+  } finally { await manager.stop(); log.mockRestore(); db.close(); }
+});
 test("trusted lives are atomic, idempotent, eligible above 3000 and cannot be finished through HTTP", async () => {
   const db = openDb(":memory:"), id = crypto.randomUUID().toUpperCase();
   try {
@@ -41,7 +118,7 @@ test("failed start rolls back; finish recovers metadata; cache failure does not 
     expect(notices).toEqual([false, true]); expect(countEvents(db)).toMatchObject({ run_started: 1, run_ended: 1 });
   } finally { log.mockRestore(); db.close(); }
 });
-test("death, stale inputs, duplicate respawns, touch, disconnect and repeated shutdown save each life once", () => {
+test("death, stale inputs, duplicate respawns, touch, disconnect and repeated shutdown save each life once", async () => {
   const db = openDb(":memory:"), manager = new RoomManager(db, "test", { seed: () => 1, wallNow: () => 1000 });
   const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(s)), close() {}, getBufferedAmount: () => 0 }), id = crypto.randomUUID();
   const send = (m: object) => manager.message(c, JSON.stringify({ v: 1, ...m }));
@@ -57,9 +134,9 @@ test("death, stale inputs, duplicate respawns, touch, disconnect and repeated sh
     send({ type: "respawn", life: 1, touch: true }); send({ type: "respawn", life: 1, touch: false }); expect(p.life).toBe(2);
     send({ type: "input", life: 1, touch: false, seq: 10, move: { x: 1, y: 0 }, aim: 0, fire: true }); expect(c.pending).toBeUndefined();
     expect(c.held.fire).toBe(false); expect(p.score).toBe(0); expect(p.touch).toBe(true);
-    manager.leave(c); manager.leave(c); manager.stop(); manager.stop();
+    manager.leave(c); manager.leave(c); await manager.stop(); await manager.stop();
     expect(countEvents(db)).toMatchObject({ run_started: 2, run_ended: 2 });
     expect((db.query("SELECT COUNT(*) AS n FROM runs WHERE touch = 1").get() as any).n).toBe(2);
     expect(endLife(room.state, id)).toBeNull();
-  } finally { manager.stop(); db.close(); }
+  } finally { await manager.stop(); db.close(); }
 });

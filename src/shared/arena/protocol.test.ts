@@ -5,6 +5,14 @@ import { MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STEP_MS, WORLD_HEIGHT, WORLD_
 import { MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SERVER_MESSAGE_BYTES } from "./constants";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
+test("restart packets require a finalized restart result; legacy life results remain valid", () => {
+  const result = { v: 1, type: "life_over", playerId: hello.playerId, life: 1, score: 21, kills: 2, seconds: 1.1, touch: true, save: "saved", reason: "restart" };
+  const parse = (result?: unknown) => parseServer(JSON.stringify({ v: 1, type: "server_restart", ...(result === undefined ? {} : { result }) }));
+  expect(parse()).not.toBeNull(); expect(parse(result)).not.toBeNull(); expect(parse({ ...result, save: "failed" })).not.toBeNull();
+  for (const bad of [null, { ...result, save: "pending" }, { ...result, reason: "death" }, { ...result, reason: undefined }, { ...result, score: -1 }, { ...result, score: "21" }]) expect(parse(bad)).toBeNull();
+  expect(parseServer(JSON.stringify({ ...result, reason: undefined }))).not.toBeNull();
+  expect(parseServer(JSON.stringify({ ...result, reason: "unknown" }))).toBeNull();
+});
 test("directional protocol accepts validated envelopes and full-room snapshots over 1 KiB", () => {
   expect(parseClient(JSON.stringify(hello))).toEqual(hello); expect(parseClient(JSON.stringify(input))).toEqual(input);
   const welcome: Welcome = { v: 1, type: "welcome", playerId: hello.playerId, arenaId: "room", buildId: "test", world: { width: WORLD_WIDTH, height: WORLD_HEIGHT },

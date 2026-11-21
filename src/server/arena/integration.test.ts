@@ -39,7 +39,7 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     for (let i = 0; i < 2; i++) a.socket.send(JSON.stringify({ v: 1, type: "respawn", life: 1, touch: true }));
     await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.hits === 3));
     expect(p.score).toBe(0); expect(p.touch).toBe(true);
-    app.arenas.stop();
+    await app.arenas.stop();
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL").get(a.id) as any).n).toBe(2);
     expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(3);
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }

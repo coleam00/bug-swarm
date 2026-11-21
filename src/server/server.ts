@@ -8,6 +8,7 @@ import { createShareAssets } from "./share-assets";
 import { configuredOrigin, renderShareMeta } from "./share-meta";
 import { RoomManager, type Connection } from "./arena/rooms";
 import { SERVER_MESSAGE_BYTES } from "../shared/arena/constants";
+import { packagedBuildId } from "./build";
 
 // Production and integration tests use the same HTTP/WebSocket boundary.
 export function createServer(options: { port?: number; hostname?: string; dataDir?: string; env?: Record<string, string | undefined> } = {}) {
@@ -17,7 +18,7 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
   // Validate configuration and prepare assets before opening SQLite.
   const publicOrigin = configuredOrigin(env), shareAssets = createShareAssets();
   const template = existsSync("dist/index.html") ? readFileSync("dist/index.html", "utf8") : undefined;
-  const buildId = env.RAILWAY_GIT_COMMIT_SHA ?? env.BUILD_ID ?? (template ? new Bun.CryptoHasher("sha256").update(template).digest("hex").slice(0, 16) : "development");
+  const buildId = packagedBuildId();
   if (startLimit > START_LIMIT) console.warn(`LOAD TEST: start limit raised to ${startLimit} per IP per ten minutes. Unset LOAD_TEST_START_LIMIT before serving players.`);
   let invalidateScores = () => {};
   const db = openDb(join(dataDir, "app.db")), arenas = new RoomManager(db, buildId, { invalidate: () => invalidateScores() });
@@ -42,6 +43,7 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
       port, hostname,
       fetch(request, server) {
         if (new URL(request.url).pathname === "/ws") {
+          if (!arenas.accepting) return new Response("Server restarting", { status: 503 });
           if (request.method === "GET" && server.upgrade(request, { data: {} })) return undefined;
           return new Response("WebSocket upgrade required", { status: 426 });
         }
@@ -57,9 +59,21 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
         close(socket) { if (socket.data.connection) arenas.leave(socket.data.connection); },
       },
     });
-    let stopping: Promise<void> | undefined;
+    let stopping: Promise<boolean> | undefined;
     return { server, db, arenas, stop() {
-      return stopping ??= (async () => { arenas.stop(); await server.stop(true); db.close(); })();
+      return stopping ??= (async () => {
+        const start = performance.now();
+        const drain = arenas.stop(start + 4000); // synchronously stop admission and freeze lives
+        const stopped = server.stop(false);
+        let saved = false;
+        try { saved = await drain; }
+        finally {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try { await Promise.race([stopped, new Promise(resolve => { timer = setTimeout(resolve, 500); })]); }
+          finally { clearTimeout(timer); try { await server.stop(true); } finally { db.close(); } }
+        }
+        return saved;
+      })();
     } };
-  } catch (error) { arenas.stop(); db.close(); throw error; }
+  } catch (error) { void arenas.stop().finally(() => db.close()); throw error; }
 }

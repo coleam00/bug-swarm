@@ -1,37 +1,89 @@
 import type { Identity } from "../../shared/api";
 import { parseServer, type InputMessage, type Respawn, type ServerMessage } from "../../shared/arena/protocol";
-export function connectArena(identity: Identity, touch: boolean, receive: (message: ServerMessage) => void, status: (message: string) => void, disconnected: () => void) {
-  let socket: WebSocket | undefined, disposed = false, refused = false, retryTeam = false;
-  let timer: ReturnType<typeof setTimeout> | undefined, backoff = 250, buildId = "unknown";
+import { clearResume, resumeStore, type ResumeStore } from "./resume";
+declare const __ARENA_BUILD_ID__: string;
+type State = "connecting" | "connected" | "reconnecting" | "reloading" | "refused" | "disposed";
+interface Dependencies {
+  href?: string;
+  socket: (url: URL) => WebSocket;
+  schedule: typeof setTimeout;
+  cancel: typeof clearTimeout;
+  reload: () => void;
+  store: ResumeStore;
+  pageBuild: string;
+}
+export function connectArena(identity: Identity, touch: boolean, receive: (message: ServerMessage) => void, status: (message: string) => void, disconnected: () => void, dependencies: Partial<Dependencies> = {}) {
+  const deps: Dependencies = { socket: url => new WebSocket(url), schedule: setTimeout.bind(globalThis), cancel: clearTimeout.bind(globalThis), reload: () => location.reload(), store: resumeStore,
+    pageBuild: typeof __ARENA_BUILD_ID__ === "undefined" ? "development" : __ARENA_BUILD_ID__, ...dependencies };
+  let socket: WebSocket | undefined, state: State = "connecting", retryTeam = false;
+  let timer: ReturnType<typeof setTimeout> | undefined, backoff = 500, buildId = deps.pageBuild, restartStatus = "";
+  const active = () => state !== "disposed" && state !== "refused" && state !== "reloading";
+  function retry() {
+    if (!active() || timer !== undefined) return;
+    state = "reconnecting"; disconnected(); status(restartStatus || "Reconnecting...");
+    timer = deps.schedule(() => { timer = undefined; connect(); }, backoff);
+    backoff = Math.min(5000, backoff * 2);
+  }
   function connect() {
-    if (disposed) return;
-    status("Connecting…");
-    const url = new URL("/ws", location.href); url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(url); socket = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ v: 1, type: "hello", ...identity, touch, buildId }));
+    if (!active()) return;
+    if (state === "connecting") status("Connecting...");
+    const url = new URL("/ws", deps.href ?? location.href); url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    let ws: WebSocket;
+    try { ws = deps.socket(url); socket = ws; } catch (error) { console.error("Arena socket creation failed", error); retry(); return; }
+    const current = () => socket === ws && active();
+    ws.onopen = () => { if (current()) ws.send(JSON.stringify({ v: 1, type: "hello", ...identity, touch, buildId })); };
     ws.onmessage = event => {
+      if (!current()) return;
       const message = parseServer(event.data);
       if (!message) { console.error("Invalid arena server message"); return; }
       if (message.type === "welcome") {
-        if (buildId !== "unknown" && buildId !== message.buildId) { location.reload(); return; }
-        buildId = message.buildId; backoff = 250; status("");
+        const changed = message.buildId !== deps.pageBuild;
+        const previous = deps.store.read();
+        // Keep attempts across stale bundles, but retire them once the requested
+        // bundle has actually loaded and its matching server has welcomed it.
+        if (!changed && previous?.target === deps.pageBuild && previous.attempted.length) {
+          deps.store.write({ ...previous, attempted: [], resume: false });
+        }
+        if (changed && !previous?.attempted.includes(message.buildId)) {
+          const envelope = { identity: { ...identity }, touch, target: message.buildId, attempted: [...(previous?.attempted ?? []), message.buildId], resume: true };
+          if (deps.store.write(envelope)) {
+            state = "reloading"; disconnected(); deps.cancel(timer); timer = undefined; deps.reload(); return;
+          }
+        }
+        buildId = message.buildId; backoff = 500; state = "connected";
+        if (!restartStatus) status("");
+      }
+      if (message.type === "snapshot" && state === "connected" && restartStatus && message.players.some(p => p.id === identity.playerId.toLowerCase() && p.hits > 0)) {
+        restartStatus = ""; status("");
+      }
+      if (message.type === "server_restart") {
+        restartStatus = message.result ? message.result.save === "saved" ? `Score saved: ${message.result.score}. Rejoining...` : "Score save failed. Rejoining..." : "Reconnecting...";
+        state = "reconnecting"; status(restartStatus);
       }
       if (message.type === "error") {
-        if (message.code === "team-conflict" && message.team && !retryTeam) { retryTeam = true; identity.team = message.team; }
-        else { refused = true; }
+        if (message.code === "restarting" || message.code === "hello-timeout") return;
+        if (message.code === "team-conflict" && message.team && !retryTeam) { retryTeam = true; identity.team = message.team; return; }
+        state = "refused"; clearResume(deps.store);
       }
       receive(message);
     };
-    ws.onerror = () => { status("Connection lost. Reconnecting…"); };
-    ws.onclose = () => {
-      disconnected(); if (disposed || refused) return;
-      status("Reconnecting…"); timer = setTimeout(connect, backoff); backoff = Math.min(5000, backoff * 2);
-    };
+    ws.onerror = () => { if (current()) ws.close(); };
+    ws.onclose = () => { if (socket !== ws) return; socket = undefined; retry(); };
   }
   connect();
   return {
-    send(input: InputMessage | Respawn): boolean { if (socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount) return false; socket.send(JSON.stringify(input)); return true; },
+    get state() { return state; },
+    send(input: InputMessage | Respawn): boolean {
+      touch ||= input.touch;
+      if (state !== "connected" || socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount) return false;
+      socket.send(JSON.stringify(input)); return true;
+    },
     reconnect() { socket?.close(); },
-    dispose() { disposed = true; clearTimeout(timer); if (socket) { socket.onclose = null; socket.onmessage = null; socket.onerror = null; socket.onopen = null; socket.close(); } },
+    dispose() {
+      const reloading = state === "reloading";
+      state = "disposed"; deps.cancel(timer); timer = undefined;
+      if (!reloading) clearResume(deps.store);
+      if (socket) { socket.onclose = null; socket.onmessage = null; socket.onerror = null; socket.onopen = null; socket.close(); socket = undefined; }
+    },
   };
 }

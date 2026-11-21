@@ -11,9 +11,9 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { createElement } from ${JSON.stringify(import.meta.resolve("react"))};
 import { create, act } from ${JSON.stringify(import.meta.resolve("react-test-renderer"))};
-let mounted = 0, disposed = 0, onError, onAccepted, onLife, joined;
+let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
 mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
-  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; joined = { identity, touch }; return () => { disposed++; };
+  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
@@ -57,6 +57,17 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   }
   act(() => onAccepted());
   assert.deepEqual(JSON.parse(saved), { playerId: joined.identity.playerId, name: acceptedName, team });
+  const playCanvas = tree.root.findByType("canvas"), beforeFeedback = mounted;
+  for (const feedback of ["Reconnecting…", "Score saved: 142. Rejoining…", "Score save failed. Rejoining…"]) {
+    act(() => onStatus(feedback));
+    const status = tree.root.findByProps({ role: "status" });
+    assert.equal(status.children.join(""), feedback, "Connection feedback must be rendered");
+    assert.equal(status.props.hidden, undefined); assert.notEqual(status.props.style?.display, "none");
+    assert.equal(tree.root.findByType("canvas"), playCanvas, "Feedback must retain the mounted canvas");
+    assert.equal(tree.root.findAllByProps({ role: "dialog" }).length, 0, "Reconnect feedback must not be modal");
+    assert.equal(mounted, beforeFeedback);
+  }
+  act(() => onStatus("")); assert.equal(tree.root.findAllByProps({ role: "status" }).length, 0);
   if (kind === "new" && team === "tabs") {
     const respawns = []; let prevented = false;
     act(() => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));
@@ -88,6 +99,33 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   assert.equal(tree.root.findByType("input").props.readOnly, true);
   act(() => tree.unmount());
 }
+const { resumeStore } = await import(${moduleUrl("resume.ts")});
+let resumeRaw = null;
+globalThis.sessionStorage = { getItem: () => resumeRaw, setItem: (key, value) => { resumeRaw = value; } };
+const resumed = { playerId: crypto.randomUUID(), name: "Resumed", team: "spaces" };
+resumeStore.write({ identity: resumed, touch: true, target: "new-build", attempted: ["new-build"], resume: true });
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
+assert.equal(tree.root.findAllByType("canvas").length, 1, "Reload must enter the play view without Join");
+assert.deepEqual(joined, { identity: resumed, touch: true });
+assert.equal(JSON.parse(resumeRaw).resume, false);
+act(() => tree.unmount());
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
+assert.equal(tree.root.findAllByType("canvas").length, 0, "An ordinary later visit still uses Join");
+act(() => tree.unmount());
+globalThis.history = { state: {}, replaceState(value) { this.state = value; } };
+globalThis.sessionStorage = { getItem() { throw Error("blocked"); }, setItem() { throw Error("blocked"); } };
+const envelope = { identity: resumed, touch: true, target: "fallback", attempted: ["fallback"], resume: true };
+assert.equal(resumeStore.write(envelope), true); assert.equal(resumeStore.read().target, "fallback");
+const stalePrimary = JSON.stringify(resumeStore.read());
+globalThis.sessionStorage.getItem = () => stalePrimary;
+assert.equal(resumeStore.write({ ...envelope, target: "later", attempted: ["fallback", "later"] }), true);
+assert.equal(resumeStore.read().target, "later", "Stale readable primary must not shadow the newer fallback guard");
+globalThis.sessionStorage.getItem = () => { throw Error("blocked"); };
+globalThis.history.state = { "bug-swarm-arena-reload-v1": { ...envelope, identity: { ...resumed, playerId: "invalid" } } };
+assert.equal(resumeStore.read(), null, "Invalid stored identities cannot resume");
+globalThis.history.replaceState = () => { throw Error("blocked"); };
+const originalError = console.error; console.error = () => {};
+assert.equal(resumeStore.write(envelope), false); console.error = originalError;
 `;
   try {
     const child = Bun.spawnSync([process.execPath, "--eval", probe], { cwd: scratch, env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home }, stdout: "pipe", stderr: "pipe", timeout: 10000 });
