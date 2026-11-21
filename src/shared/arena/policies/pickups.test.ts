@@ -5,7 +5,7 @@ import { lifeDefaults, type Pickup } from "../types";
 import { createBug } from "../bugs/registry";
 const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
 const pickup: Pickup = { id: 2, kind: "shield", x: 1200, y: 1400, expiresAt: 12000 };
-const observation = (): Observation => ({ globs: [], players: [player], bugs: [createBug("crawler", 1, 1600, 1200)], pickups: [pickup], tick: 0 });
+const observation = (): Observation => ({ globs: [], players: [player], bugs: [createBug("crawler", 1, 1900, 1200)], pickups: [pickup], tick: 0 });
 test.each(["shield", "spread", "rapid"] as const)("aimer seeks safe %s within 250, keeps independent leading aim/bursts, and allows refresh", kind => {
   const o = observation(); o.pickups = [{ ...pickup, kind }];
   const ordinary = policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79));
@@ -22,6 +22,8 @@ test("pickup seeking abandons near bugs, blocked routes, committed corridors, ex
   const crawler = createBug("crawler", 3, 1200, 1400);
   expect(safePickup({ ...o, bugs: [crawler] }, player)).toBeUndefined();
   crawler.y = 1450; expect(safePickup({ ...o, bugs: [crawler] }, player)).toBeUndefined();
+  const hive = createBug("hive", 5, 1580, 1200);
+  expect(safePickup({ ...o, bugs: [hive] }, player)).toBeUndefined(); // Keep the escape route while a nearby boss approaches.
   const dasher = createBug("dasher", 4, 950, 1300); Object.assign(dasher, { phase: "windup", phaseUntil: 700, facing: 0 });
   expect(safePickup({ ...o, bugs: [dasher] }, player)).toBeUndefined();
   Object.assign(dasher, { phase: "dash", phaseUntil: 450 }); expect(safePickup({ ...o, bugs: [dasher] }, player)).toBeUndefined();
@@ -50,9 +52,9 @@ test("pickup routes avoid crossing acid globs and reconsider after passage or ex
 });
 
 test("seeking keeps clearance from approaching bugs while still collecting on an open route", () => {
-  const o = observation(); o.bugs = [createBug("crawler", 3, 1610, 1200)];
-  o.pickups = [{ ...pickup, x: 1400, y: 1200 }];
-  expect(safePickup(o, player)).toBeUndefined(); // A short detour would close to 210 units.
+  const o = observation(); o.bugs = [createBug("crawler", 3, 1790, 1200)];
+  o.pickups = [{ ...pickup, x: 1450, y: 1200 }];
+  expect(safePickup(o, player)).toBeUndefined(); // A detour would close to 340 units.
   o.pickups = [{ ...pickup, x: 1000, y: 1200 }];
   expect(safePickup(o, player)).toBe(o.pickups[0]);
 });
