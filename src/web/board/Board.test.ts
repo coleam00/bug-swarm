@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 test("board subscribes, renders server data as text, preserves rows, handles outages and cleans up", () => {
-  const scratch = mkdtempSync(join(tmpdir(), "board-ui-")), home = join(scratch, "home");
+  const evidence = resolve(import.meta.dir, "../../../.evidence/62");
+  mkdirSync(evidence, { recursive: true });
+  const scratch = mkdtempSync(join(evidence, "board-ui-")), home = join(scratch, "home");
   mkdirSync(home);
   const moduleUrl = (path: string) => JSON.stringify(pathToFileURL(join(import.meta.dir, path)).href);
   const probe = `
@@ -19,6 +20,30 @@ import { TEAMS, TEAM_NAMES } from ${moduleUrl("../../shared/teams.ts")};
 globalThis.document = { title: "" };
 Object.defineProperty(globalThis, "localStorage", { get() { throw new Error("Board accessed player storage"); } });
 const text = node => typeof node === "object" ? node.children.map(text).join(" ") : String(node);
+const domText = node => typeof node === "object" ? node.children.map(domText).join("") : String(node);
+
+// Exercise the default Board -> controller -> boardApi -> request wiring.
+globalThis.window = { location: { origin: "https://swarm.test" } };
+const originalFetch = globalThis.fetch, requests = [];
+globalThis.fetch = async (path, init) => {
+  requests.push({ path, method: init?.method });
+  switch (path) {
+    case "/api/leaderboard": return Response.json([]);
+    case "/api/teams": return Response.json({ tabs: 0, spaces: 0 });
+    case "/api/arena/stats": return Response.json({ totalPlayers: 25, arenas: [{ id: "first", players: 20 }, { id: "second", players: 5 }] });
+    default: throw new Error("Unexpected board request: " + path);
+  }
+};
+let defaultTree;
+try {
+  await act(async () => { defaultTree = create(createElement(Board)); });
+  assert.ok(requests.some(request => request.path === "/api/arena/stats" && request.method === "GET"), "Default Board must GET /api/arena/stats");
+  assert.equal(domText(defaultTree.root.findByProps({ className: "board-playing" })), "25 playing now", "Default Board must display the stats response");
+} finally {
+  try { if (defaultTree) act(() => defaultTree.unmount()); }
+  finally { globalThis.fetch = originalFetch; }
+}
+
 for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
   globalThis.window = { location: { origin } };
   const clock = new FakeScheduler(), leaders = [], teams = [], stats = [], logs = [];
@@ -36,13 +61,37 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
     assert.equal(Boolean(text(tree.root.findByProps({ role: "status" })).trim()), failed, "Incorrect reconnecting indication");
   };
   const assertActivity = (total, pills = []) => {
-    const domText = node => typeof node === "object" ? node.children.map(domText).join("") : String(node);
     const actual = domText(tree.root.findByProps({ className: "board-playing" }));
     assert.equal(actual, total + " playing now");
     assert.deepEqual(tree.root.findAllByProps({ className: "board-arena" }).map(domText), pills);
     const activity = tree.root.findByProps({ className: "board-activity" });
     assert.ok(!text(activity).includes("secret-room"), "Raw arena id shown");
     assert.ok(activity.findAll(node => Object.entries(node.props).some(([key, value]) => ["title", "aria-label"].includes(key) && String(value).includes("secret-room"))).length === 0);
+  };
+  const assertActivityPlacement = () => {
+    const main = tree.root.findByType("main");
+    const race = tree.root.findByProps({ className: "board-race" });
+    const activity = tree.root.findByProps({ className: "board-activity" });
+    const leaders = tree.root.findByProps({ className: "board-leaders" });
+    const [raceIndex, activityIndex, leadersIndex] = [race, activity, leaders].map(section => {
+      assert.equal(section.parent, main, "Board sections must belong to the main container");
+      const index = main.children.indexOf(section);
+      assert.ok(index >= 0, "Missing board section");
+      return index;
+    });
+    assert.ok(raceIndex < activityIndex && activityIndex < leadersIndex, "Activity must sit between the team race and Top 10");
+    const heading = leaders.findByType("h2");
+    assert.equal(heading.parent, leaders);
+    assert.equal(domText(heading), "Top 10");
+    const playing = activity.findByProps({ className: "board-playing" });
+    const arenas = activity.findByProps({ className: "board-arenas" });
+    assert.equal(playing.parent, activity); assert.equal(arenas.parent, activity);
+    const playingIndex = activity.children.indexOf(playing), arenasIndex = activity.children.indexOf(arenas);
+    assert.ok(playingIndex >= 0 && arenasIndex >= 0, "Missing activity total or arena container");
+    assert.ok(playingIndex < arenasIndex, "Arena pills must follow the activity total");
+    const pills = tree.root.findAllByProps({ className: "board-arena" });
+    assert.ok(pills.length > 0, "Missing populated arena pills");
+    pills.forEach(pill => assert.equal(pill.parent, arenas, "Every arena pill must belong to the arena container"));
   };
   const assertRows = (expected, scores) => {
     const rendered = tree.root.findAllByType("li");
@@ -97,6 +146,7 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
     });
     const pills = ["Arena 10 · 20", "Arena 2 · 18", "Arena 3 · 18", "Arena 1 · 7", "Arena 4 · 6", "Arena 5 · 5", "Arena 6 · 4", "Arena 7 · 3", "+2 more"];
     assertActivity("1,234", pills);
+    assertActivityPlacement();
     assertRows(firstRows, ["1.2M", "950", "840", "730", "620", "510", "400", "290", "180", "70"]);
     assertRace([999999, 333333], ["999,999", "333,333"], [75, 25]);
     const row = tree.root.findAllByType("li")[0], shell = tree.root.findByType("main");
