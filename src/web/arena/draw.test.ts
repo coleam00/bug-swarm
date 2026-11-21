@@ -146,6 +146,7 @@ test("each hive recipient gets its own world award; the banner avoids their full
     for (const [width, height] of [[844, 390], [390, 844], [1280, 720]] as const) {
       const view = worldView(width, height), camera = cameraFor(local.x, local.y, view.width, view.height);
       renderer.reset(); renderer.events([event], 1000);
+      const birthY = new Map<string, number>();
       const draw = (age: number) => { c.paints.length = 0; renderer.draw(width, height, camera, [local], local, input, [], [], 5, 100, 1000 + age, view.scale); return [...c.paints]; };
       for (const age of [0, 180, 800, ...Array.from({ length: 32 }, (_, i) => i * 50)]) {
         const paints = draw(age), panel = paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12dd")!;
@@ -154,9 +155,14 @@ test("each hive recipient gets its own world award; the banner avoids their full
         const [px, py, pw, ph] = panel.args.map(Number) as [number, number, number, number];
         for (const r of rewards) {
           const awards = paints.filter(p => p.op === "fillText" && p.args[0] === `+${r.amount}`); expect(awards).toHaveLength(1);
-          const award = awards[0]!, [a, , , d, e, f] = award.transform as [number, number, number, number, number, number];
-          expect(award.args[1]).toBe(r.x); expect(award.args[2]).toBeCloseTo(r.y - 65 - age / 35);
+          const award = awards[0]!, [a, b, cx, d, e, f] = award.transform as [number, number, number, number, number, number];
+          expect(award.args[1]).toBe(r.x);
+          if (age === 0) birthY.set(r.playerId, Number(award.args[2])); else expect(Number(award.args[2])).toBeLessThan(birthY.get(r.playerId)!);
+          // A minimum rendered size guards readability without pinning the 32px font.
+          const fontSize = Number.parseFloat(award.font.match(/[\d.]+px/)?.[0] ?? "0"), glyphScale = Math.min(Math.hypot(a, b), Math.hypot(cx, d));
+          expect(fontSize * glyphScale).toBeGreaterThanOrEqual(24);
           const x = a * r.x + e, y = d * Number(award.args[2]) + f, half = (c.measureText(`+${r.amount}`).width / 2 + 5) * view.scale;
+          expect(y - fontSize * glyphScale).toBeGreaterThanOrEqual(0); expect(y + fontSize * glyphScale * 0.3).toBeLessThanOrEqual(height);
           expect(x + half <= px || x - half >= px + pw || y + 10 * view.scale <= py || y - 36 * view.scale >= py + ph).toBe(true);
           expect(award.globalAlpha).toBeGreaterThan(0);
         }

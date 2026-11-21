@@ -3,7 +3,7 @@ import { createArena, joinPlayer, endLife, leavePlayer, respawnPlayer, stepArena
 import { createBug } from "./registry";
 import { hive, spawnHive, contributeHive, rewardHive } from "./hive";
 import { hivePlacement } from "./hive-placement";
-import { MAX_BUGS, STEP_MS, WAVE_MS, HIVE_SPEED } from "../constants";
+import { MAX_BUGS, STEP_MS, WAVE_MS, HIVE_SPEED, PLAYER_SPEED, CRAWLER_SPEED } from "../constants";
 import { spawnBug, pushBugsFromSpawn } from "../spawn";
 import { downPlayer } from "../revive";
 import type { ArenaState, CombatPlayer } from "../types";
@@ -103,6 +103,9 @@ test("exact 600 clearance activates immediately; densest cluster beats lone near
   const a = setup(3), [p, q, r] = [...a.players.values()]; spawnHive(a, 0); const b = a.bugs[0]!;
   Object.assign(b, { x: 1200, y: 1200 }); Object.assign(p!, { x: 1150, y: 1200 }); Object.assign(q!, { x: 1600, y: 1200 }); Object.assign(r!, { x: 1700, y: 1200 });
   hive.move(b, a.players.values(), 0); expect(b.vx).toBe(HIVE_SPEED); expect(b.vy).toBe(0);
+  // Slow is relative to the arena, not whatever value the hive tuning happens to hold.
+  const speed = Math.hypot(b.vx, b.vy);
+  expect(speed).toBeGreaterThan(0); expect(speed).toBeLessThan(Math.min(PLAYER_SPEED, CRAWLER_SPEED));
   q!.status = r!.status = "out"; hive.move(b, a.players.values(), 0); expect(b.vx).toBe(-HIVE_SPEED);
   p!.status = "out"; hive.move(b, a.players.values(), 0); expect(b.vx).toBe(0);
   p!.status = "active"; p!.x = 14; b.x = 48; hive.move(b, a.players.values(), 0); expect(b.vx).toBe(0);
