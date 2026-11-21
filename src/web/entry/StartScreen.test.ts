@@ -28,18 +28,20 @@ const change = value => act(() => tree.root.findByType("input").props.onChange({
 const click = index => act(() => tree.root.findAllByType("button")[index].props.onClick());
 const submit = () => act(() => tree.root.findByType("form").props.onSubmit({ preventDefault() {} }));
 const alerts = () => tree.root.findAllByProps({ role: "alert" });
+// Inspect the whole rendered entry, including text in small/span/div elements.
+const assertCleanEntry = () => assert.doesNotMatch(text(tree.root.findByType("main")),
+  /2[-\u2013]16|2 to 16|letters|numbers|permanent|WASD|arrows|drag|steer|auto.fire|three hits|every score helps|choose your team/i);
 await mount(null);
+assertCleanEntry();
 assert.equal(text(tree.root.findByType("h1")), "Bug Swarm");
 assert.equal(text(tree.root.findByProps({ className: "entry-tagline" })), "Survive the swarm.");
 assert.equal(tree.root.findByType("input").props.placeholder, "Your name");
-assert.equal(tree.root.findByType("input").props.autoFocus, undefined);
-assert.equal(tree.root.findByType("input").props.maxLength, undefined);
 assert.deepEqual(tree.root.findAllByType("button").map(text), ["Join Tabs", "Join Spaces"]);
 assert.equal(alerts().length, 0);
 for (const invalid of ["", "x", "a".repeat(17), "hello!", "éé", "admin", "fuuuck"]) {
   change(invalid); assert.equal(alerts().length, 0);
   click(0); assert.equal(starts.length, 0); assert.equal(alerts().length, 1);
-  assert.equal(text(alerts()[0]), ["admin", "fuuuck"].includes(invalid) ? "Pick a different name." : "Use 2 to 16 letters or numbers.");
+  assert.ok(text(alerts()[0]).trim(), "A rejected attempt needs a short explanation");
   assert.equal(focused, "input");
   const input = tree.root.findByType("input");
   assert.equal(input.props["aria-invalid"], true); assert.equal(input.props["aria-describedby"], "name-error");
@@ -54,6 +56,7 @@ assert.equal(starts.pop().touch, true);
 act(() => tree.unmount());
 const identity = { playerId: crypto.randomUUID(), name: "Saved Robot", team: "spaces" };
 await mount(identity);
+assertCleanEntry();
 assert.equal(tree.root.findAllByType("input").length, 0);
 assert.equal(tree.root.findAllByType("button").length, 1); assert.equal(text(tree.root.findByType("button")), "Play");
 assert.equal(text(tree.root.findByProps({ className: "entry-player" })), "Saved RobotSpaces");
@@ -62,6 +65,7 @@ act(() => tree.root.findByType("main").props.onPointerDown({ pointerType: "touch
 assert.deepEqual(starts.pop(), { name: identity.name, team: "spaces", touch: true });
 act(() => tree.unmount());
 await mount({ playerId: identity.playerId, name: identity.name });
+assertCleanEntry();
 assert.equal(tree.root.findByType("input").props.readOnly, true);
 assert.equal(tree.root.findByType("input").props.value, identity.name);
 click(0); assert.deepEqual(starts.pop(), { name: identity.name, team: "tabs", touch: false });

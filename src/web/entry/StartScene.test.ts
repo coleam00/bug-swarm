@@ -25,8 +25,14 @@ test("decorative scene resizes, pauses, honours reduced motion, and releases eve
       const dispose = mountStartScene(canvas);
       expect(canvas.width).toBe(width * 2); expect(canvas.height).toBe(height * 2);
       expect(frames.size).toBe(1); expect(fixture.depth).toBe(0);
-      const paints = ctx.paints.length; tick(100); tick(116);
-      expect(ctx.paints.length).toBeGreaterThan(paints);
+      // Beetles use ellipses; compare their rendered geometry, not draw counts.
+      const beetles = () => ctx.paints.filter(paint => paint.path.some(part => part.op === "ellipse"))
+        .map(({ path, transform }) => ({ path, transform }));
+      ctx.paints.length = 0; tick(100);
+      const before = beetles();
+      ctx.paints.length = 0; tick(148);
+      expect(before.length).toBeGreaterThan(0);
+      expect(beetles()).not.toEqual(before);
       doc.hidden = true; doc.dispatchEvent(new Event("visibilitychange"));
       expect(frames.size).toBe(0);
       doc.hidden = false; doc.dispatchEvent(new Event("visibilitychange")); expect(frames.size).toBe(1);
