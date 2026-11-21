@@ -35,7 +35,7 @@ test("newcomer trials observe exactly the first life at the requested age and re
   expect(newcomerTrial(3, "idle", 0, 0, 120)).toEqual(death);
   const busy = newcomerTrial(3, "aimer", 1, 8, 0.5);
   expect(busy).toMatchObject({ seed: 3, policy: "aimer", joinSeconds: 1, incumbents: 8, seconds: 0.5, cutoff: true });
-});
+}, 10000); // Several thousand simulated seconds, also on shared Windows runners.
 
 test("survival gates distinguish deaths, censored lower bounds, missing cohorts and failed thresholds", () => {
   const cohort = (policy: "aimer" | "idle", joinSeconds: number, incumbents: number, seconds: number): NewcomerLife[] =>

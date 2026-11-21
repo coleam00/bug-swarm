@@ -8,7 +8,35 @@ import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import type { Paint } from "../test-support/canvas-fixture.test-support";
+import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
+
+test("kind dispatch paints a crouched hot tell along locked facing, keeps offscreen warnings, and sparks without score", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("dasher", 1, 500, 500), input = new ArenaInput();
+    const draw = () => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, input, [b], [], 3, 0, 0, 1, undefined, 350); return [...fixture.context.paints]; };
+    const ordinary = draw(); Object.assign(b, { phase: "windup", phaseUntil: 700, facing: Math.PI / 2 });
+    const hot = draw(), warning = hot.find(p => p.op === "stroke" && p.path.some(q => q.op === "lineTo" && q.args[0]! > 200))!;
+    expect(warning).toBeDefined(); expect(Math.atan2(warning.transform[1]!, warning.transform[0]!)).toBeCloseTo(Math.PI / 2);
+    expect(hot.filter(p => p.op === "drawImage").length).toBeGreaterThan(ordinary.filter(p => p.op === "drawImage").length);
+    const body = (paints: Paint[]) => paints.find(p => p.op === "fill" && p.path.some(q => q.op === "moveTo" && q.args[0] === 19))!;
+    expect(Math.hypot(body(hot).transform[0]!, body(hot).transform[1]!)).toBeLessThan(Math.hypot(body(ordinary).transform[0]!, body(ordinary).transform[1]!));
+    const cached = fixture.created; draw(); expect(fixture.created).toBe(cached);
+    b.x = 50; b.facing = 0; expect(draw().some(p => p.op === "stroke" && p.path.some(q => q.op === "lineTo" && q.args[0]! > 200))).toBe(true);
+    b.x = 2390; b.facing = 0;
+    fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 2000, y: 100 }, [], null, input, [b]);
+    expect(fixture.context.paints.some(p => p.op === "stroke" && p.path.length === 2 && p.path[1]!.args[0] === 10)).toBe(true);
+    renderer.events([{ id: 2, tick: 1, kind: "dasher", type: "hit", x: 500, y: 500, points: 0 }], 0);
+    const spark = draw(); expect(spark.some(p => p.op === "stroke" && p.path.length === 16)).toBe(true);
+    expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    renderer.reset(); expect(draw().some(p => p.op === "stroke" && p.path.length === 16)).toBe(false);
+    const crawler = createBug("crawler", 3, 500, 500); fixture.context.paints.length = 0;
+    renderer.draw(800, 600, { x: 100, y: 100 }, [], null, input, [crawler]);
+    expect(fixture.context.paints.some(p => p.path.some(q => q.op === "ellipse"))).toBe(true);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
 
 test("one HUD baseline uses authoritative combat and connected population, fitting large scores on phones", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -50,7 +78,7 @@ test("renderer draws the minimap outline, faint swarm, both living teams and one
       c.paints.length = 0;
       renderer.draw(width!, height!, { x: 400, y: 500 },
         [{ ...local, x: 0 }, remote, { ...remote, id: "dead", hits: 0 }], local, new ArenaInput(),
-        [{ id: 1, kind: "crawler", x: 600, y: 600, vx: 0, vy: 0 }], [], 1, 1, 50, 1.5);
+        [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: 600, y: 600, vx: 0, vy: 0 }], [], 1, 1, 50, 1.5);
       const outlines = c.paints.filter(p => p.op === "strokeRect" && screenSpace(p));
       expect(outlines).toHaveLength(1);
       const outline = outlines[0]!, [x, y, mapWidth, mapHeight] = outline.args as number[];
@@ -265,7 +293,7 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
     p.streak = 30;
     const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([17, 987, 3, 1]));
     expect(capped).not.toContain(4);
-    const effectTime = 1_000_000_000, kill = { id: 1, tick: 4, x: 550, y: 550, points: 11 };
+    const effectTime = 1_000_000_000, kill = { id: 1, tick: 4, x: 550, y: 550, points: 11, type: "kill" as const, kind: "crawler" as const };
     renderer.events([kill], effectTime);
     expect(draw(effectTime / 50).some(paint => paint.op === "fillText" && paint.args[0] === "+11" && paint.globalAlpha > 0)).toBe(true);
     renderer.events([kill], effectTime + 100);

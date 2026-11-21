@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createServer } from "../server";
 import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
 import { runBots } from "../../../scripts/bots";
+import { createBug } from "../../shared/arena/bugs/registry";
 function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID()) {
   const socket = new WebSocket(url), messages: ServerMessage[] = [];
   const observers = new Set<() => void>();
@@ -28,14 +29,14 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
   try {
     await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
     const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
-    p.x = p.y = 1200; room.state.tick = 21; room.state.bugs = [{ id: 999, kind: "crawler", x: 1320, y: 1200, vx: 0, vy: 0 }];
+    p.x = p.y = 1200; room.state.tick = 21; room.state.bugs = [{ id: 999, kind: "crawler", hp: 1, facing: 0, x: 1320, y: 1200, vx: 0, vy: 0 }];
     a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
     await a.wait(m => m.type === "snapshot" && m.shots.some(s => s.owner === a.id));
     await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.score === 11));
     const origin = `http://127.0.0.1:${app.server.port}`;
     const read = async (path: string) => (await fetch(origin + path)).json();
     expect(await read("/api/leaderboard")).toEqual([]); expect(await read("/api/teams")).toEqual({ tabs: 0, spaces: 0 });
-    p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 1000, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
+    p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 1000, kind: "crawler", hp: 1, facing: 0, x: p.x, y: p.y, vx: 0, vy: 0 });
     expect(await a.wait(m => m.type === "life_over" && m.save === "saved")).toMatchObject({ score: 11, kills: 1, life: 1 });
     expect(await read("/api/leaderboard")).toContainEqual({ playerId: a.id, name: "bot-1", score: 11 });
     expect(await read("/api/teams")).toEqual({ tabs: 11, spaces: 0 });
@@ -48,6 +49,22 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     await app.arenas.stop();
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL").get(a.id) as any).n).toBe(2);
     expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(3);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
+test("two real clients observe surviving dasher hit, then authoritative removal and score", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "dasher-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
+    p.x = p.y = 1200;
+    room.state.bugs.push(createBug("dasher", 999, 1320, 1200));
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.id === 999 && b.hp === 1) && m.events.some(e => e.type === "hit" && e.kind === "dasher") && m.players.some(q => q.id === a.id && q.score === 0 && q.streak === 1));
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.bugs.some(b => b.id === 999) && m.players.some(q => q.id === a.id && q.score === 30 && q.kills === 1));
+    expect(p.streak).toBe(2);
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
 }, 10000);
 test("real server: clients see each other move, 21st player is isolated, refused names and live hides close", async () => {

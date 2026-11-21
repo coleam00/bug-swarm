@@ -2,6 +2,8 @@ import { BUG_SPAWN_MAX, BUG_SPAWN_MIN, MAX_BUGS, MAX_VIEW, PLAYER_RADIUS, SAFE_S
 import { nextRandom } from "./random";
 import { cameraFor } from "./view";
 import type { ArenaState, CombatPlayer } from "./types";
+import { createBug } from "./bugs/registry";
+import { spawnKind } from "./bugs/spawn-mix";
 export function random(state: ArenaState) { state.random = nextRandom(state.random); return state.random / 4294967296; }
 export function safeSpawn(state: ArenaState, except?: string) {
   let best = { x: WORLD_WIDTH / 2, y: WORLD_HEIGHT / 2 }, bestScore = -Infinity;
@@ -51,6 +53,6 @@ export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
       if (distance > bestDistance) { bestX = x; bestY = y; bestDistance = distance; }
     }
   }
-  if (bestDistance >= 0) { state.bugs.push({ id: state.nextId++, kind: "crawler", x: bestX, y: bestY, vx: 0, vy: 0 }); return true; }
+  if (bestDistance >= 0) { state.bugs.push(createBug(spawnKind(state.wave, () => random(state)), state.nextId++, bestX, bestY)); return true; }
   return false;
 }

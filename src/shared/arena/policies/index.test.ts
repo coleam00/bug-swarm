@@ -1,9 +1,28 @@
 import { expect, test } from "bun:test";
 import { createPolicy, intercept, policyInput } from "./index";
 import { lifeDefaults } from "../types";
+import { createBug } from "../bugs/registry";
 const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+
+test("aimer reads visible locked corridor, prefers earliest tell/id, holds perpendicular dodge through dash and chooses edge clearance", () => {
+  const b = createBug("dasher", 2, 960, 1200); Object.assign(b, { phase: "windup", phaseUntil: 700 });
+  const state = createPolicy(71), observation = { players: [player], bugs: [b] };
+  const first = policyInput("aimer", observation, player, state); expect(first.move.y).toBeGreaterThan(0.25); expect(first.fire).toBe(true);
+  b.phase = "dash"; player.y += 100;
+  const crowd = createBug("crawler", 9, player.x, player.y + 40);
+  expect(policyInput("aimer", { ...observation, bugs: [b, crowd] }, player, state).move.y).toBeLessThan(0);
+  expect(state.dodgeId).toBe(b.id); expect(state.dodgeY).toBe(1); player.y -= 100;
+  b.phase = "recovery"; policyInput("aimer", observation, player, state); expect(state.dodgeId).toBeUndefined();
+  b.phase = "windup";
+  const early = { ...b, id: 3, phaseUntil: 650 }, tie = { ...early, id: 1 };
+  policyInput("aimer", { players: [player], bugs: [b, early, tie] }, player, state); expect(state.dodgeId).toBe(1);
+  const edge = { ...player, y: 2380 }, edgeBug = { ...b, y: 2380 }, edgeState = createPolicy(1);
+  expect(policyInput("aimer", { players: [edge], bugs: [edgeBug] }, edge, edgeState).move.y).toBeLessThan(-0.5);
+  expect(edgeState.dodgeY).toBe(-1);
+  expect(policyInput("aimer", { players: [player], bugs: [{ ...b, facing: Math.PI / 2 }] }, player, createPolicy(1)).move.x).not.toBe(0);
+});
 test("mover aims along motion; aimer leads available targets, fires only in range and bursts with hysteresis", () => {
-  const observation = { players: [player], bugs: [{ id: 1, kind: "crawler" as const, x: 1600, y: 1200, vx: 0, vy: 140 }] }, before = structuredClone(observation);
+  const observation = { players: [player], bugs: [{ id: 1, kind: "crawler" as const, hp: 1, facing: 0, x: 1600, y: 1200, vx: 0, vy: 140 }] }, before = structuredClone(observation);
   const mover = policyInput("mover", observation, player, createPolicy(1)); expect(mover.fire).toBe(true); expect(mover.aim).toBe(Math.atan2(mover.move.y, mover.move.x));
   const state = createPolicy(1), aimed = policyInput("aimer", observation, player, state); expect(aimed.fire).toBe(true); expect(aimed.aim).toBeGreaterThan(0);
   expect(policyInput("aimer", observation, { ...player, heat: 12 }, state).fire).toBe(false);
@@ -18,9 +37,9 @@ test("mover dodges a nearby side threat while aimer retreats inside its desired 
   const waypoint = () => ({ ...createPolicy(1), steps: 1, x: 1800, y: 1200 });
   const empty = { players: [player], bugs: [] };
   expect(policyInput("mover", empty, player, waypoint()).move.y).toBe(0);
-  const dodge = policyInput("mover", { players: [player], bugs: [{ id: 1, kind: "crawler", x: 1200, y: 1250, vx: 0, vy: 0 }] }, player, waypoint());
+  const dodge = policyInput("mover", { players: [player], bugs: [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: 1200, y: 1250, vx: 0, vy: 0 }] }, player, waypoint());
   expect(dodge.move.y).toBeLessThan(0); expect(dodge.fire).toBe(true); expect(dodge.aim).toBe(Math.atan2(dodge.move.y, dodge.move.x));
-  const target = { id: 1, kind: "crawler" as const, x: 1400, y: 1200, vx: 0, vy: 0 };
+  const target = { id: 1, kind: "crawler" as const, hp: 1, facing: 0, x: 1400, y: 1200, vx: 0, vy: 0 };
   expect(policyInput("aimer", { players: [player], bugs: [target] }, player, createPolicy(1)).move.x).toBeLessThan(0);
   expect(policyInput("aimer", { players: [player], bugs: [{ ...target, x: 1900 }] }, player, createPolicy(1)).move.x).toBeGreaterThan(0);
 });
