@@ -4,7 +4,8 @@ import { movePlayer } from "./movement";
 import { neutralInput, lifeDefaults, type ArenaState, type Input, type Player, type LifeResult } from "./types";
 import { safeSpawn, spawnBug } from "./spawn";
 import { BUGS } from "./bugs/registry";
-import { fireAndAdvance } from "./combat";
+import { fireAndAdvance, circleEntry } from "./combat";
+import { motionFor, stopAtBoundary } from "./motion";
 import { downPlayer, resolveRevives } from "./revive";
 export function createArena(seed: number): ArenaState { return { tick: 0, random: seed >>> 0, players: new Map(), slots: new Map(),
   wave: 0, bugs: [], shots: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
@@ -53,17 +54,23 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
       }
     }
   }
-  for (const bug of state.bugs) BUGS[bug.kind].move(bug, state.players.values());
+  for (const bug of state.bugs) { BUGS[bug.kind].move(bug, state.players.values(), time); stopAtBoundary(bug); }
   fireAndAdvance(state, inputs, time);
-  for (const b of state.bugs) { b.x += b.vx * STEP_MS / 1000; b.y += b.vy * STEP_MS / 1000; }
+  for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;
   for (const p of state.players.values()) {
     if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
-    for (const b of state.bugs) if (Math.hypot(p.x - b.x, p.y - b.y) <= PLAYER_RADIUS + BUGS[b.kind].radius) {
+    for (const b of state.bugs) {
+      const m = motionFor(b), dt = STEP_MS / 1000, px = p.x - p.vx * dt, py = p.y - p.vy * dt, radius = PLAYER_RADIUS + BUGS[b.kind].radius;
+      const moving = circleEntry(px - m.x, py - m.y, (p.vx - m.vx) * m.stop, (p.vy - m.vy) * m.stop, radius);
+      const stopped = circleEntry(px + p.vx * m.stop - b.x, py + p.vy * m.stop - b.y, p.vx * (dt - m.stop), p.vy * (dt - m.stop), radius);
+      if (moving === null && stopped === null) continue;
       p.immuneUntil = time + IMMUNITY_MS;
       if (p.hits === 1) downPlayer(state, p); else p.hits--;
       break;
     }
   }
   for (const p of resolveRevives(state, state.tick * STEP_MS)) endLife(state, p.id);
+  // Publish phase/velocity for the following interval, after resolving completed motion and life states.
+  for (const b of state.bugs) { BUGS[b.kind].move(b, state.players.values(), state.tick * STEP_MS); stopAtBoundary(b); }
 }

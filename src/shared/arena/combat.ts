@@ -1,6 +1,7 @@
 import { HEAT_CAPACITY, HEAT_COOLING, HEAT_GAIN, MUZZLE_OFFSET, OVERHEAT_MS, SHOT_LIFETIME_MS, SHOT_RADIUS, SHOT_RATE, SHOT_SPEED, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "./constants";
 import { BUGS } from "./bugs/registry";
 import type { ArenaState, Input } from "./types";
+import { recordMotion, motionFor } from "./motion";
 // First entry of a relative segment into a circle, including initial overlap.
 export function circleEntry(x: number, y: number, dx: number, dy: number, radius: number): number | null {
   const c = x * x + y * y - radius * radius; if (c <= 0) return 0;
@@ -10,6 +11,7 @@ export function circleEntry(x: number, y: number, dx: number, dy: number, radius
 }
 export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, Input>, time: number) {
   const end = time + STEP_MS;
+  for (const b of state.bugs) recordMotion(b);
   for (const p of state.players.values()) {
     if (p.status === "out") continue;
     const firing = p.status === "active" && (inputs.get(p.id)?.fire ?? false);
@@ -39,15 +41,27 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
     boundary = Math.max(0, boundary);
     let victim = -1, first = Infinity;
     for (let i = 0; i < state.bugs.length; i++) {
-      const b = state.bugs[i]!, offset = (from - time) / 1000;
-      const t = circleEntry(s.x - b.x - b.vx * offset, s.y - b.y - b.vy * offset, (s.vx - b.vx) * boundary, (s.vy - b.vy) * boundary, SHOT_RADIUS + BUGS[b.kind].radius);
-      if (t !== null && (t < first || (t === first && b.id < state.bugs[victim]!.id))) { first = t; victim = i; }
+      const b = state.bugs[i]!, m = motionFor(b), offset = (from - time) / 1000;
+      // A bug may reach the wall partway through this shot's active interval.
+      for (let segment = 0; segment < 2; segment++) {
+        const start = segment ? Math.max(0, m.stop - offset) : 0;
+        const finish = segment ? boundary : Math.min(boundary, Math.max(0, m.stop - offset));
+        if (finish < start || start > boundary) continue;
+        const moving = segment === 0 && offset < m.stop, bvx = moving ? m.vx : 0, bvy = moving ? m.vy : 0;
+        const t = circleEntry(s.x + s.vx * start - m.x - m.vx * Math.min(m.stop, offset + start), s.y + s.vy * start - m.y - m.vy * Math.min(m.stop, offset + start), (s.vx - bvx) * (finish - start), (s.vy - bvy) * (finish - start), SHOT_RADIUS + BUGS[b.kind].radius);
+        const entry = t === null ? Infinity : start + t * (finish - start);
+        if (entry < first || entry !== Infinity && entry === first && b.id < state.bugs[victim]!.id) { first = entry; victim = i; }
+      }
     }
     if (victim >= 0) {
-      const b = state.bugs[victim]!, multiplier = Math.min(30, 10 + ++owner.streak), points = BUGS[b.kind].points * multiplier;
-      owner.points += points; owner.score = Math.round(owner.points / 10); owner.kills++;
-      state.events.push({ id: state.nextId++, tick: state.tick + 1, x: b.x + b.vx * ((from - time) / 1000 + boundary * first), y: b.y + b.vy * ((from - time) / 1000 + boundary * first), points: points / 10 });
-      state.bugs.splice(victim, 1); continue;
+      const b = state.bugs[victim]!, m = motionFor(b), multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;
+      const points = killed ? BUGS[b.kind].points * multiplier : 0;
+      if (killed) { owner.points += points; owner.score = Math.round(owner.points / 10); owner.kills++; }
+      const impact = Math.min(m.stop, (from - time) / 1000 + first);
+      const event = { id: state.nextId++, tick: state.tick + 1, kind: b.kind, x: m.x + m.vx * impact, y: m.y + m.vy * impact };
+      state.events.push(killed ? { ...event, type: "kill", points: points / 10 } : { ...event, type: "hit", points: 0 });
+      if (killed) state.bugs.splice(victim, 1);
+      continue;
     }
     s.x += s.vx * boundary; s.y += s.vy * boundary;
     if (to >= s.born + SHOT_LIFETIME_MS - 1e-8 || boundary < dt || s.x <= 0 || s.x >= WORLD_WIDTH || s.y <= 0 || s.y >= WORLD_HEIGHT) { owner.streak = 0; continue; }

@@ -41,7 +41,7 @@ try {
   if (${JSON.stringify(scenario)} === "respawn-before-snapshot") {
     // Produce an ordinary death and let the real client request its next life.
     p.hits = 1; p.immuneUntil = 0; p.spawnProtectedUntil = 0;
-    c.room.state.bugs = [{ id: 999, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 }];
+    c.room.state.bugs = [{ id: 999, kind: "crawler", hp: 1, facing: 0, x: p.x, y: p.y, vx: 0, vy: 0 }];
     app.arenas.tick(c.room);
     for (let i = 0; i < 200; i++) app.arenas.tick(c.room);
     await until(() => panels.at(-1)?.life === 1);

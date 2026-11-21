@@ -13,10 +13,12 @@ export interface Life {
 export type CombatPlayer = Player & Life;
 export const lifeDefaults = (tick = 0, life = 1): Life => ({ status: "active", downedUntil: 0, reviveMs: 0, reviving: false, life, hits: PLAYER_HITS, heat: 0, overheatUntil: 0, nextShotAt: tick * STEP_MS,
   immuneUntil: 0, spawnProtectedUntil: tick * STEP_MS + SPAWN_PROTECTION_MS, streak: 0, points: 0, score: 0, kills: 0, startedTick: tick, touch: false });
-export interface Bug { id: number; kind: keyof typeof import("./bugs/registry").BUGS; x: number; y: number; vx: number; vy: number }
+export type BugKind = keyof typeof import("./bugs/registry").BUGS;
+export interface Bug { id: number; kind: BugKind; x: number; y: number; vx: number; vy: number; hp: number; facing: number; phase?: string; phaseUntil?: number }
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }
-export interface KillEvent { id: number; tick: number; x: number; y: number; points: number }
+export type CombatEvent = { id: number; tick: number; x: number; y: number; kind: BugKind } &
+  ({ type: "hit"; points: 0 } | { type: "kill"; points: number });
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; players: Map<string, CombatPlayer>; slots: Map<string, number>;
-  wave: number; bugs: Bug[]; shots: Shot[]; events: KillEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }
+  wave: number; bugs: Bug[]; shots: Shot[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }
 export const neutralInput = (): Input => ({ move: { x: 0, y: 0 }, aim: 0, fire: false });

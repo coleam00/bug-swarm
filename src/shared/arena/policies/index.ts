@@ -1,10 +1,10 @@
-import { HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
+import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANCE, DASHER_DODGE_FORCE, PLAYER_RADIUS, HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
 import type { Bug, Input, Player, Life } from "../types";
 export type Policy = "mover" | "aimer";
 export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[] }
-export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number }
+export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
   const a = vx * vx + vy * vy - SHOT_SPEED * SHOT_SPEED, b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
@@ -18,18 +18,6 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
   let x = 0, y = 0, aim = p.facing, fire = policy === "mover";
   let nearest: Bug | undefined, distance = Infinity;
   for (const b of observation.bugs) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < distance || d === distance && b.id < nearest!.id) { nearest = b; distance = d; } }
-  if (policy === "aimer" && distance > 200) {
-    let target: Observation["players"][number] | undefined, closest = 450;
-    for (const q of observation.players) {
-      if (q.id === p.id || q.status !== "downed") continue;
-      const d = Math.hypot(q.x - p.x, q.y - p.y);
-      if (d < closest || d === closest && (!target || q.id < target.id)) { target = q; closest = d; }
-    }
-    if (target) {
-      const strength = closest > REVIVE_RADIUS ? Math.min(1, (closest - REVIVE_RADIUS + 1) / (PLAYER_SPEED * STEP_MS / 1000)) : 0;
-      return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
-    }
-  }
   if (policy === "mover" || !nearest) {
     if (state.steps++ % 90 === 0 || Math.hypot(state.x - p.x, state.y - p.y) < 80) {
       state.random = nextRandom(state.random); state.x = 150 + state.random / 4294967296 * (WORLD_WIDTH - 300);
@@ -53,6 +41,52 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
   }
   x += Math.max(0, (180 - p.x) / 90) - Math.max(0, (p.x - WORLD_WIDTH + 180) / 90);
   y += Math.max(0, (180 - p.y) / 90) - Math.max(0, (p.y - WORLD_HEIGHT + 180) / 90);
+  let dodging = false;
+  if (policy === "aimer") {
+    const committed = observation.bugs.find(b => b.id === state.dodgeId && (b.phase === "windup" || b.phase === "dash"));
+    let threat = committed;
+    if (!threat) {
+      state.dodgeId = undefined;
+      for (const b of observation.bugs) {
+        if (b.kind !== "dasher" || b.phase !== "windup") continue;
+        const dx = p.x - b.x, dy = p.y - b.y, along = dx * Math.cos(b.facing) + dy * Math.sin(b.facing);
+        const across = Math.abs(-dx * Math.sin(b.facing) + dy * Math.cos(b.facing));
+        if (along < 0 || along > DASHER_DASH_SPEED * DASHER_DASH_MS / 1000 + PLAYER_RADIUS + DASHER_RADIUS || across > PLAYER_RADIUS + DASHER_RADIUS + 12) continue;
+        if (!threat || b.phaseUntil! < threat.phaseUntil! || b.phaseUntil === threat.phaseUntil && b.id < threat.id) threat = b;
+      }
+      if (threat) {
+        let dx = -Math.sin(threat.facing), dy = Math.cos(threat.facing);
+        const clearance = (sign: number) => Math.min(
+          dx * sign > 0 ? (WORLD_WIDTH - PLAYER_RADIUS - p.x) / Math.abs(dx) : dx ? (p.x - PLAYER_RADIUS) / Math.abs(dx) : Infinity,
+          dy * sign > 0 ? (WORLD_HEIGHT - PLAYER_RADIUS - p.y) / Math.abs(dy) : dy ? (p.y - PLAYER_RADIUS) / Math.abs(dy) : Infinity);
+        if (clearance(-1) > clearance(1)) { dx = -dx; dy = -dy; }
+        state.dodgeId = threat.id; state.dodgeX = dx; state.dodgeY = dy;
+      }
+    }
+    if (threat) {
+      const dx = p.x - threat.x, dy = p.y - threat.y;
+      const along = dx * Math.cos(threat.facing) + dy * Math.sin(threat.facing);
+      const across = Math.abs(-dx * Math.sin(threat.facing) + dy * Math.cos(threat.facing));
+      // Keep the escape side through the dash, but preserve crowd avoidance and
+      // stop pushing once clear of the corridor (or beyond the dash's reach).
+      if (along >= 0 && along <= DASHER_DASH_SPEED * DASHER_DASH_MS / 1000 + PLAYER_RADIUS + DASHER_RADIUS && across < DASHER_DODGE_CLEARANCE) {
+        dodging = true;
+        x += state.dodgeX! * DASHER_DODGE_FORCE; y += state.dodgeY! * DASHER_DODGE_FORCE;
+      }
+    }
+  }
+  if (policy === "aimer" && distance > 200 && !dodging) {
+    let target: Observation["players"][number] | undefined, closest = 450;
+    for (const q of observation.players) {
+      if (q.id === p.id || q.status !== "downed") continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < closest || d === closest && (!target || q.id < target.id)) { target = q; closest = d; }
+    }
+    if (target) {
+      const strength = closest > REVIVE_RADIUS ? Math.min(1, (closest - REVIVE_RADIUS + 1) / (PLAYER_SPEED * STEP_MS / 1000)) : 0;
+      return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
+    }
+  }
   const move = clampMove(x, y);
   if (policy === "mover") aim = Math.atan2(move.y, move.x);
   return { move, aim, fire };

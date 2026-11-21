@@ -1,10 +1,18 @@
 import { INTERPOLATION_MS, MAX_SNAPSHOTS, STEP_MS, WORLD_WIDTH, WORLD_HEIGHT } from "../../shared/arena/constants";
 import type { Snapshot } from "../../shared/arena/protocol";
-import type { Player, Bug, Shot, KillEvent } from "../../shared/arena/types";
+import type { Player, Bug, Shot, CombatEvent } from "../../shared/arena/types";
+import { BUGS } from "../../shared/arena/bugs/registry";
+import { boundaryTime, stopAtBoundary } from "../../shared/arena/motion";
+function advancePosition(bug: Bug, ms: number) {
+  const seconds = ms / 1000, travel = boundaryTime(bug.x, bug.y, bug.vx, bug.vy, seconds);
+  bug.x += bug.vx * travel; bug.y += bug.vy * travel;
+  if (travel < seconds) bug.vx = bug.vy = 0;
+}
 export class Interpolation {
   private samples: { snapshot: Snapshot; at: number }[] = [];
   private combatTick = -Infinity;
   private lastEvent = 0;
+  get time() { return Number.isFinite(this.combatTick) ? this.combatTick * STEP_MS : 0; }
   private playerTransitions = new Map<string, number>();
   clear() { this.samples = []; this.combatTick = -Infinity; this.lastEvent = 0; this.playerTransitions.clear(); }
   push(snapshot: Snapshot, at: number) {
@@ -40,7 +48,7 @@ export class Interpolation {
     if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [] };
     let a = this.samples[0]!, b = a;
     for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
-    const offset = target - a.snapshot.tick, events: KillEvent[] = [];
+    const offset = target - a.snapshot.tick, events: CombatEvent[] = [];
     for (const sample of this.samples) {
       if (sample.snapshot.tick > target) break;
       for (const event of sample.snapshot.events) if (event.tick <= target && event.id > this.lastEvent) {
@@ -50,14 +58,37 @@ export class Interpolation {
     return { bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
   }
   private entities<K extends "bugs" | "shots">(kind: K, a: Snapshot, b: Snapshot, offset: number): Snapshot[K] {
-    const fraction = a === b ? 0 : offset / (b.tick - a.tick);
     const visible: (Bug | Shot)[] = [];
     for (const p of a[kind]) {
       const q = b[kind].find(q => q.id === p.id);
+      const entity = { ...p }, target = (a.tick + offset) * STEP_MS;
+      let anchor = a.tick * STEP_MS;
+      if ("kind" in entity) {
+        const definition = BUGS[entity.kind];
+        // Consume the known path before blending any unknown tracking movement.
+        // This also runs when the next snapshot has already removed the bug.
+        while (anchor < target && entity.phaseUntil! > anchor && definition.committedPhases?.includes(entity.phase!)) {
+          const until = Math.min(target, entity.phaseUntil!);
+          advancePosition(entity, until - anchor); anchor = until;
+          if (anchor === entity.phaseUntil) {
+            if (definition.advancePhase) definition.advancePhase(entity, anchor);
+            else entity.vx = entity.vy = 0;
+          }
+        }
+      }
       // Even a one-snapshot shot travels until its removal tick, never to latest-only membership.
-      const x = q ? p.x + (q.x - p.x) * fraction : p.x + p.vx * offset * STEP_MS / 1000;
-      const y = q ? p.y + (q.y - p.y) * fraction : p.y + p.vy * offset * STEP_MS / 1000;
-      visible.push({ ...p, x: Math.max(0, Math.min(WORLD_WIDTH, x)), y: Math.max(0, Math.min(WORLD_HEIGHT, y)) });
+      if (q && b.tick * STEP_MS > anchor) {
+        const fraction = (target - anchor) / (b.tick * STEP_MS - anchor);
+        entity.x += (q.x - entity.x) * fraction; entity.y += (q.y - entity.y) * fraction;
+      } else if ("kind" in entity) {
+        const until = entity.phaseUntil! > anchor ? Math.min(target, entity.phaseUntil!) : target;
+        advancePosition(entity, until - anchor);
+      } else {
+        entity.x += entity.vx * (target - anchor) / 1000; entity.y += entity.vy * (target - anchor) / 1000;
+      }
+      entity.x = Math.max(0, Math.min(WORLD_WIDTH, entity.x)); entity.y = Math.max(0, Math.min(WORLD_HEIGHT, entity.y));
+      if ("kind" in entity) { BUGS[entity.kind].advancePhase?.(entity, target); stopAtBoundary(entity); }
+      visible.push(entity);
     }
     return visible as Snapshot[K];
   }

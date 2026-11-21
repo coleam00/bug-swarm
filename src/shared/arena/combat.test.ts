@@ -2,12 +2,49 @@ import { expect, test } from "bun:test";
 import { createArena, joinPlayer, stepArena, respawnPlayer, endLife } from "./simulation";
 import { fireAndAdvance, circleEntry } from "./combat";
 import { crawler } from "./bugs/crawler";
+import { createBug } from "./bugs/registry";
 import { spawnBug, safeSpawn } from "./spawn";
 import { CRAWLER_SPEED, MAX_BUGS, MAX_SHOTS, MAX_PLAYERS, MUZZLE_OFFSET, SHOT_RATE, SHOT_SPEED, STEP_MS } from "./constants";
 import { parseServer, serializeSnapshot } from "./protocol";
 import { neutralInput, type Bug } from "./types";
 function fixture() { const a = createArena(21), p = joinPlayer(a, { id: "a", name: "Robot", team: "tabs" })!; p.x = p.y = 1200; return { a, p }; }
-const bug = (id: number, x: number, y = 1200): Bug => ({ id, kind: "crawler", x, y, vx: 0, vy: 0 });
+const bug = (id: number, x: number, y = 1200): Bug => ({ id, kind: "crawler", hp: 1, facing: 0, x, y, vx: 0, vy: 0 });
+
+test("surviving impacts credit accuracy without a kill; lethal shooter receives one kind-valued award", () => {
+  for (const split of [false, true]) {
+    const { a, p } = fixture(), q = joinPlayer(a, { id: "b", name: "Other", team: "spaces" })!;
+    const b = createBug("dasher", 999, 1250, 1200); a.bugs.push(b);
+    const hit = (owner: string) => { a.shots.push({ id: a.nextId++, owner, life: 1, x: 1230, y: 1200, vx: 900, vy: 0, born: 0 }); fireAndAdvance(a, new Map(), 0); };
+    hit(p.id); expect(b.hp).toBe(1); expect(p.streak).toBe(1); expect(p.score).toBe(0); expect(p.kills).toBe(0);
+    expect(a.events).toHaveLength(1); expect(a.events[0]).toMatchObject({ type: "hit", kind: "dasher", points: 0 });
+    hit(split ? q.id : p.id);
+    expect(a.bugs).toHaveLength(0); expect(a.events).toHaveLength(2); expect(a.events[1]).toMatchObject({ type: "kill", kind: "dasher", points: split ? 27.5 : 30 });
+    expect(p.streak).toBe(split ? 1 : 2); expect(p.kills).toBe(split ? 0 : 1); expect(q.kills).toBe(split ? 1 : 0);
+    expect(split ? q.points : p.points).toBe(split ? 275 : 300);
+  }
+});
+
+test("a projectile damages a recovering dasher without interrupting its recovery", () => {
+  const { a, p } = fixture(), b = createBug("dasher", a.nextId++, 960, 1200); a.bugs.push(b);
+  const step = () => stepArena(a, new Map()); step(); p.y = 1400;
+  while (a.tick * 50 < 1150) step();
+  expect(b.phase).toBe("recovery"); const until = b.phaseUntil;
+  a.shots.push({ id: a.nextId++, owner: p.id, life: p.life, born: 1150, x: b.x, y: b.y, vx: 900, vy: 0 });
+  step();
+  expect(b.hp).toBe(1); expect(b.phase).toBe("recovery"); expect(b.phaseUntil).toBe(until);
+  expect(a.events).toHaveLength(1); expect(a.events[0]).toMatchObject({ type: "hit", kind: "dasher", points: 0 });
+});
+
+test("nonlethal hit remains eligible for contact; projectile meets the stationary part of a wall stop", () => {
+  const { a, p } = fixture(); p.spawnProtectedUntil = 0;
+  const b = createBug("dasher", 999, 1210, 1200); a.bugs.push(b);
+  a.shots.push({ id: a.nextId++, owner: p.id, life: 1, x: 1210, y: 1200, vx: 900, vy: 0, born: 0 });
+  stepArena(a, new Map()); expect(b.hp).toBe(1); expect(p.hits).toBe(2); expect(p.kills).toBe(0);
+  Object.assign(b, { x: 2399, y: 1200, vx: 490, vy: 0 });
+  a.shots.push({ id: a.nextId++, owner: p.id, life: 1, x: 2378, y: 1200, vx: 900, vy: 0, born: 50 });
+  fireAndAdvance(a, new Map(), 50);
+  expect(a.bugs).toHaveLength(0); expect(a.events.at(-1)!.x).toBe(2400);
+});
 test("release/repress preserves the six-per-second cooldown and full-room snapshot bounds", () => {
   const a = createArena(1), inputs = new Map();
   for (let i = 0; i < MAX_PLAYERS; i++) {
@@ -78,10 +115,10 @@ test("held stream reaches 18th shot, locks for 1.5s, cools during lockout and re
 });
 test("crawler targets nearest living player with stable ties; contact persists, immunity gates three-hit downing and timeout", () => {
   const { a, p } = fixture(), q = joinPlayer(a, { id: "b", name: "Other", team: "tabs" })!;
-  q.x = 1400; q.y = 1200; const b = bug(4, 1300); crawler.move(b, [q, p]); expect(b.vx).toBe(-CRAWLER_SPEED);
+  q.x = 1400; q.y = 1200; const b = bug(4, 1300); crawler.move(b, [q, p], 0); expect(b.vx).toBe(-CRAWLER_SPEED);
   // Farther "a" must not override nearer "b" simply because its id sorts first.
-  p.x = 900; crawler.move(b, [q, p]); expect(b.vx).toBe(CRAWLER_SPEED); expect(b.vy).toBe(0); p.x = 1200;
-  p.status = "downed"; p.hits = 0; crawler.move(b, [p, q]); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3; p.status = "active";
+  p.x = 900; crawler.move(b, [q, p], 0); expect(b.vx).toBe(CRAWLER_SPEED); expect(b.vy).toBe(0); p.x = 1200;
+  p.status = "downed"; p.hits = 0; crawler.move(b, [p, q], 0); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3; p.status = "active";
   a.tick = 21; p.immuneUntil = 0; p.spawnProtectedUntil = 0; a.bugs = [bug(5, 1200), bug(6, 1200)];
   stepArena(a, new Map()); expect(p.hits).toBe(2); expect(a.bugs).toHaveLength(2); expect(p.score).toBe(0);
   for (let i = 0; i < 19; i++) stepArena(a, new Map()); expect(p.hits).toBe(2);

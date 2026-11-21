@@ -6,7 +6,7 @@ import { MAX_BUGS, MAX_VIEW, STEP_MS, VISIBILITY_PADDING } from "./constants";
 import { cameraFor } from "./view";
 import { neutralInput, type Bug } from "./types";
 const identity = (id = "p") => ({ id, name: "Pilot", team: "tabs" as const });
-const bug = (id: number, x: number, y: number): Bug => ({ id, kind: "crawler", x, y, vx: 3, vy: 4 });
+const bug = (id: number, x: number, y: number): Bug => ({ id, kind: "crawler", hp: 1, facing: 0, x, y, vx: 3, vy: 4 });
 const inset = (p: { x: number; y: number }) => Math.min(p.x, p.y, 2400 - p.x, 2400 - p.y);
 
 test("join and repeated respawns stay inside the inset, clear bugs and avoid living robots", () => {

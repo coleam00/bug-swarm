@@ -26,7 +26,7 @@ test("WebSocket bots actually send distinct mover and aimer inputs for the same 
         world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } }));
       const snapshot: Snapshot = { v: VERSION, type: "snapshot", arenaId: "policy-test", tick: 1, wave: 1, events: [], shots: [],
         players: [{ ...lifeDefaults(), id: message.playerId, name: message.name, team: message.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 }],
-        bugs: [{ id: 1, kind: "crawler", x: 1600, y: 1200, vx: 0, vy: 140 }] };
+        bugs: [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: 1600, y: 1200, vx: 0, vy: 140 }] };
       socket.send(JSON.stringify(snapshot));
     } },
   });

@@ -119,7 +119,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   key("KeyA", "keyup"); key("Space", "keyup"); key("Space"); send();
   own.status = "out"; own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
   const oldEffects = effects.length;
-  snapshot(6, 1203, 1020, inputs.at(-1).seq, [{ id: 100 + cycle, tick: 6, x: 1300, y: 1200, points: 11 }]); assert.equal(lifePanel.score, 34);
+  snapshot(6, 1203, 1020, inputs.at(-1).seq, [{ id: 100 + cycle, tick: 6, x: 1300, y: 1200, points: 11, type: "kill" as const, kind: "crawler" as const }]); assert.equal(lifePanel.score, 34);
   assert.equal(effects.length, oldEffects, "Receipt must not deliver kill feedback ahead of delayed combat");
   frame(clock + 99); assert.equal(effects.length, oldEffects);
   frame(clock + 1); assert.equal(effects.length, oldEffects + 1);

@@ -10,7 +10,7 @@ function fixture() {
   const q = joinPlayer(a, { id: "rescuer", name: "Rescuer", team: "spaces" })!;
   Object.assign(p, { x: 1200, y: 1200, hits: 1, spawnProtectedUntil: 0, score: 37, points: 370, streak: 7, kills: 3, touch: true });
   Object.assign(q, { x: 1600, y: 1200 });
-  a.bugs = [{ id: 99, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 }];
+  a.bugs = [{ id: 99, kind: "crawler", hp: 1, facing: 0, x: p.x, y: p.y, vx: 0, vy: 0 }];
   stepArena(a, new Map()); a.bugs = [];
   return { a, p, q };
 }
@@ -26,8 +26,8 @@ test("third hit downs for a full ten seconds, cancels shots without a miss, and 
   steps(a, 1, new Map([[p.id, { move: { x: 1, y: 0 }, aim: 2, fire: true }]]));
   expect(p.x).toBe(1200); expect(p.facing).toBe(0); expect(p.heat).toBeCloseTo(11.7); expect(a.shots).toHaveLength(0);
   expect(a.spawnCredits.has(p.id)).toBe(false);
-  const b = { id: 999, kind: "crawler" as const, x: 1200, y: 1200, vx: 3, vy: 4 };
-  crawler.move(b, [p]); expect(b.vx).toBe(0); expect(b.vy).toBe(0);
+  const b = { id: 999, kind: "crawler" as const, hp: 1, facing: 0, x: 1200, y: 1200, vx: 3, vy: 4 };
+  crawler.move(b, [p], 0); expect(b.vx).toBe(0); expect(b.vy).toBe(0);
 });
 
 test("inclusive 90-unit contact accumulates across gaps and different teams, without stacking", () => {
@@ -69,14 +69,14 @@ test("no contact on the damaging step; no self/downed rescue or same-step rescue
   downPlayer(a, p); downPlayer(a, q); downPlayer(a, r); steps(a, 3); expect(p.reviveMs).toBe(0);
   const single = createArena(2), solo = joinPlayer(single, { id: "solo", name: "Solo", team: "tabs" })!;
   Object.assign(solo, { hits: 1, spawnProtectedUntil: 0 });
-  single.bugs = [{ id: 1, kind: "crawler", x: solo.x, y: solo.y, vx: 0, vy: 0 }];
+  single.bugs = [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: solo.x, y: solo.y, vx: 0, vy: 0 }];
   stepArena(single, new Map()); expect(solo.reviveMs).toBe(0);
 });
 
 test("post-damage eligibility excludes a rescuer who goes down that step", () => {
   const { a, p, q } = fixture(); p.reviveMs = 1950;
   Object.assign(q, { x: p.x, hits: 1, spawnProtectedUntil: 0 });
-  a.bugs = [{ id: 1, kind: "crawler", x: q.x, y: q.y, vx: 0, vy: 0 }]; stepArena(a, new Map());
+  a.bugs = [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: q.x, y: q.y, vx: 0, vy: 0 }]; stepArena(a, new Map());
   expect(q.status).toBe("downed"); expect(p.status).toBe("downed"); expect(p.reviveMs).toBe(1950); expect(q.reviveMs).toBe(0);
 });
 
@@ -85,12 +85,12 @@ test("revival immunity lasts exactly 1.5 seconds even when firing; repeated down
   const immuneUntil = p.immuneUntil;
   const inputs = new Map([[p.id, { ...neutralInput(), fire: true, aim: Math.PI }]]);
   for (let i = 0; i < 30; i++) {
-    a.bugs = [{ id: 9000, kind: "crawler", x: p.x, y: p.y + 20, vx: 0, vy: 0 }];
+    a.bugs = [{ id: 9000, kind: "crawler", hp: 1, facing: 0, x: p.x, y: p.y + 20, vx: 0, vy: 0 }];
     stepArena(a, inputs); expect(p.status).toBe("active"); expect(p.immuneUntil).toBe(immuneUntil);
   }
   expect(a.tick * STEP_MS).toBe(immuneUntil);
   const streak = p.streak;
-  a.bugs = [{ id: 9001, kind: "crawler", x: p.x, y: p.y + 20, vx: 0, vy: 0 }]; stepArena(a, inputs);
+  a.bugs = [{ id: 9001, kind: "crawler", hp: 1, facing: 0, x: p.x, y: p.y + 20, vx: 0, vy: 0 }]; stepArena(a, inputs);
   expect(p.status).toBe("downed"); expect(p.reviveMs).toBe(0); expect(p.reviving).toBe(false);
   expect(p.streak).toBe(streak); expect(a.shots).toHaveLength(0); expect(a.spawnCredits.has(p.id)).toBe(false);
   expect(p.downedUntil).toBe(a.tick * STEP_MS + DOWNED_MS);
@@ -101,7 +101,7 @@ test("revive reward remains in points after a later accuracy-multiplied kill; on
   Object.assign(r, { x: p.x, y: p.y }); downPlayer(a, r); q.x = p.x;
   steps(a, 40); expect(q.score).toBe(100); expect(p.status).toBe("active"); expect(r.status).toBe("active");
   q.streak = 10;
-  a.bugs = [{ id: 9000, kind: "crawler", x: q.x + 25, y: q.y, vx: 0, vy: 0 }];
+  a.bugs = [{ id: 9000, kind: "crawler", hp: 1, facing: 0, x: q.x + 25, y: q.y, vx: 0, vy: 0 }];
   stepArena(a, new Map([[q.id, { ...neutralInput(), fire: true }]]));
   expect(q.points).toBe(1210); expect(q.score).toBe(121); expect(q.kills).toBe(1);
 });

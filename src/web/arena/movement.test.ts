@@ -7,7 +7,71 @@ import { movePlayer } from "../../shared/arena/movement";
 import { neutralInput, lifeDefaults } from "../../shared/arena/types";
 import type { InputMessage, Snapshot } from "../../shared/arena/protocol";
 import { createArena, joinPlayer, stepArena } from "../../shared/arena/simulation";
+import { createBug } from "../../shared/arena/bugs/registry";
 const player = () => ({ ...lifeDefaults(), id: crypto.randomUUID(), name: "Robot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 });
+
+function dasherHistory() {
+  const arena = createArena(71), p = joinPlayer(arena, { id: "a", name: "Pilot", team: "tabs" })!;
+  p.x = p.y = 1200;
+  const bug = createBug("dasher", arena.nextId++, 960, 1200); arena.bugs.push(bug);
+  const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "gap", tick: arena.tick, wave: arena.wave,
+    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
+  const advance = () => { stepArena(arena, new Map()); if (arena.tick === 1) p.y = 1400; return snapshot(); };
+  return { arena, p, bug, snapshot, advance };
+}
+
+test.each([13, 21])("committed dash stays on its authoritative path across a gap from tick %i into recovery", start => {
+  const f = dasherHistory(), history = new Map<number, Snapshot>();
+  while (f.arena.tick < 29) { const s = f.advance(); history.set(s.tick, s); }
+  const interpolation = new Interpolation(); interpolation.push(history.get(start)!, start * 50); interpolation.push(history.get(29)!, 1450);
+  for (let tick = start; tick <= 29; tick++) {
+    const rendered = interpolation.combat(tick * 50 + 100).bugs[0]!, actual = history.get(tick)!.bugs[0]!;
+    expect(rendered.x).toBeCloseTo(actual.x); expect(rendered.y).toBeCloseTo(actual.y);
+    if (tick <= 23) { expect(rendered.y).toBe(1200); expect(rendered.facing).toBe(0); }
+    expect(rendered.phase).toBe(actual.phase);
+  }
+});
+
+test("committed wind-up and dash advance before a lethal removal, with the kill effect at removal time", () => {
+  const f = dasherHistory(), history = new Map<number, Snapshot>(); f.bug.hp = 1;
+  while (f.arena.tick < 18) {
+    if (f.arena.tick === 17) f.arena.shots.push({ id: f.arena.nextId++, owner: f.p.id, life: f.p.life,
+      x: f.bug.x, y: f.bug.y, vx: 900, vy: 0, born: 850 });
+    const s = f.advance(); history.set(s.tick, s);
+  }
+  const removed = history.get(18)!; expect(removed.bugs).toHaveLength(0); expect(removed.events[0]!.type).toBe("kill");
+  const interpolation = new Interpolation(); interpolation.push(history.get(13)!, 650); interpolation.push(removed, 900);
+  for (const tick of [13, 14, 15, 16, 17]) {
+    const combat = interpolation.combat(tick * 50 + 100), actual = history.get(tick)!.bugs[0]!;
+    expect(combat.bugs[0]!.x).toBeCloseTo(actual.x); expect(combat.bugs[0]!.y).toBe(actual.y);
+    expect(combat.bugs[0]!.phase).toBe(actual.phase); expect(combat.events).toHaveLength(0);
+  }
+  expect(interpolation.combat(1000)).toMatchObject({ bugs: [], events: removed.events });
+  expect(interpolation.combat(1001).events).toHaveLength(0);
+});
+
+test("a committed diagonal dash stops at the first world edge across skipped snapshots", () => {
+  const f = dasherHistory();
+  Object.assign(f.bug, { x: 2390, y: 1200, phase: "dash", phaseUntil: 450, facing: Math.PI / 4,
+    vx: 490 / Math.sqrt(2), vy: 490 / Math.sqrt(2) });
+  const first = f.snapshot(); while (f.arena.tick < 13) f.advance();
+  const interpolation = new Interpolation(); interpolation.push(first, 0); interpolation.push(f.snapshot(), 650);
+  const wall = interpolation.combat(200).bugs[0]!;
+  expect(wall.x).toBe(2400); expect(wall.y).toBeCloseTo(1210); expect(wall.phase).toBe("dash"); expect(wall.vx).toBe(0); expect(wall.vy).toBe(0);
+});
+
+test("delayed dasher timeline holds wind-up through gaps and keeps HP/facing and hit sparks at their snapshot", () => {
+  const interpolation = new Interpolation(), b = createBug("dasher", 1, 100, 100);
+  Object.assign(b, { phase: "windup", phaseUntil: 700 });
+  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 3, players: [], shots: [], bugs: [{ ...b }], events: [] });
+  interpolation.push(snapshot(12), 600);
+  Object.assign(b, { x: 149, vx: 490, phase: "dash", phaseUntil: 1150, hp: 1 });
+  interpolation.push({ ...snapshot(16), events: [{ id: 2, tick: 16, x: 149, y: 100, kind: "dasher", type: "hit", points: 0 }] }, 800);
+  const early = interpolation.combat(750); expect(early.bugs[0]!.x).toBe(100); expect(early.bugs[0]!.phase).toBe("windup"); expect(early.bugs[0]!.hp).toBe(2); expect(early.events).toHaveLength(0);
+  const travelling = interpolation.combat(850); expect(travelling.bugs[0]).toMatchObject({ hp: 2, facing: 0, phase: "dash", phaseUntil: 1150 }); expect(travelling.bugs[0]!.x).toBeCloseTo(124.5);
+  const hit = interpolation.combat(900); expect(hit.bugs[0]).toMatchObject({ x: 149, hp: 1, phase: "dash" }); expect(hit.events).toHaveLength(1);
+  expect(interpolation.combat(901).events).toHaveLength(0); interpolation.clear(); expect(interpolation.combat(1000).bugs).toHaveLength(0);
+});
 test("floating stick has a dead zone, analog strength, exclusive left-touch ownership and cancellation", () => {
   const input = new ArenaInput();
   expect(input.down(2, 350, 100, 390)).toBe(true); expect(input.down(1, 50, 200, 390)).toBe(true);
@@ -64,7 +128,7 @@ test("arriving shots and bugs stay on the delayed timeline without reversing as 
   const interpolation = new Interpolation(), p = player();
   const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, players: [p], events: [],
     shots: tick < 2 ? [] : [{ id: 1, owner: p.id, life: 1, born: 50, x: 100 + (tick - 2) * 45, y: 100, vx: 900, vy: 0 }],
-    bugs: tick < 2 ? [] : [{ id: 2, kind: "crawler", x: 100 + (tick - 2) * 7, y: 100, vx: 140, vy: 0 }] });
+    bugs: tick < 2 ? [] : [{ id: 2, kind: "crawler", hp: 1, facing: 0, x: 100 + (tick - 2) * 7, y: 100, vx: 140, vy: 0 }] });
   const positions: number[] = [];
   for (let tick = 1; tick <= 6; tick++) {
     interpolation.push(snapshot(tick), tick * 50);
@@ -86,7 +150,7 @@ test("arriving shots and bugs stay on the delayed timeline without reversing as 
 });
 test.each([1325, 1360])("a short-lived shot at crawler x=%i has visible travelling frames before its kill", x => {
   const arena = createArena(1), p = joinPlayer(arena, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
-  p.x = p.y = 1200; arena.bugs = [{ id: arena.nextId++, kind: "crawler", x, y: 1200, vx: 0, vy: 0 }];
+  p.x = p.y = 1200; arena.bugs = [{ id: arena.nextId++, kind: "crawler", hp: 1, facing: 0, x, y: 1200, vx: 0, vy: 0 }];
   const interpolation = new Interpolation();
   const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "short", tick: arena.tick, wave: arena.wave,
     players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
@@ -109,7 +173,7 @@ test.each([1325, 1360])("a short-lived shot at crawler x=%i has visible travelli
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
   expect(effects).toHaveLength(1); expect(effects[0]!.at).toBe(x === 1325 ? 700 : 750);
   interpolation.clear();
-  interpolation.push({ ...snapshot(), events: [{ id: 1, tick: arena.tick, x: 1300, y: 1200, points: 11 }] }, 900);
+  interpolation.push({ ...snapshot(), events: [{ id: 1, tick: arena.tick, x: 1300, y: 1200, points: 11, type: "kill" as const, kind: "crawler" as const }] }, 900);
   expect(interpolation.combat(1000).events.map(e => e.id)).toEqual([1]);
   expect(interpolation.combat(1010).events).toHaveLength(0);
 });
@@ -117,7 +181,7 @@ test("combat does not rewind or replay effects after a delayed next snapshot", (
   const interpolation = new Interpolation(), p = player();
   const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "stall", tick, wave: 1, players: [p], bugs: [],
     shots: [{ id: 1, owner: p.id, life: 1, born: 0, x: 100 + tick * 45, y: 100, vx: 900, vy: 0 }],
-    events: [{ id: tick + 1, tick, x: 100, y: 100, points: 11 }] });
+    events: [{ id: tick + 1, tick, x: 100, y: 100, points: 11, type: "kill", kind: "crawler" }] });
   interpolation.push(snapshot(1), 50); interpolation.push(snapshot(2), 100);
   const caughtUp = interpolation.combat(250); expect(caughtUp.shots[0]!.x).toBe(190); expect(caughtUp.events).toHaveLength(2);
   interpolation.push(snapshot(3), 300);
