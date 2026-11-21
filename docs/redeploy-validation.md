@@ -1,5 +1,7 @@
 # Redeploy validation (issue 66)
 
+Earlier slice evidence below is historical. The game now runs at `/` through StartScreen; `/arena` redirects there. Current entry, HUD, minimap and touch validation: [cutover-validation.md](cutover-validation.md).
+
 Validated on Windows with Bun 1.4.2 and the machine's installed Chrome 157.0.8103.51 (headless, CDP). All servers, SQLite files, homes, browser profiles, logs and the disposable changed-build clone stayed under `.evidence/66/` in this checkout. All owned processes were stopped afterward.
 
 The production Vite artifacts were served through `src/server/main.ts`, without Vite's development server. `NODE_ENV=development` selected the loopback listener for this isolated run; it did not change the packaged build identity. Windows Bun's external process kill does not deliver graceful SIGTERM, so an stdin harness imported the production entry and emitted its registered signal. This is handler evidence, not Windows OS-signal evidence. The subprocess tests use actual SIGTERM/SIGINT on Linux; that branch runs in CI and was not executed locally.

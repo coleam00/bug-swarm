@@ -1,20 +1,3 @@
-# Phase 1 validation
+# Validation
 
-Windows, Bun 1.4.2. All runtime data, browser profiles and tool caches used scratch directories; browser requests were fulfilled in process through Hono rather than connecting to a listening server. No application or browser-test dependency was added.
-
-`bun run check` covers adjacent simulation, rules, persistence, API, session, input, identity and CLI tests, plus the existing development-launch and production-startup tests. The production tests build the real Vite bundle, check static assets, PORT and DATA_DIR, and capture Bun's serve options without opening a TCP listener. The existing CI matrix runs the same command on Ubuntu and Windows.
-
-Headless Chrome for Testing 145, using the production bundle:
-
-- At 390 × 844 with touch emulation: blocked-name refusal, name entry, return visit, three complete runs, touch restart, personal best and live rankings. Play appeared about 73 ms after name submission; the return visit took about 35 ms in this local intercepted-request setup. These timings do not measure deployment latency or time spent typing.
-- One desktop run at 1280 × 720 against the same scratch database produced exactly `players: 2`, `finished_runs: 4`, `median_runs_per_player: 2.0`, `touch_share: 75%`. There were two leaderboard rows. A separate `hide` CLI process removed the touch player's row on the next two-second poll (virtual clock). API interruption preserved play, showed "couldn't save your score", and allowed immediate keyboard restart. No page errors occurred.
-- Real browser pointer events steered the robot in 390 × 844 portrait and 844 × 390 landscape; releasing touch stopped movement. All eight WASD/arrow keys moved in their expected directions. Mouse steering worked and keyboard input overrode it. Screenshots were inspected for readable play/game-over layouts and horizontal overflow.
-- A seeded scratch fixture fed at least 150 bugs through the normal loop and canvas renderer for five one-second samples. Desktop: steady 60 FPS, update 0.04–0.11 ms, draw 0.05–0.08 ms. Phone-sized emulation at device scale 2: steady 60 FPS, update 0.03–0.13 ms, draw 0.04–0.07 ms. The first sample rounds to 61 FPS because it includes the initial frame. Simulation cost is O(bugs + shots × bugs), with bounded shot lifetime; no sorting or entity-array copies occur per frame.
-
-These are desktop-host measurements with phone emulation. Physical mid-range-phone FPS, physical phone/laptop usability, and the owner's three-phone-run/one-laptop-run acceptance remain unverified here. Perform that PRD acceptance against the same deployed server before Phase 2. `bun run dev` was verified through its launcher test, not by binding live development TCP ports in this isolated run. Docker was not rebuilt; its existing configuration and production startup coverage are retained.
-
-## Review corrections
-
-Session reads now apply responses in request order relative to the last applied result, rather than discarding a response whenever a newer request is pending. A deterministic subscribed-session regression models 2,500 ms responses across 2,000 ms polls: rankings become visible, a moderated row disappears four seconds after hiding, slow failures become visible, and successful reads recover. Both leaderboard and best reads retain protection against older runs and out-of-order successes or failures. A real-timer probe of the actual Session also completed four responses over 7.8 seconds: the board became ready after 2.5 seconds and removed the hidden row 3.3 seconds after hiding.
-
-Strengthened fixtures cover off-center chasing, nearest targeting independent of id, every keyboard direction, unequal-score top-ten selection, an asymmetric median, CLI records outside both date bounds, key-aware identity persistence, and the exported client's start/finish contract against in-process Hono. Eleven isolated mutations were rejected by the corresponding assertions, including the original polling gate and the matching best-read defect. No browser tooling was installed or operator-home files modified during these corrections; physical-device and live-network validation limits above remain unchanged.
+Run `bun run check` and `bun run build`. Production Chrome cutover, touch, layout, bundle and capacity evidence is summarized in [docs/cutover-validation.md](docs/cutover-validation.md). Combat rules and skill evidence remain in [docs/arena-combat-validation.md](docs/arena-combat-validation.md).

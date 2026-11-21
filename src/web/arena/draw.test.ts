@@ -1,13 +1,82 @@
 import { expect, test } from "bun:test";
-import { ArenaRenderer, lifeClock } from "./draw";
+import { ArenaRenderer } from "./draw";
 import { ArenaInput } from "./input";
-import { canvasFixture } from "../game/canvas-fixture.test-support";
+import { canvasFixture } from "../test-support/canvas-fixture.test-support";
 import { TEAM_COLOURS } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
-import type { Paint } from "../game/canvas-fixture.test-support";
+import type { Paint } from "../test-support/canvas-fixture.test-support";
+import type { Snapshot } from "../../shared/arena/protocol";
+
+test("one HUD baseline uses authoritative combat and connected population, fitting large scores on phones", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context;
+    c.measureText = text => ({ width: text.length * Number.parseInt(c.font.replace("bold ", "")) * 0.6 } as TextMetrics);
+    const renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
+    const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
+    for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
+      players[0]!.score = score; c.paints.length = 0;
+      // Interpolated membership is deliberately stale; connected dead players still count.
+      renderer.draw(width!, height!, { x: 750, y: 750 }, [predicted], predicted, input, [], [], snapshot.wave, 1, 50, 1, snapshot);
+      // No effects or overheat in this fixture: all main-canvas text belongs to the HUD.
+      // Counting every text paint also catches persistent instructions outside that line.
+      const hud = c.paints.filter(p => p.op === "fillText" || p.op === "strokeText");
+      expect(hud).toHaveLength(1);
+      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+W19\s+20 in this arena$/);
+      if (score === 123) expect(String(hud[0]!.args[0])).toStartWith("123 pts");
+      c.font = hud[0]!.font;
+      expect(Number(hud[0]!.args[1]) + c.measureText(String(hud[0]!.args[0])).width).toBeLessThanOrEqual(width! - 16);
+      expect(hud[0]!.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("renderer draws the minimap outline, faint swarm, both living teams and one predicted local marker", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D);
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 2400, y: 0, vx: 0, vy: 0, facing: 0 };
+    const remote = { ...local, id: "remote", team: "spaces" as const, x: 1200, y: 1200 };
+    const screenSpace = (paint: Paint) => paint.transform.every((value, i) => value === [1, 0, 0, 1, 0, 0][i]);
+    for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) {
+      c.paints.length = 0;
+      renderer.draw(width!, height!, { x: 400, y: 500 },
+        [{ ...local, x: 0 }, remote, { ...remote, id: "dead", hits: 0 }], local, new ArenaInput(),
+        [{ id: 1, kind: "crawler", x: 600, y: 600, vx: 0, vy: 0 }], [], 1, 1, 50, 1.5);
+      const outlines = c.paints.filter(p => p.op === "strokeRect" && screenSpace(p));
+      expect(outlines).toHaveLength(1);
+      const outline = outlines[0]!, [x, y, mapWidth, mapHeight] = outline.args as number[];
+      expect(outline.globalAlpha).toBeGreaterThan(0); expect(outline.lineWidth).toBeGreaterThan(0);
+      expect(x!).toBeGreaterThan(width! / 2); expect(y!).toBeGreaterThan(0);
+      expect(mapWidth!).toBeGreaterThan(0); expect(mapHeight!).toBeCloseTo(mapWidth!);
+      expect(mapWidth!).toBeLessThan(width! / 2); expect(mapHeight!).toBeLessThan(height! / 2);
+      expect(x! + mapWidth!).toBeLessThan(width!); expect(y! + mapHeight!).toBeLessThan(height!);
+      const markers = c.paints.filter(p => p.op === "fill" && screenSpace(p) && p.path.some(command => command.op === "arc"));
+      expect(markers).toHaveLength(3); // Bug, living teammate, local; no dead or duplicate local marker.
+      const [bug, teammate, own] = markers as [Paint, Paint, Paint];
+      expect(teammate.fillStyle).toBe(TEAM_COLOURS.spaces); expect(own.fillStyle).toBe(TEAM_COLOURS.tabs);
+      const alpha = bug.globalAlpha * (typeof bug.fillStyle === "string" && /^#[\da-f]{8}$/i.test(bug.fillStyle) ? Number.parseInt(bug.fillStyle.slice(-2), 16) / 255 : 1);
+      expect(alpha).toBeGreaterThan(0); expect(alpha).toBeLessThan(0.5);
+      const circle = (paint: Paint) => paint.path.find(command => command.op === "arc")!.args;
+      expect(circle(bug)[0]).toBeCloseTo(x! + mapWidth! / 4); expect(circle(bug)[1]).toBeCloseTo(y! + mapHeight! / 4);
+      expect(circle(teammate)[0]).toBeCloseTo(x! + mapWidth! / 2); expect(circle(teammate)[1]).toBeCloseTo(y! + mapHeight! / 2);
+      const [ownX, ownY, radius] = circle(own) as [number, number, number];
+      expect(radius).toBeGreaterThan(circle(teammate)[2]!);
+      expect(ownX).toBeCloseTo(x! + mapWidth! - radius); expect(ownY).toBeCloseTo(y! + radius);
+      const ring = c.paints.find(p => p.op === "stroke" && screenSpace(p) && JSON.stringify(p.path) === JSON.stringify(own.path));
+      expect(ring).toBeDefined(); expect(ring!.strokeStyle).not.toBe(own.fillStyle);
+      expect(ring!.globalAlpha).toBeGreaterThan(0); expect(ring!.lineWidth).toBeGreaterThan(0);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
 
 test("spawn shimmer animates on both robots, expires independently of damage flash, and scales only world drawing", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -49,10 +118,8 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
     const first = draw(0), opening = protection(0), next = protection(10);
     surrounds(opening, [local, remote]); surrounds(next, [local, remote]);
     expect(opening.map(p => p.path)).not.toEqual(next.map(p => p.path));
-    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes("Wave"))!;
+    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"))!;
     expect(hud.transform).toEqual([1, 0, 0, 1, 0, 0]);
-    expect(first.some(p => p.op === "fillText" && /\b0:00\b/.test(String(p.args[0])))).toBe(true);
-    expect(draw(1260).some(p => p.op === "fillText" && /\b1:03\b/.test(String(p.args[0])))).toBe(true);
     const stick = first.find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[2] === 60))!;
     expect(stick.transform).toEqual([1, 0, 0, 1, 0, 0]);
     surrounds(protection(39), [local, remote]); expect(protection(40)).toHaveLength(0);
@@ -65,13 +132,6 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
   }
 });
 
-test("life clock uses authoritative ticks, resets on a new life and freezes at the terminal duration", () => {
-  const p = { ...lifeDefaults(9600), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
-  expect(lifeClock(p, 9600)).toBe("0:00"); expect(lifeClock(p, 10860)).toBe("1:03");
-  const dead = { ...p, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
-  expect(lifeClock(dead, 12000)).toBe("1:03");
-  expect(lifeClock({ ...p, ...lifeDefaults(12000, 2) }, 12020)).toBe("0:01");
-});
 
 test("renderer paints a grid, a distinguishing local ring, remote robots and complete names", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -153,7 +213,7 @@ test("phone boundaries and corners keep the robot, barrel and heat clear of the 
       Object.assign(p, { x, y, facing }); fixture.context.paints.length = 0;
       renderer.draw(width!, height!, cameraFor(x!, y!, width!, height!), [p], p, input);
       const paints = fixture.context.paints;
-      const hud = paints.find(q => q.op === "fillRect" && Number(q.args[2]) > 100 && Number(q.args[3]) > 40 && Number(q.args[3]) < 100)!;
+      const hud = paints.find(q => q.op === "fillRect" && Number(q.args[2]) > 100 && Number(q.args[3]) === 34)!;
       expect(hud).toBeDefined(); const panel = bounds(hud);
       const feedback = paints.filter(q => q.op === "drawImage" || q.op === "stroke" && q.path.some(c => c.op === "roundRect") ||
         q.op === "fillRect" && Number(q.args[2]) > 0 && Number(q.args[2]) <= 50 && Number(q.args[3]) > 0 && Number(q.args[3]) <= 10);

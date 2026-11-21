@@ -1,11 +1,11 @@
 import { expect, test } from "bun:test";
 import { ArenaResults } from "./results";
 import type { LifeOver } from "../../shared/arena/protocol";
-import type { GameApi } from "../game/api";
+import type { ScoresApi } from "../api";
 
 function fixture() {
   const requests = { best: [] as any[], standing: [] as any[], teams: [] as any[] };
-  const api = Object.fromEntries(Object.keys(requests).map(field => [field, () => new Promise((resolve, reject) => requests[field as keyof typeof requests].push({ resolve, reject }))])) as unknown as Pick<GameApi, keyof typeof requests>;
+  const api = Object.fromEntries(Object.keys(requests).map(field => [field, () => new Promise((resolve, reject) => requests[field as keyof typeof requests].push({ resolve, reject }))])) as unknown as Pick<ScoresApi, keyof typeof requests>;
   const timers = new Map<number, () => void>(), updates: any[] = [], logs: any[] = [];
   let id = 0;
   const controller = new ArenaResults("pilot", api, view => updates.push(view), {

@@ -15,8 +15,9 @@ let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
 mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
   mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
+mock.module(${moduleUrl("../entry/StartScene.tsx")}, () => ({ StartScene: () => null }));
 globalThis.window = new EventTarget(); globalThis.document = new EventTarget();
-const { api } = await import(${moduleUrl("../game/api.ts")});
+const { api } = await import(${moduleUrl("../api.ts")});
 let serverBest = 9876;
 const requests = { best: [], standing: [] };
 api.best = async playerId => { requests.best.push(playerId); assert.equal(playerId, joined.identity.playerId); return { best: serverBest }; };
@@ -32,8 +33,8 @@ let tree;
 for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "spaces"]) {
   const id = crypto.randomUUID(); saved = kind === "new" ? null : JSON.stringify({ playerId: id, name: "Robot", ...(kind === "returning" ? { team } : {}) });
   const original = saved;
-  const mount = () => act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
-  const choose = () => act(() => tree.root.findAllByType("button").find(b => b.children.join("").toLowerCase().includes(team)).props.onClick());
+  const mount = () => act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({ focus() {} }) }); });
+  const choose = () => act(() => { if (tree.root.findAllByType("button").length === 1) tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); else tree.root.findAllByType("button").find(b => b.children.join("").toLowerCase().includes(team)).props.onClick(); });
   mount();
   assert.equal(mounted, disposed, "Entry connected before a tap");
   assert.equal(tree.root.findAllByType("button").length, kind === "returning" ? 1 : 2);
@@ -43,8 +44,8 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
     act(() => tree.root.findByType("input").props.onChange({ target: { value: "<script>" } }));
     act(() => tree.root.findAllByType("button")[0].props.onClick()); assert.equal(mounted, disposed);
     act(() => tree.root.findByType("input").props.onChange({ target: { value: "Robot" } }));
-  } else assert.equal(tree.root.findByType("input").props.readOnly, true);
-  act(() => tree.root.findByType("form").props.onPointerDown({ pointerType: "touch" }));
+  } else if (kind === "legacy") assert.equal(tree.root.findByType("input").props.readOnly, true);
+  act(() => tree.root.findByType("main").props.onPointerDown({ pointerType: "touch" }));
   choose();
   assert.equal(mounted, disposed + 1); assert.equal(joined.touch, true); assert.equal(joined.identity.team, team);
   assert.equal(saved, original, "An attempt must not persist before welcome");
@@ -54,6 +55,7 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
     act(() => onError(unavailable, undefined, "name-hidden"));
     assert.equal(alertText(), unavailable, "A fresh editable attempt keeps correction guidance");
     assert.equal(saved, null); assert.equal(tree.root.findByType("input").props.readOnly, false);
+    assert.equal(tree.root.findByType("input").props.value, "Robot", "Refusal preserves the editable draft");
     assert.equal(tree.root.findAllByType("button").length, 2);
     // Reload after refusal: no rejected identity may survive in storage.
     act(() => tree.unmount()); mount();
@@ -149,22 +151,22 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   assert.equal(JSON.parse(saved).team, restoredTeam); assert.equal(mounted, before, "Team correction remounted a live connection");
   act(() => onError("This player is already in an arena."));
   assert.equal(mounted, disposed); assert.equal(tree.root.findAllByProps({ role: "alert" }).length, 1);
-  assert.equal(tree.root.findByType("input").props.readOnly, true, "An accepted name stays fixed after refusal");
-  act(() => tree.root.findAllByType("button")[0].props.onClick());
+  assert.equal(tree.root.findAllByType("input").length, 0, "An accepted name stays fixed after refusal");
+  choose();
   act(() => onAccepted());
   act(() => onError(unavailable, undefined, "name-hidden"));
   assert.equal(alertText(), HIDDEN_IDENTITY_MESSAGE, "Live removal must explain the saved identity rule");
-  assert.equal(tree.root.findByType("input").props.readOnly, true);
+  assert.equal(tree.root.findAllByType("input").length, 0);
   act(() => tree.unmount()); assert.equal(mounted, disposed);
-  mount(); assert.equal(tree.root.findByType("input").props.readOnly, true);
-  assert.equal(tree.root.findByType("input").props.value, acceptedName);
+  mount(); assert.equal(tree.root.findAllByType("input").length, 0);
+  assert.equal(tree.root.findByProps({ className: "entry-player" }).findByType("strong").children.join(""), acceptedName);
   assert.equal(tree.root.findAllByType("button").length, 1);
   const persisted = saved;
-  act(() => tree.root.findAllByType("button")[0].props.onClick());
+  choose();
   // A saved identity can be refused before welcome too; it must receive the same rule.
   act(() => onError(unavailable, undefined, "name-hidden"));
   assert.equal(alertText(), HIDDEN_IDENTITY_MESSAGE); assert.equal(saved, persisted);
-  assert.equal(tree.root.findByType("input").props.readOnly, true);
+  assert.equal(tree.root.findAllByType("input").length, 0);
   act(() => tree.unmount());
 }
 const { resumeStore } = await import(${moduleUrl("resume.ts")});
@@ -172,13 +174,13 @@ let resumeRaw = null;
 globalThis.sessionStorage = { getItem: () => resumeRaw, setItem: (key, value) => { resumeRaw = value; } };
 const resumed = { playerId: crypto.randomUUID(), name: "Resumed", team: "spaces" };
 resumeStore.write({ identity: resumed, touch: true, target: "new-build", attempted: ["new-build"], resume: true });
-act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({ focus() {} }) }); });
 assert.equal(tree.root.findAllByType("canvas").length, 1, "Reload must enter the play view without Join");
 assert.deepEqual(joined, { identity: resumed, touch: true });
 assert.equal(JSON.parse(resumeRaw).resume, false);
 act(() => tree.unmount());
-act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
-assert.equal(tree.root.findAllByType("canvas").length, 0, "An ordinary later visit still uses Join");
+act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({ focus() {} }) }); });
+assert.equal(tree.root.findAllByType("button").length, 1, "An ordinary later visit still uses Play");
 act(() => tree.unmount());
 globalThis.history = { state: {}, replaceState(value) { this.state = value; } };
 globalThis.sessionStorage = { getItem() { throw Error("blocked"); }, setItem() { throw Error("blocked"); } };

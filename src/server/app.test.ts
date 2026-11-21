@@ -6,9 +6,6 @@ import type { Finish } from "../shared/api";
 import type { Database } from "bun:sqlite";
 import { createApp, resolveClientIp, START_WINDOW_MS } from "./app";
 import { approveRun, countEvents, finishRun, getRun, hideName, openDb, recordEvent, startRun } from "./db";
-import { createSimulation, chooseUpgrade, IDLE, step } from "../web/game/simulation";
-import { acquiredUpgrades } from "../web/game/upgrades";
-import { arenaForViewport } from "../web/game/arena";
 import { UPGRADE_IDS } from "../shared/upgrades";
 
 let dir: string;
@@ -417,25 +414,16 @@ test("committed finish stays successful if subsequent ranking reads fail", async
   expect(countEvents(db).run_ended).toBe(1); expect(failures).toHaveLength(3);
 });
 
-test("seeded choice-driven finishes remain plausible in all arena shapes, with and without wall-clock pauses", async () => {
-  for (const shape of [[1, 1], [390, 844], [844, 390]]) {
-    const s = createSimulation(73, arenaForViewport(shape[0]!, shape[1]!));
-    // This fixture tests upgraded finish validation, independently of early combat balance.
-    s.invulnerableUntil = 60;
-    while (!s.dead && s.time < 180) {
-      step(s, { x: Math.cos(s.time * 0.4), y: Math.sin(s.time * 0.4), target: null }, 1 / 60);
-      if (s.upgrades.offer) chooseUpgrade(s, s.upgrades.choiceNumber, s.upgrades.offer[(s.upgrades.choiceNumber - 1) % 3]!);
-    }
-    expect(acquiredUpgrades(s.upgrades).length).toBeGreaterThan(0);
-    for (const pause of [0, 600000]) {
-      let time = 0;
-      const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
-      const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" as const }))).json() as { runId: string };
-      time = Math.ceil(s.time * 1000) + pause;
-      const result = { playerId, seconds: s.seconds, squashes: s.squashes, score: s.score, touch: false, upgrades: acquiredUpgrades(s.upgrades) };
-      expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
-      expect(getRun(db, runId)?.upgrades).toBe(JSON.stringify(result.upgrades));
-    }
+test("legacy finishes accept explicit upgrade summaries with and without wall-clock pauses", async () => {
+  for (const pause of [0, 600000]) {
+    let time = 0;
+    const app = createApp(db, { now: () => time }), playerId = crypto.randomUUID();
+    const { runId } = await (await app.request("/api/runs", post({ playerId, name: "Robot", team: "tabs" }))).json() as { runId: string };
+    time = 60000 + pause;
+    const upgrades = UPGRADE_IDS.map(id => ({ id, count: id === UPGRADE_IDS[0] ? 2 : 0 }));
+    const result = { playerId, seconds: 60, squashes: 3, score: 90, touch: false, upgrades: upgrades.filter(u => u.count) };
+    expect((await app.request(`/api/runs/${runId}/finish`, post(result))).status).toBe(200);
+    expect(getRun(db, runId)?.upgrades).toBe(JSON.stringify(result.upgrades));
   }
 });
 
