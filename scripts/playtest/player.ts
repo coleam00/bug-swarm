@@ -14,7 +14,7 @@ export function guardInput(f: ArenaFrame, target: { x: number; y: number }, stat
   // victim's attackers. Fire at normal range, rather than waiting for contact.
   const bugs = f.paint.bugs.filter(b => waiting.status === "downed" ||
     Math.hypot(b.x - f.local.x, b.y - f.local.y) < Math.hypot(b.x - waiting.x, b.y - waiting.y));
-  const input = policyInput("aimer", { players: [], bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, state);
+  const input = policyInput("aimer", { players: [], bugs, globs: f.snapshot.globs, pickups: f.snapshot.pickups, tick: f.snapshot.tick }, f.local, state);
   const dx = target.x - f.local.x, dy = target.y - f.local.y, distance = Math.hypot(dx, dy);
   const danger = bugs.some(b => Math.hypot(b.x - f.local.x, b.y - f.local.y) < 200);
   // Defend a nearby patch instead of letting the aimer wander out of the
@@ -79,14 +79,14 @@ export class Player {
     if (life !== this.lastTouchLife) { await this.clear(); this.lastTouchLife = life; }
     if (f.local.status !== "active" || this.plan === "wait" || this.plan === "still") { await this.clear(); return; }
     const players = typeof this.plan === "object" && this.plan.fire ? [] : f.players;
-    let input = policyInput("aimer", { players, bugs: f.paint.bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+    let input = policyInput("aimer", { players, bugs: f.paint.bugs, globs: f.snapshot.globs, pickups: f.snapshot.pickups, tick: f.snapshot.tick }, f.local, this.policy);
     if (this.plan === "boss") {
       const hive = f.snapshot.bugs.find(b => b.kind === "hive");
       // The hive's HUD/edge arrow exposes its direction on this player's own
       // screen. Approach and shoot it while keeping the normal glob dodges.
       const threatened = f.paint.bugs.some(b => b.kind !== "hive" && Math.hypot(b.x - f.local.x, b.y - f.local.y) < 250);
       if (hive) {
-        input = policyInput("aimer", { players: [], bugs: threatened ? f.paint.bugs : [hive], globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+        input = policyInput("aimer", { players: [], bugs: threatened ? f.paint.bugs : [hive], globs: f.snapshot.globs, pickups: f.snapshot.pickups, tick: f.snapshot.tick }, f.local, this.policy);
         const imminent = f.paint.bugs.some(b => b.kind !== "hive" && Math.hypot(b.x - f.local.x, b.y - f.local.y) < 90);
         const time = intercept(hive.x - f.local.x, hive.y - f.local.y, hive.vx, hive.vy);
         // Keep dodging the crowd, but focus the boss rather than spending the

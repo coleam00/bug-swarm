@@ -49,42 +49,49 @@ test("JSON and binary clients share hive, ring, life rewards and idempotent pers
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
 }, 10000);
 
-test("real JSON and binary clients receive beetle state and shell bounces", async () => {
-  const scratch = mkdtempSync(join(tmpdir(), "beetle-wire-"));
-  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
-  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2, "Other", undefined, true);
-  try {
-    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
-    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
-    const bug = createBug("beetle", 999, 1200, 1200); room.state.bugs = [bug];
-    Object.assign(p, { x: 1400, y: 1200 });
-    Object.assign(room.state.players.get(b.id)!, { x: 1600, y: 1200 });
-    room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: 1, x: bug.x + 24, y: bug.y, vx: -900, vy: 0, born: room.state.tick * 50 });
-    const [json, binary] = await Promise.all([a, b].map(c => c.wait((m): m is Snapshot => m.type === "snapshot" &&
-      m.bugs.some(b => b.id === 999 && b.kind === "beetle") && m.events.some(e => e.kind === "beetle" && e.type === "bounce"))));
-    expect(binary!.tick).toBe(json!.tick);
-    expect(binary!.events).toEqual(json!.events);
-  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
-}, 10000);
-
-test.each([false, true])("two real clients receive the same swell, glob, interception and five points (compact=%s)", async compact => {
-  const scratch = mkdtempSync(join(tmpdir(), "spitter-wire-"));
+test.each([false, true])("two real clients collect all three kinds and receive the combined boosted fan (compact=%s)", async compact => {
+  const scratch = mkdtempSync(join(tmpdir(), "weapon-pickup-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
   const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1, "bot-1", crypto.randomUUID(), compact), b = client(url, 2, "bot-2", crypto.randomUUID(), compact);
   try {
     await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
     const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
-    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(q, { x: 1800, y: 1800 });
-    const bug = createBug("spitter", room.state.nextId++, 800, 1200, room.state.tick * 50); room.state.bugs = [bug];
-    Object.assign(bug, { phase: "swell", phaseUntil: (room.state.tick + 4) * 50 });
-    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "spitter" && b.phase === "swell"));
-    const snapshots: Snapshot[] = [];
-    for (const c of [a, b]) snapshots.push(await c.wait((m): m is Snapshot => m.type === "snapshot" && m.globs.length === 1));
-    expect(snapshots[0]!.globs).toEqual(snapshots[1]!.globs);
-    const g = room.state.globs[0]!;
-    room.state.shots.push({ id: room.state.nextId++, x: g.x + 20, y: g.y, vx: -900, vy: 0, owner: p.id, life: p.life, born: room.state.tick * 50 });
-    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.globs.length && m.events.some(e => e.type === "glob-pop") && m.players.some(p => p.id === a.id && p.score === 5 && p.kills === 0));
-    expect(p.streak).toBe(1);
+    Object.assign(p, { x: 1000, y: 1200 }); Object.assign(q, { x: 1800, y: 1200 });
+    room.state.pickups = (["shield", "spread", "rapid"] as const).map(kind => ({ id: room.state.nextId++, kind, x: 1200, y: 1200, expiresAt: room.state.tick * 50 + 12000 }));
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.length === 3);
+    p.x = 1200; app.arenas.tick(room);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.length === 0 && m.players.some(p => p.id === a.id && p.effects.spread && p.effects.rapid && p.effects.shield));
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
+    for (const c of [a, b]) {
+      const s = await c.wait((m): m is Snapshot => m.type === "snapshot" && m.shots.filter(s => s.owner === a.id).length === 3);
+      const shots = s.shots.filter(s => s.owner === a.id), angles = shots.map(s => Math.atan2(s.vy, s.vx)).sort((a,b) => a-b);
+      // Binary velocities quantize to 1/16 unit/s: each end angle can vary by 0.00005 rad.
+      expect(Math.abs(angles[2]! - angles[0]! - Math.PI / 9)).toBeLessThan(0.0001);
+      expect(s.players.find(p => p.id === a.id)!.heat).toBe(1.5);
+    }
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
+test("two real clients observe the same floor pickup, one collection winner, refresh and shield consumption", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "shield-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1000, y: 1000, spawnProtectedUntil: 0 }); Object.assign(q, { x: 1400, y: 1000 });
+    const floor = () => { const pickup = { id: room.state.nextId++, kind: "shield" as const, x: 1200, y: 1000, expiresAt: room.state.tick * 50 + 12000 }; room.state.pickups.push(pickup); return pickup; };
+    const pickup = floor(); app.arenas.tick(room);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.pickups.some(p => p.id === pickup.id));
+    p.x = q.x = 1200; app.arenas.tick(room);
+    const winner = p.id < q.id ? p : q, loser = winner === p ? q : p, until = winner.effects.shield!;
+    expect(until).toBeGreaterThan(room.state.tick * 50); expect(loser.effects).toEqual({});
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.pickups.some(p => p.id === pickup.id) && m.players.some(p => p.id === winner.id && p.effects.shield === until));
+    loser.x = 1600; floor(); app.arenas.tick(room); const refreshed = winner.effects.shield!; expect(refreshed).toBeGreaterThan(until);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.players.some(p => p.id === winner.id && p.effects.shield === refreshed));
+    winner.spawnProtectedUntil = winner.immuneUntil = 0; room.state.bugs = [createBug("crawler", room.state.nextId++, winner.x, winner.y)];
+    app.arenas.tick(room); expect(winner.effects).toEqual({}); expect(winner.hits).toBe(3);
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.tick === room.state.tick && m.players.some(p => p.id === winner.id && !p.effects.shield && p.hits === 3));
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
 }, 10000);
 test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {
@@ -313,3 +320,42 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     console.info("bot CLI phase durations (ms)", JSON.stringify(timings));
   }
 }, CLI_TEST_TIMEOUT_MS);
+
+test.each([false, true])("two real clients receive the same swell, glob, interception and five points (compact=%s)", async compact => {
+  const scratch = mkdtempSync(join(tmpdir(), "spitter-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1, "bot-1", crypto.randomUUID(), compact), b = client(url, 2, "bot-2", crypto.randomUUID(), compact);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(q, { x: 1800, y: 1800 });
+    const bug = createBug("spitter", room.state.nextId++, 800, 1200, room.state.tick * 50); room.state.bugs = [bug];
+    Object.assign(bug, { phase: "swell", phaseUntil: (room.state.tick + 4) * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "spitter" && b.phase === "swell"));
+    const snapshots: Snapshot[] = [];
+    for (const c of [a, b]) snapshots.push(await c.wait((m): m is Snapshot => m.type === "snapshot" && m.globs.length === 1));
+    expect(snapshots[0]!.globs).toEqual(snapshots[1]!.globs);
+    const g = room.state.globs[0]!;
+    room.state.shots.push({ id: room.state.nextId++, x: g.x + 20, y: g.y, vx: -900, vy: 0, owner: p.id, life: p.life, born: room.state.tick * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.globs.length && m.events.some(e => e.type === "glob-pop") && m.players.some(p => p.id === a.id && p.score === 5 && p.kills === 0));
+    expect(p.streak).toBe(1);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
+test("real JSON and binary clients receive beetle state and shell bounces", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "beetle-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2, "Other", undefined, true);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
+    const bug = createBug("beetle", 999, 1200, 1200); room.state.bugs = [bug];
+    Object.assign(p, { x: 1400, y: 1200 });
+    Object.assign(room.state.players.get(b.id)!, { x: 1600, y: 1200 });
+    room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: 1, x: bug.x + 24, y: bug.y, vx: -900, vy: 0, born: room.state.tick * 50 });
+    const [json, binary] = await Promise.all([a, b].map(c => c.wait((m): m is Snapshot => m.type === "snapshot" &&
+      m.bugs.some(b => b.id === 999 && b.kind === "beetle") && m.events.some(e => e.kind === "beetle" && e.type === "bounce"))));
+    expect(binary!.tick).toBe(json!.tick);
+    expect(binary!.events).toEqual(json!.events);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);

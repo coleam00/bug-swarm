@@ -21,7 +21,7 @@ export function botDriver(manager: RoomManager, count: number, seed: number) {
     input(idle = false) { for (const bot of bots) {
       const { c } = bot, state = c.room!.state, p = state.players.get(c.id!)!;
       if (p.status === "out" && !idle) manager.message(c, JSON.stringify({ v: 1, type: "respawn", life: p.life, touch: false }));
-      else if (p.status === "active") manager.message(c, JSON.stringify({ v: 1, type: "input", seq: ++bot.seq, life: p.life, touch: false, ...(idle ? neutralInput() : policyInput("aimer", { players: [...state.players.values()], bugs: state.bugs, globs: state.globs, tick: state.tick }, p, bot.policy)) }));
+      else if (p.status === "active") manager.message(c, JSON.stringify({ v: 1, type: "input", seq: ++bot.seq, life: p.life, touch: false, ...(idle ? neutralInput() : policyInput("aimer", { players: [...state.players.values()], bugs: state.bugs, globs: state.globs, pickups: state.pickups, tick: state.tick }, p, bot.policy)) }));
     } },
   };
 }

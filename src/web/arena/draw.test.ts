@@ -68,7 +68,7 @@ test("beetle plate follows facing, each lost HP cracks once, and pale bounces le
 test("bounce, HP cracks, facing and removal stay on the delayed combat clock and reset without replay", () => {
   const view = new Interpolation(), b = createBug("beetle", 1, 500, 500);
   const shot = { id: 2, owner: "a", life: 1, x: 550, y: 500, vx: -900, vy: 0, born: 0 };
-  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
+  const s: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
   view.push(structuredClone(s), 0);
   s.tick = 2; s.shots = []; s.events = [{ id: 3, tick: 2, kind: "beetle", type: "bounce", x: 522, y: 500, points: 0 }];
   view.push(structuredClone(s), 50);
@@ -90,7 +90,7 @@ test("hive has cached pulsing art, authoritative health, edge arrow, minimap dia
     const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const p = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
     const boss = createBug("hive", 1, 1200, 1200), authoritative = { ...boss, hp: 660 };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, pickups: [], players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], events: [] };
     for (const [width, height] of [[1280, 720], [390, 844], [844, 390]] as const) {
       c.paints.length = 0;
       renderer.draw(width, height, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, 1000, 1, snapshot, 4900);
@@ -265,7 +265,7 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
     const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
     const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
     for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
       players[0]!.score = score; c.paints.length = 0;
       // Interpolated membership is deliberately stale; connected dead players still count.
@@ -290,7 +290,7 @@ test("HUD level follows authoritative life age, freezes at termination and reset
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const p: Snapshot["players"][number] = { ...local, startedTick: 73800, ackSeq: 0 };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], pickups: [], events: [] };
     const draw = (level: number, now = 0) => {
       fixture.context.paints.length = 0;
       renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], snapshot.wave, 1, now, 1, snapshot, 0);

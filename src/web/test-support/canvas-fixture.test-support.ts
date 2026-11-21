@@ -7,7 +7,7 @@ export interface Gradient {
 }
 export interface PathCommand { op: string; args: number[] }
 interface PaintState {
-  fillStyle: string | Gradient; strokeStyle: string | Gradient; lineWidth: number; shadowBlur: number;
+  fillStyle: string | Gradient; strokeStyle: string | Gradient; lineWidth: number; lineCap: CanvasLineCap; shadowBlur: number;
   globalAlpha: number; globalCompositeOperation: string; font: string;
   textAlign: string; textBaseline: string; transform: number[];
 }
@@ -17,6 +17,7 @@ export class RecordingContext {
   fillStyle: string | Gradient = "#000";
   strokeStyle: string | Gradient = "#000";
   lineWidth = 1;
+  lineCap: CanvasLineCap = "butt";
   shadowBlur = 0;
   globalAlpha = 1;
   globalCompositeOperation = "source-over";
@@ -28,8 +29,12 @@ export class RecordingContext {
   private path: PathCommand[] = [];
   private readonly stack: PaintState[] = [];
   get depth(): number { return this.stack.length; }
+  reset(): void {
+    this.paints.length = 0; this.path = []; this.stack.length = 0;
+    Object.assign(this, new RecordingContext().state());
+  }
   private state(): PaintState {
-    return { fillStyle: this.fillStyle, strokeStyle: this.strokeStyle, lineWidth: this.lineWidth, shadowBlur: this.shadowBlur,
+    return { fillStyle: this.fillStyle, strokeStyle: this.strokeStyle, lineWidth: this.lineWidth, lineCap: this.lineCap, shadowBlur: this.shadowBlur,
       globalAlpha: this.globalAlpha, globalCompositeOperation: this.globalCompositeOperation,
       font: this.font, textAlign: this.textAlign, textBaseline: this.textBaseline, transform: [...this.transform] };
   }
@@ -88,7 +93,13 @@ export function canvasFixture() {
   const surfaces: { canvas: HTMLCanvasElement; context: RecordingContext }[] = [];
   const factory = () => {
     const offscreen = new RecordingContext();
-    const canvas = { width: 0, height: 0, getContext: () => offscreen } as unknown as HTMLCanvasElement;
+    let width = 0, height = 0;
+    // Assigning either dimension clears the bitmap and state, even if its value is unchanged.
+    const canvas = {
+      get width() { return width; }, set width(value: number) { width = value; offscreen.reset(); },
+      get height() { return height; }, set height(value: number) { height = value; offscreen.reset(); },
+      getContext: () => offscreen,
+    } as unknown as HTMLCanvasElement;
     surfaces.push({ canvas, context: offscreen }); return canvas;
   };
   return { context, surfaces, factory, get created() { return surfaces.length; }, get depth() { return context.depth; },

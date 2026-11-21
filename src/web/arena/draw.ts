@@ -1,12 +1,14 @@
 import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS, DOWNED_MS, REVIVE_MS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
-import type { Player, CombatPlayer, Bug, Shot, Glob, CombatEvent, BugKind } from "../../shared/arena/types";
+import type { Player, CombatPlayer, Bug, Shot, Glob, CombatEvent, BugKind, Pickup, PickupKind } from "../../shared/arena/types";
 import { createGlobDraw, GLOB_EXTENT } from "./globs";
 import { BUG_DRAW, createBugDraws, type BugDraw } from "./bugs/registry";
 import type { ArenaInput } from "./input";
 import { helpArrow } from "./help-arrow";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
+import { createPickupDraws, pickupAlpha, effectRemaining, type PickupDraw } from "./pickups/registry";
+import { PICKUPS, PICKUP_KINDS } from "../../shared/arena/pickups/registry";
 import type { PaintTrace } from "./observation";
 import { HiveHud } from "./hive-hud";
 import { personalLevel } from "./level";
@@ -14,6 +16,7 @@ declare const __ARENA_PLAYTEST__: boolean;
 const observing = typeof __ARENA_PLAYTEST__ === "undefined" || __ARENA_PLAYTEST__;
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
+  private pickupDraw: Record<PickupKind, PickupDraw>;
   private bugDraw: Record<BugKind, BugDraw>;
   private globDraw = createGlobDraw();
   private hiveHud = new HiveHud();
@@ -25,7 +28,7 @@ export class ArenaRenderer {
   private glows = new Map<string, HTMLCanvasElement>();
   private labels = new Map<string, HTMLCanvasElement>();
   constructor(private ctx: CanvasRenderingContext2D, private trace?: PaintTrace) {
-    this.bugDraw = createBugDraws();
+    this.bugDraw = createBugDraws(); this.pickupDraw = createPickupDraws();
     const tile = document.createElement("canvas"); tile.width = tile.height = 48;
     const c = tile.getContext("2d")!; c.fillStyle = "#0c1420"; c.fillRect(0, 0, 48, 48);
     c.strokeStyle = "#1a2b3c"; c.lineWidth = 1; c.beginPath(); c.moveTo(0, 48); c.lineTo(0, 0); c.lineTo(48, 0); c.stroke();
@@ -37,7 +40,7 @@ export class ArenaRenderer {
       g.fillStyle = gradient; g.fillRect(0, 0, 100, 100); this.glows.set(team, glow);
     }
   }
-  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS, globs: Glob[] = []) {
+  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS, globs: Glob[] = [], pickups: readonly Pickup[] = []) {
     if (observing && this.trace) { this.trace.players = []; this.trace.bugs = []; this.trace.effects = []; this.trace.shots = []; this.trace.minimap = []; this.trace.hud = undefined; this.trace.hive = undefined; this.trace.hiveRewards = []; }
     this.time = tick * STEP_MS;
     this.animationTime = now;
@@ -48,6 +51,11 @@ export class ArenaRenderer {
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     for (const id of this.labels.keys()) if (!players.some(p => p.id === id)) this.labels.delete(id);
+    for (const p of pickups) {
+      const draw = this.pickupDraw[p.kind], extent = draw.extent;
+      if (p.x < camera.x - extent || p.x > camera.x + worldWidth + extent || p.y < camera.y - extent || p.y > camera.y + worldHeight + extent) continue;
+      c.save(); c.globalAlpha = pickupAlpha(p.expiresAt - combatTime); draw.floor(c, p.x, p.y); c.restore();
+    }
     for (const b of bugs) {
       const extent = BUG_DRAW[b.kind].extent(b);
       if (b.x < camera.x - extent || b.x > camera.x + worldWidth + extent || b.y < camera.y - extent || b.y > camera.y + worldHeight + extent) continue;
@@ -113,6 +121,14 @@ export class ArenaRenderer {
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
       if (observing && this.trace) this.trace.hud = { score: p.score, hits: p.hits, population, level };
     }
+    if (local && "effects" in local) {
+      const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
+      let index = 0;
+      for (const kind of PICKUP_KINDS) {
+        const remaining = effectRemaining(p.effects[kind] ?? 0, this.time, PICKUPS[kind].duration);
+        if (remaining > 0) this.pickupDraw[kind].hud(c, 32 + index++ * 48, boss || visibleBoss ? 112 : 70, remaining);
+      }
+    }
     this.hiveHud.draw(c, width, height, camera, scale, boss, visibleBoss, now, map.y + map.height + 24,
       observing && this.trace ? value => { this.trace!.hive = value; } : undefined);
     for (const s of [input.stick, input.right]) if (s) {
@@ -160,6 +176,7 @@ export class ArenaRenderer {
     c.beginPath(); c.roundRect(-r, -r, r * 2, r * 2, 7); c.fill(); c.stroke();
     c.fillStyle = colour; c.beginPath(); c.arc(0, 0, 6, 0, Math.PI * 2); c.fill();
     c.fillStyle = "#fff5d8"; c.beginPath(); c.arc(1, -1, 2.5, 0, Math.PI * 2); c.fill(); c.restore();
+    if (!downed) for (const kind of PICKUP_KINDS) if ((combat.effects?.[kind] ?? 0) > this.time) this.pickupDraw[kind].robot(c, p);
     let label = this.labels.get(p.id);
     if (!label) {
       label = document.createElement("canvas");

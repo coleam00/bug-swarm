@@ -1,9 +1,10 @@
 import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS, HIVE_GLOB_SPEED, HIVE_RING_COUNT, HIVE_REWARD_BASE, HIVE_REWARD_POOL } from "./constants";
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
-import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS } from "./constants";
-import type { Input, CombatPlayer, Bug, Shot, Glob, CombatEvent, LifeResult } from "./types";
+import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS, MAX_PICKUPS, PICKUP_LIFETIME_MS } from "./constants";
+import type { Input, CombatPlayer, Bug, Shot, Glob, CombatEvent, LifeResult, Pickup } from "./types";
 import { BUGS, isBugKind } from "./bugs/registry";
+import { PICKUPS, isPickupKind } from "./pickups/registry";
 export const VERSION = 1;
 export const HIDDEN_IDENTITY_MESSAGE = "That name isn't allowed.";
 export interface Hello { v: 1; type: "hello"; playerId: string; name: string; team: Team; touch: boolean; buildId: string; snapshotEncoding?: "delta-v1" }
@@ -15,7 +16,7 @@ export interface LifeOver extends LifeResult { v: 1; type: "life_over"; save: Sa
 export interface ServerRestart { v: 1; type: "server_restart"; result?: LifeOver }
 export interface Welcome { v: 1; type: "welcome"; playerId: string; arenaId: string; buildId: string; snapshotEncoding?: "delta-v1";
   world: { width: number; height: number }; constants: { stepMs: number; playerSpeed: number; playerRadius: number; maxPlayers: number } }
-export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[];
+export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; pickups: Pickup[]; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[];
   players: (CombatPlayer & { ackSeq: number; result?: LifeOver })[] }
 export interface ArenaError { v: 1; type: "error"; code: string; message: string; team?: Team }
 export type ClientMessage = Hello | InputMessage | Respawn;
@@ -71,8 +72,11 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
       (p.status === "downed" ? p.downedUntil <= v.tick * STEP_MS || p.downedUntil > v.tick * STEP_MS + DOWNED_MS :
         p.downedUntil !== 0 || p.reviveMs !== 0 || p.reviving) ||
       (p.status !== "active" && (p.vx !== 0 || p.vy !== 0))) return null;
+    if (!object(p.effects) || Object.getPrototypeOf(p.effects) !== Object.prototype) return null;
+    for (const [kind, until] of Object.entries(p.effects)) if (!isPickupKind(kind) || p.status !== "active" || !finite(until) || until <= v.tick * STEP_MS || until > v.tick * STEP_MS + PICKUPS[kind].duration + 0.001) return null;
     ids.add(p.id);
   }
+  if (!expandCombat(v)) return null;
   const entityIds = new Set<number>();
   for (const [entities, cap, speed] of [[v.bugs, MAX_BUGS, Infinity], [v.shots, MAX_SHOTS, SHOT_SPEED], [v.globs, MAX_GLOBS, GLOB_SPEED]] as const) {
     if (!Array.isArray(entities) || entities.length > cap) return null;
@@ -93,18 +97,18 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
       entityIds.add(e.id);
     }
   }
+  if (!Array.isArray(v.pickups) || v.pickups.length > MAX_PICKUPS) return null;
+  for (const p of v.pickups) {
+    if (!object(p) || !integer(p.id) || entityIds.has(p.id) || !isPickupKind(p.kind) || ![p.x, p.y, p.expiresAt].every(finite) || p.x < 0 || p.x > WORLD_WIDTH || p.y < 0 || p.y > WORLD_HEIGHT || p.expiresAt <= v.tick * STEP_MS || p.expiresAt > v.tick * STEP_MS + PICKUP_LIFETIME_MS + 0.001) return null;
+    entityIds.add(p.id);
+  }
   if (v.bugs.filter((b: Bug) => b.kind === "spitter").length > MAX_SPITTERS) return null;
   if (v.bugs.filter((b: Bug) => b.kind === "hive").length > 1 || v.globs.filter((g: Glob) => g.source === "hive").length > HIVE_RING_COUNT || v.globs.filter((g: Glob) => g.source === undefined).length > MAX_SPITTERS) return null;
   if (!Array.isArray(v.events) || v.events.length > MAX_EVENTS) return null;
   const events = new Set<number>();
   let hiveKills = 0;
   for (let index = 0; index < v.events.length; index++) {
-    let e = v.events[index];
-    // JSON rows: id, tick, x, y, type, kind (null for pop), points, optional rewards.
-    if (Array.isArray(e)) {
-      if (e.length < 7 || e.length > 8) return null;
-      e = v.events[index] = { id: e[0], tick: e[1], x: e[2], y: e[3], type: e[4], ...(e[5] === null ? {} : { kind: e[5] }), points: e[6], ...(e.length === 8 ? { rewards: e[7] } : {}) };
-    }
+    const e = v.events[index];
     if (!object(e) || !integer(e.id) || events.has(e.id) || entityIds.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT) return null;
     if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "bounce" ? e.points !== 0 || !BUGS[e.kind].blocksShot : e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
     if (e.type === "kill" && e.kind === "hive") {
@@ -127,7 +131,54 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
 function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type === "life_over" && isId(v.playerId) && integer(v.life) && v.life > 0 && integer(v.score) && integer(v.kills) && finite(v.seconds) && v.seconds >= 0 && typeof v.touch === "boolean" && ["pending", "saved", "failed"].includes(v.save) && (v.reason === undefined || ["death", "disconnect", "restart"].includes(v.reason)); }
 /** Quantize the wire only. The authoritative simulation keeps full precision. */
 export function serializeSnapshot(snapshot: Snapshot): string {
-  const owners = new Map(snapshot.players.map((p, i) => [p.id, i]));
-  const events = snapshot.events.map(e => [e.id, e.tick, e.x, e.y, e.type, e.kind ?? null, e.points, ...("rewards" in e && e.rewards ? [e.rewards] : [])]);
-  return JSON.stringify({ ...snapshot, events }, (key, value) => key === "owner" ? owners.get(value) ?? value : typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+  const time = snapshot.tick * STEP_MS;
+  const entities = [...snapshot.bugs, ...snapshot.shots, ...snapshot.globs, ...snapshot.events, ...snapshot.pickups];
+  const largestId = entities.reduce((largest, e) => Math.max(largest, e.id), 0);
+  const idBase = largestId > 999999 ? largestId : 0;
+  const wire = { ...snapshot,
+    ...(idBase ? { idBase } : {}),
+    bugs: snapshot.bugs.map(b => b.maxHp !== undefined || b.ringAt !== undefined ? { ...b, id: b.id - idBase } : b.phase === undefined && b.phaseUntil === undefined ?
+      [b.id - idBase, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing] :
+      [b.id - idBase, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing, b.phase, b.phaseUntil]),
+    shots: snapshot.shots.map(s => [s.id - idBase, snapshot.players.findIndex(p => p.id === s.owner), s.life, s.x, s.y, s.vx, s.vy, time - s.born]),
+    events: snapshot.events.map(e => [e.id - idBase, snapshot.tick - e.tick, e.x, e.y, e.kind, e.type, e.points, ...("rewards" in e && e.rewards ? [e.rewards] : [])]),
+    globs: snapshot.globs.map(g => ({ ...g, id: g.id - idBase })),
+    pickups: snapshot.pickups.map(p => ({ ...p, id: p.id - idBase })),
+  };
+  return JSON.stringify(wire, (_key, value) => typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+}
+/** Compact combat tuples keep combined spread/rapid volleys within 64 KiB.
+ * Runtime state and consumers still use named fields. Existing object fixtures are also validated.
+ * A projectile either survives or becomes an impact event, never both in one snapshot. */
+function expandCombat(v: RecordValue): boolean {
+  if (!Array.isArray(v.bugs) || v.bugs.length > MAX_BUGS || !Array.isArray(v.shots) || v.shots.length > MAX_SHOTS ||
+    !Array.isArray(v.events) || v.events.length > MAX_EVENTS || v.shots.length + v.events.length > MAX_SHOTS) return false;
+  for (let i = 0; i < v.bugs.length; i++) {
+    const b = v.bugs[i]; if (!Array.isArray(b)) continue;
+    if (b.length !== 8 && b.length !== 10) return false;
+    v.bugs[i] = { id: b[0], kind: b[1], x: b[2], y: b[3], vx: b[4], vy: b[5], hp: b[6], facing: b[7],
+      ...(b.length === 10 ? { phase: b[8], phaseUntil: b[9] } : {}) };
+  }
+  for (let i = 0; i < v.shots.length; i++) {
+    const s = v.shots[i]; if (!Array.isArray(s)) continue;
+    if (s.length !== 8 || !integer(s[1]) || s[1] >= v.players.length || !finite(s[7])) return false;
+    v.shots[i] = { id: s[0], owner: v.players[s[1]].id, life: s[2], x: s[3], y: s[4], vx: s[5], vy: s[6], born: v.tick * STEP_MS - s[7] };
+  }
+  for (let i = 0; i < v.events.length; i++) {
+    const e = v.events[i]; if (!Array.isArray(e)) continue;
+    if ((e.length !== 7 && e.length !== 8) || !integer(e[1])) return false;
+    // Also accept main's absolute-tick event rows during coordinated deployment.
+    const legacy = ["hit", "kill", "bounce", "glob-pop"].includes(e[4]);
+    const kind = legacy ? e[5] : e[4];
+    v.events[i] = { id: e[0], tick: legacy ? e[1] : v.tick - e[1], x: e[2], y: e[3], ...(kind === null ? {} : { kind }), type: legacy ? e[4] : e[5], points: e[6], ...(e.length === 8 ? { rewards: e[7] } : {}) };
+  }
+  if (v.idBase !== undefined) {
+    if (!integer(v.idBase) || !Array.isArray(v.globs) || v.globs.length > MAX_GLOBS || !Array.isArray(v.pickups) || v.pickups.length > MAX_PICKUPS) return false;
+    for (const group of [v.bugs, v.shots, v.events, v.globs, v.pickups]) for (const e of group) {
+      if (!object(e) || typeof e.id !== "number" || !Number.isSafeInteger(e.id)) return false;
+      e.id += v.idBase;
+    }
+    delete v.idBase;
+  }
+  return true;
 }

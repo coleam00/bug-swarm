@@ -107,7 +107,7 @@ test("negotiated binary snapshots preserve history and reset the base for each s
   try {
     f.socket.onopen(); expect(f.socket.sent[0].snapshotEncoding).toBe("delta-v1"); expect(f.socket.binaryType).toBe("arraybuffer");
     f.receive(f.welcome());
-    const value: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, players: [{ ...lifeDefaults(), id: f.identity.playerId, name: "Robot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 1 }], bugs: [], shots: [], globs: [], events: [] };
+    const value: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, players: [{ ...lifeDefaults(), id: f.identity.playerId, name: "Robot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 1 }], bugs: [], shots: [], globs: [], events: [] };
     f.socket.onmessage({ data: encoder.encode(value).keyframe.buffer });
     const first = f.messages.at(-1); value.tick++; value.players[0]!.x += 5;
     f.socket.onmessage({ data: encoder.encode(value).delta.buffer });

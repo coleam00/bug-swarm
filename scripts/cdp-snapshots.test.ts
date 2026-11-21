@@ -8,7 +8,7 @@ test("CDP decodes JSON controls and base64 keyframes/deltas independently across
   const frames = new CdpSnapshots(), encoder = new SnapshotEncoder(), id = crypto.randomUUID();
   const welcome: Welcome = { v: 1, type: "welcome", playerId: id, arenaId: "cdp", buildId: "test", snapshotEncoding: "delta-v1",
     world: { width: 2400, height: 2400 }, constants: { stepMs: 50, playerSpeed: 180, playerRadius: 14, maxPlayers: 20 } };
-  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "cdp", tick: 0, wave: 1, bugs: [], shots: [], globs: [], events: [],
+  const snapshot: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "cdp", tick: 0, wave: 1, bugs: [], shots: [], globs: [], events: [],
     players: [{ ...lifeDefaults(), id, name: "Pilot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 }] };
   const binary = (bytes: Uint8Array) => ({ opcode: 2, payloadData: Buffer.from(bytes).toString("base64") });
   frames.created("first"); frames.created("second");

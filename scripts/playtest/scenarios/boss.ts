@@ -23,7 +23,12 @@ export default async function boss(c: Context) {
   }
   // Idle setup bots die naturally and wait at life-over, then respawn through
   // the normal protocol. This reaches wave five without aged-life pressure.
-  await c.startServer(119, true); await c.join();
+  await c.startServer(119, true);
+  // Freeze encounter health with the two setup bots. Browser startup speed must
+  // not decide whether some humans enter before the fifth-wave boundary.
+  await c.wait("Setup bots reach the fifth-wave hive before browser admission", () =>
+    !!c.latest?.snapshots.at(-1)?.bugs.some(b => b.kind === "hive"), 10000);
+  await c.join();
   const arrows = new Set<string>(), bodies = new Set<string>(), awards = new Map<string, { amount: number; life: number }>();
   let killed: Extract<CombatEvent, { type: "kill" }> | undefined;
   const observe = () => {
