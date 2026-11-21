@@ -43,15 +43,25 @@ test("down/revive retains one run, clears held controls, rejects respawn and per
 
 test.each(["disconnect", "moderation", "stall", "shutdown"])("downed %s finalizes once through the writer", async reason => {
   const f = fixture(); try {
-    const { c, buffer } = f.join(), room = c.room!, p = room.state.players.get(c.id!)!;
+    const { c, buffer, closed } = f.join(), room = c.room!, p = room.state.players.get(c.id!)!;
     p.score = 37; downPlayer(room.state, p);
     if (reason === "disconnect") f.manager.leave(c);
     if (reason === "moderation") { hideName(f.db, p.name, 0); f.manager.refreshHidden(); }
     if (reason === "stall") { buffer(1); f.manager.tick(room); f.at(5000); f.manager.tick(room); }
     if (reason === "shutdown") await f.manager.stop();
+    // Observe the trigger before cleanup can evict or finish the life for it.
+    expect(c.closed).toBe(true);
+    if (reason !== "disconnect") expect(closed()).toBe(true);
+    expect(f.manager.active.has(p.id)).toBe(false); expect(f.manager.connections.has(c)).toBe(false);
+    expect(room.members.has(c)).toBe(false); expect(room.state.players.has(p.id)).toBe(false);
+    expect(f.manager.rooms.has(room.id)).toBe(false); expect(c.room).toBeUndefined();
+    f.manager.writer.flush();
+    expect(countEvents(f.db)).toMatchObject({ run_started: 1, run_ended: 1 });
+    const saved = getRun(f.db, c.record!.runId);
+    expect(saved).toMatchObject({ score: 37, end_reason: reason === "shutdown" ? "restart" : "disconnect" });
     f.manager.leave(c); await f.manager.stop();
     expect(countEvents(f.db)).toMatchObject({ run_started: 1, run_ended: 1 });
-    expect(getRun(f.db, c.record!.runId)).toMatchObject({ score: 37, end_reason: reason === "shutdown" ? "restart" : "disconnect" });
+    expect(getRun(f.db, c.record!.runId)).toEqual(saved);
   } finally { await f.close(); }
 });
 test("rooms pack fullest first, 21st opens a new arena, departures dispose empty timers", async () => {

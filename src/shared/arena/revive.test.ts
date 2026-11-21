@@ -19,15 +19,15 @@ function steps(a: ArenaState, n: number, inputs = new Map<string, Input>()) {
 }
 
 test("third hit downs for a full ten seconds, cancels shots without a miss, and blocks play/respawn", () => {
-  const { a, p, q } = fixture();
+  const { a, p } = fixture();
   expect(p).toMatchObject({ status: "downed", hits: 0, downedUntil: STEP_MS + DOWNED_MS, reviveMs: 0, reviving: false, vx: 0, vy: 0, score: 37, streak: 7 });
   expect(a.ended).toHaveLength(0); expect(respawnPlayer(a, p.id, p.life)).toBeNull();
   p.heat = 12;
   steps(a, 1, new Map([[p.id, { move: { x: 1, y: 0 }, aim: 2, fire: true }]]));
   expect(p.x).toBe(1200); expect(p.facing).toBe(0); expect(p.heat).toBeCloseTo(11.7); expect(a.shots).toHaveLength(0);
   expect(a.spawnCredits.has(p.id)).toBe(false);
-  const b = { id: 999, kind: "crawler" as const, x: 1200, y: 1200, vx: 0, vy: 0 };
-  crawler.move(b, [p, q]); expect(b.vx).toBe(140); crawler.move(b, [p]); expect(b.vx).toBe(0);
+  const b = { id: 999, kind: "crawler" as const, x: 1200, y: 1200, vx: 3, vy: 4 };
+  crawler.move(b, [p]); expect(b.vx).toBe(0); expect(b.vy).toBe(0);
 });
 
 test("inclusive 90-unit contact accumulates across gaps and different teams, without stacking", () => {

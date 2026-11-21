@@ -5,7 +5,7 @@ import { canvasFixture } from "../game/canvas-fixture.test-support";
 import { TEAM_COLOURS } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
-import { lifeDefaults } from "../../shared/arena/types";
+import { lifeDefaults, type CombatPlayer } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import type { Paint } from "../game/canvas-fixture.test-support";
 
@@ -17,20 +17,50 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const p = { ...lifeDefaults(), status: "downed" as const, hits: 0, downedUntil: 10000, reviveMs: 1000, reviving: true,
       id: "victim", name: "Victim", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
     const q = { ...p, id: "remote", x: 1200 };
-    renderer.draw(390, 844, { x: 0, y: 0 }, [p, q], p, input, [], [], 1, 40, 1234);
-    const paints = fixture.context.paints;
-    expect(paints.some(p => p.op === "stroke" && p.globalAlpha === 0.4 && p.path.some(c => c.op === "roundRect"))).toBe(true);
-    const text = paints.filter(p => p.op === "fillText").map(p => p.args[0]);
-    expect(text).toContain("Help"); expect(text).toContain("8s");
-    expect(text.join(" ")).toContain("Downed — a teammate can revive you");
+    const draw = (local: CombatPlayer, remote = [q], now = 0) => {
+      fixture.context.paints.length = 0;
+      renderer.draw(390, 844, { x: 0, y: 0 }, [local, ...remote], local, input, [], [], 1, 40, now);
+      return [...fixture.context.paints];
+    };
+    const body = (paints: Paint[]) => paints.find(p => p.op === "stroke" && p.path.some(c => c.op === "roundRect"))!;
+    const marker = (paints: Paint[]) => paints.find(paint => paint.op === "fillText" && paint.args[1] === p.x && Number(paint.args[2]) > p.y)!;
+    const arrows = (paints: Paint[]) => paints.filter(paint => paint.op === "fill" && paint.path[0]?.op === "moveTo" && paint.path.some(c => c.op === "lineTo"));
+    const overlay = (paints: Paint[]) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > 390 / 2 &&
+      Number(paint.args[1]) > 78 && Number(paint.args[1]) + Number(paint.args[3]) < p.y);
+    const paints = draw(p), panel = overlay(paints);
+    expect(panel).toBeDefined();
+    expect(paints.filter(paint => paint.op === "fillText" && Number(paint.args[2]) > Number(panel!.args[1]) &&
+      Number(paint.args[2]) < Number(panel!.args[1]) + Number(panel!.args[3])).length).toBeGreaterThanOrEqual(2);
+    expect(paints.some(paint => paint.op === "fillText" && paint.args[0] === "8s")).toBe(true);
     const rings = paints.filter(p => p.op === "stroke").flatMap(p => p.path.filter(c => c.op === "arc"));
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI) < 1e-8)).toBe(true);
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI * 1.6) < 1e-8)).toBe(true);
-    expect(paints.filter(p => p.op === "fillText" && p.args[0] === "Help")).toHaveLength(2);
-    fixture.context.paints.length = 0;
-    const revived = { ...p, status: "active" as const, hits: 1 };
-    renderer.draw(390, 844, { x: 0, y: 0 }, [revived], revived, input);
-    expect(fixture.context.paints.some(p => p.op === "fillText" && String(p.args[0]).includes("Help"))).toBe(false);
+    const markerAlphas: number[] = [], arrowAlphas: number[] = [];
+    for (const now of [0, 180, 360, 540]) {
+      const frame = draw(p, [q], now), help = marker(frame), edge = arrows(frame);
+      expect(help).toBeDefined(); expect(edge).toHaveLength(1);
+      for (const alpha of [help.globalAlpha, edge[0]!.globalAlpha]) { expect(alpha).toBeGreaterThan(0); expect(alpha).toBeLessThanOrEqual(1); }
+      markerAlphas.push(help.globalAlpha); arrowAlphas.push(edge[0]!.globalAlpha);
+    }
+    expect(Math.max(...markerAlphas) - Math.min(...markerAlphas)).toBeGreaterThan(0.1);
+    expect(Math.max(...arrowAlphas) - Math.min(...arrowAlphas)).toBeGreaterThan(0.1);
+    for (const position of [{ x: 1200, y: 300 }, { x: 200, y: -1000 }, { x: 200, y: 1844 }]) {
+      const edge = arrows(draw(p, [{ ...q, ...position }])); expect(edge).toHaveLength(1);
+      expect(edge[0]!.transform[4]).toBeGreaterThanOrEqual(32); expect(edge[0]!.transform[4]).toBeLessThanOrEqual(358);
+      expect(edge[0]!.transform[5]).toBeGreaterThanOrEqual(112); expect(edge[0]!.transform[5]).toBeLessThanOrEqual(804);
+      if (position.x > 390) expect(edge[0]!.transform[0]).toBeGreaterThan(0);
+      if (position.y < 0) expect(edge[0]!.transform[1]).toBeLessThan(0);
+      if (position.y > 844) expect(edge[0]!.transform[1]).toBeGreaterThan(0);
+    }
+    const revived = { ...p, status: "active" as const, hits: 1, downedUntil: 0, reviveMs: 0, reviving: false };
+    const active = draw(revived, []), fallenBody = body(paints), activeBody = body(active);
+    const aspect = (paint: Paint) => {
+      const [a, b, c, d] = paint.transform as [number, number, number, number];
+      const x = Math.hypot(a, b), y = Math.hypot(c, d); return Math.min(x, y) / Math.max(x, y);
+    };
+    expect(aspect(fallenBody)).toBeLessThan(aspect(activeBody) * 0.75);
+    expect(fallenBody.globalAlpha).toBeGreaterThan(0); expect(fallenBody.globalAlpha).toBeLessThan(activeBody.globalAlpha);
+    expect(overlay(active)).toBeUndefined(); expect(marker(active)).toBeUndefined(); expect(arrows(active)).toHaveLength(0);
     fixture.context.paints.length = 0;
     const out = { ...p, status: "out" as const };
     renderer.draw(390, 844, { x: 0, y: 0 }, [out], null, input);
