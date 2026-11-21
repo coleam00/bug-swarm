@@ -104,8 +104,14 @@ for (let cycle = 0; cycle < 2; cycle++) {
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
   key("Space", "keyup"); key("KeyW", "keyup");
   key("KeyD");
-  receive({ v: 1, type: "life_over", reason: "restart", life: 2, playerId: own.id, score: 42, save: "saved" });
+  receive({ v: 1, type: "life_over", reason: "restart", life: 1, playerId: own.id, score: 42, save: "pending" });
+  const beforeOldResult = inputs.length; send(); assert.equal(inputs.length, beforeOldResult + 1, "An old-life restart result must not pause the replacement life");
+  receive({ v: 1, type: "life_over", reason: "restart", life: 2, playerId: own.id, score: 42, save: "pending" });
   assert.equal(lifePanel, null, "Restart result must not open the death panel while prediction is alive");
+  const pendingScene = draws.length, pendingInputs = inputs.length, pendingReconnects = reconnects;
+  frame(clock + 3500); send();
+  assert.equal(draws.length, pendingScene, "Pending restart freezes the scene before persistence finishes");
+  assert.equal(inputs.length, pendingInputs); assert.equal(reconnects, pendingReconnects, "Pending save must not cross the ordinary snapshot timeout");
   receive({ v: 1, type: "server_restart", result: { score: 42, save: "saved", reason: "restart" } });
   assert.equal(lifePanel, null);
   const sceneCount = draws.length; frame(clock + 20); assert.equal(draws.length, sceneCount, "Restart retains the rendered scene");

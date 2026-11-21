@@ -11,9 +11,9 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { createElement } from ${JSON.stringify(import.meta.resolve("react"))};
 import { create, act } from ${JSON.stringify(import.meta.resolve("react-test-renderer"))};
-let mounted = 0, disposed = 0, onError, onAccepted, onLife, joined;
+let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
 mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
-  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; joined = { identity, touch }; return () => { disposed++; };
+  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
@@ -57,6 +57,17 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   }
   act(() => onAccepted());
   assert.deepEqual(JSON.parse(saved), { playerId: joined.identity.playerId, name: acceptedName, team });
+  const playCanvas = tree.root.findByType("canvas"), beforeFeedback = mounted;
+  for (const feedback of ["Reconnecting…", "Score saved: 142. Rejoining…", "Score save failed. Rejoining…"]) {
+    act(() => onStatus(feedback));
+    const status = tree.root.findByProps({ role: "status" });
+    assert.equal(status.children.join(""), feedback, "Connection feedback must be rendered");
+    assert.equal(status.props.hidden, undefined); assert.notEqual(status.props.style?.display, "none");
+    assert.equal(tree.root.findByType("canvas"), playCanvas, "Feedback must retain the mounted canvas");
+    assert.equal(tree.root.findAllByProps({ role: "dialog" }).length, 0, "Reconnect feedback must not be modal");
+    assert.equal(mounted, beforeFeedback);
+  }
+  act(() => onStatus("")); assert.equal(tree.root.findAllByProps({ role: "status" }).length, 0);
   if (kind === "new" && team === "tabs") {
     const respawns = []; let prevented = false;
     act(() => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));

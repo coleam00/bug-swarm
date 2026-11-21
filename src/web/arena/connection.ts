@@ -39,6 +39,11 @@ export function connectArena(identity: Identity, touch: boolean, receive: (messa
       if (message.type === "welcome") {
         const changed = message.buildId !== deps.pageBuild;
         const previous = deps.store.read();
+        // Keep attempts across stale bundles, but retire them once the requested
+        // bundle has actually loaded and its matching server has welcomed it.
+        if (!changed && previous?.target === deps.pageBuild && previous.attempted.length) {
+          deps.store.write({ ...previous, attempted: [], resume: false });
+        }
         if (changed && !previous?.attempted.includes(message.buildId)) {
           const envelope = { identity: { ...identity }, touch, target: message.buildId, attempted: [...(previous?.attempted ?? []), message.buildId], resume: true };
           if (deps.store.write(envelope)) {

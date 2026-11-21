@@ -18,7 +18,14 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   let latest: Snapshot | null = null, deadLife = 0, shownLife = 0, shownSave = "";
   const respawn = (usedTouch: boolean) => { if (ready && deadLife) { input.clear(); connection.send({ v: 1, type: "respawn", life: deadLife, touch: usedTouch }); } };
   const showLife = (result: LifeOver) => {
-    if (result.reason === "restart") return;
+    if (result.reason === "restart") {
+      if (result.playerId === identity.playerId.toLowerCase() && result.life === prediction.player?.life) {
+        // The server is frozen while its bounded persistence drain runs. Stop
+        // prediction and the snapshot timeout, keeping the socket for its receipt.
+        pause(); status("Reconnecting...");
+      }
+      return;
+    }
     if (result.life !== prediction.player?.life || prediction.player.hits || shownLife === result.life && shownSave === result.save) return;
     shownLife = result.life; shownSave = result.save; lifeView(result, respawn);
   };
@@ -29,8 +36,8 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (message.type === "error") { refused(message.message, message.team, message.code); return; }
     if (message.type === "welcome") { clear(); ready = true; lastSnapshot = performance.now(); accepted(); return; }
     if (message.type === "server_restart") { pause(); return; }
+    if (message.type === "life_over") { if (ready || message.reason === "restart") showLife(message); return; }
     if (!ready) return;
-    if (message.type === "life_over") { showLife(message); return; }
     const own = message.players.find(p => p.id === identity.playerId.toLowerCase());
     if (!own) return;
     if (message.tick < lastTick) return;

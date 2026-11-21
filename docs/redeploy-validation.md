@@ -31,21 +31,23 @@ An additional nineteen-bot cohort filled the arena to twenty players. Chrome's F
 
 `bun run check`: **570 passed, zero failed**, 116,535 assertions (44.58 s). `bun run build`: passed. Focused lifecycle, protocol, connection, engine, entry and real-process tests passed. They cover idempotence, multiple rooms, pending starts, dead players, close during drain, rejected joins/respawns, notification ordering, transient and permanent failures, lock release/deadline, repeated signals, exact retry delays, changed-build reload guards, stale sockets, automatic resume and storage fallback. The held-lock subprocess case completed in 4.41 s including startup and assertions, with a failed acknowledgement, logged run ids and exit status 1. Docker and Railway deployment were not run locally.
 
-Production validation commands, using scratch HOME/USERPROFILE/APPDATA/LOCALAPPDATA/TEMP/TMP and DATA_DIR:
+From a fresh checkout, install dependencies and run the committed harness:
 
 ```text
-bun run build
-bun .evidence/66/browser-validation.ts
-bun run bots -- --url <owned-origin> --count 10 --seconds 60 --policy aimer
-bun run stats
+bun install --frozen-lockfile
+bun scripts/validate-redeploy.ts
 bun run check
 ```
 
-The evidence harness owns startup, browser navigation, signal delivery, bot cleanup and SQL verification. Bot CLI disconnect failures at an intentional restart are expected; it does not reconnect. The application uses graceful socket acknowledgements, without persistent receipt replay: a missed acknowledgement produces reconnect feedback without claiming the score was saved.
+Run from a clean committed checkout with Bun, Git and Chrome installed. The harness builds both artifacts itself; the standalone build command is optional. If Chrome is not at a conventional installation path, set `CHROME_PATH` to its executable (`$env:CHROME_PATH = 'C:/path/to/chrome.exe'` in PowerShell, or `export CHROME_PATH='/path/to/chrome'` in a POSIX shell).
+
+`scripts/validate-redeploy.ts` creates and prints a unique `.evidence/66/redeploy-*` directory, including a scratch home, temporary directory, database and Chrome profile. It builds this commit, creates a disposable clone with a comment-only commit, and builds that clone using the installed dependencies. It starts only its own loopback servers on an ephemeral port, starts Chrome through CDP and launches ten aimer bots for each restart. It exercises same-build reconnect, changed-build reload, rollback, redeploy to the previously visited build, and a save held by a 3.5-second SQLite lock. It checks navigation counts, identity, saved feedback, per-run restart reasons/events, and stats; then checks full-room timing, phone layouts, two-touch input and release 1. It stops all processes it started even when an assertion fails. All generated outputs remain under the printed evidence directory; no preexisting `.evidence` files or server are needed.
+
+On Windows the harness emits the production entry's registered SIGTERM handler through child stdin; on Linux/macOS it sends OS SIGTERM. Bot CLI disconnect failures at an intentional restart are expected; it does not reconnect. The application uses graceful socket acknowledgements, without persistent receipt replay: a missed acknowledgement produces reconnect feedback without claiming the score was saved.
 
 Evidence files (gitignored):
 
-- `browser-validation.ts`, `browser-validation.json`, `browser-events.json`, `browser-validation.log`: commands, per-run rows, snapshots, identities and timestamped navigation/socket/overlay events.
+- `browser-validation.json`, `browser-events.json`, `browser-validation.log`: per-run rows, snapshots, identities and timestamped navigation/socket/overlay events. The original run used a local harness; its reusable replacement is committed at `scripts/validate-redeploy.ts`.
 - `same-server.log`, `changed-server.log`, `same-bots.log`, `changed-bots.log`, `same-stats.txt`, `changed-stats.txt`.
 - `before-*-restart.png`, `*-saved-overlay.png`, `*-rejoined.png`, `full-room-frame-timing.png`, `portrait-play.png`, `release1-entry.png`, `release1-playing.png`.
 - `check-final.log`, `build.log`, `changed-build.log`, `shutdown-tests-2.log`, `storage-tests.log`.

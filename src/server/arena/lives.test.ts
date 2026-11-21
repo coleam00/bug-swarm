@@ -18,27 +18,27 @@ test("shutdown freezes all rooms, rejects admission/respawn, commits once before
       close: code => { order.push(`close:${code}`); }, getBufferedAmount: () => 0 });
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: `Pilot-${i}`, team: i % 2 ? "tabs" : "spaces", touch: true, buildId: "build" }));
     const p = c.room!.state.players.get(c.id!)!; p.score = 100 + i; p.kills = 8; p.startedTick = 0; c.room!.state.tick = 123;
-    return { c, messages, order };
+    return { c, messages, order, expected: { score: 100 + i, squashes: 8, seconds: 6, touch: 1, team: p.team, held: 0 } };
   });
   try {
     const dead = clients[0]!.c, result = endLife(dead.room!.state, dead.id!)!;
     // Normal death was queued before restart and must keep its original reason.
     (manager as any).finishLife(dead, result);
-    const stopping = manager.stop(); expect(manager.stop()).toBe(stopping); expect(manager.accepting).toBe(false);
+    const stopping = manager.stop(), repeated = manager.stop(); expect(manager.accepting).toBe(false);
     manager.message(dead, JSON.stringify({ v: 1, type: "respawn", life: 1, touch: false }));
     manager.leave(clients[20]!.c);
     const refused: any[] = []; manager.open({ send: raw => refused.push(JSON.parse(raw)), close() {}, getBufferedAmount: () => 0 });
-    expect(refused.at(-1).code).toBe("restarting"); expect(await stopping).toBe(true);
+    expect(refused.at(-1).code).toBe("restarting"); expect(await stopping).toBe(true); expect(await repeated).toBe(true);
     const rows = db.query("SELECT * FROM runs").all() as any[];
     expect(rows).toHaveLength(22); expect(rows.filter(r => r.end_reason === "restart")).toHaveLength(21);
-    for (const { c, messages, order } of clients) {
+    for (const { c, messages, order, expected } of clients) {
       const row = getRun(db, c.record!.runId)!;
-      expect(row).toMatchObject({ score: c.record!.result!.score, squashes: 8, seconds: 6, touch: 1, team: c.record!.team, held: 0 });
+      expect(row).toMatchObject(expected);
       if (c === clients[20]!.c) continue;
       const restart = messages.find(m => m.type === "server_restart");
       expect(restart).toBeDefined();
       if (c === dead) expect(restart.result).toBeUndefined();
-      else expect(restart.result).toMatchObject({ reason: "restart", save: "saved", score: row.score });
+      else expect(restart.result).toMatchObject({ reason: "restart", save: "saved", score: expected.score });
       expect(order.indexOf("server_restart:")).toBeLessThan(order.indexOf("close:1012"));
       expect(order.indexOf("life_over:saved")).toBeLessThan(order.indexOf("server_restart:"));
     }

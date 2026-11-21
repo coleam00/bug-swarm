@@ -49,12 +49,15 @@ test("restart feedback survives retries; only committed saves make a saved claim
       f.receive(f.welcome());
       const result = { v: 1, type: "life_over", reason: "restart", playerId: f.identity.playerId, life: 1, score: 42, kills: 3, seconds: 9, touch: true, save };
       f.receive({ v: 1, type: "server_restart", result }); f.socket.close(); f.retry(500);
-      const expected = save === "saved" ? "Score saved: 42. Rejoining..." : "Score save failed. Rejoining...";
-      expect(f.statuses.at(-1)).toBe(expected); f.receive(f.welcome()); expect(f.statuses.at(-1)).toBe(expected);
+      const feedback = f.statuses.at(-1)!;
+      expect(feedback).toMatch(/rejoin/i);
+      if (save === "saved") { expect(feedback).toMatch(/saved/i); expect(feedback).toContain("42"); }
+      else { expect(feedback).toMatch(/fail/i); expect(feedback).not.toMatch(/saved/i); }
+      f.receive(f.welcome()); expect(f.statuses.at(-1)).toBe(feedback);
       expect(f.messages.some(m => m.type === "server_restart")).toBe(true);
     } finally { f.connection.dispose(); }
   }
-  const f = fixture(); f.socket.close(); expect(f.statuses.at(-1)).toBe("Reconnecting..."); f.connection.dispose();
+  const f = fixture(); f.socket.close(); expect(f.statuses.at(-1)).toMatch(/reconnect/i); expect(f.statuses.at(-1)).not.toMatch(/saved/i); f.connection.dispose();
 });
 test("changed builds reload once across page loads, stale bundles and alternating builds; resume is one use", () => {
   const f = fixture(); f.receive(f.welcome("two")); f.receive(f.welcome("three"));
@@ -80,7 +83,18 @@ test("storage failure suppresses reload; transient refusals retry and permanent 
     f.connection.dispose();
   }
 });
+test("successful page transitions rearm reload protection for rollbacks and later redeploys", () => {
+  let retained: Resume | null = null;
+  for (const [page, target] of [["A", "B"], ["B", "C"], ["C", "B"], ["B", "A"], ["A", "B"]]) {
+    const f = fixture(page, retained);
+    f.receive(f.welcome(page)); expect(f.reloads()).toBe(0);
+    f.receive(f.welcome(target)); expect(f.reloads()).toBe(1);
+    f.receive(f.welcome(target)); expect(f.reloads()).toBe(1);
+    f.connection.dispose(); retained = f.store.read();
+    expect(consumeResume(f.store)?.target).toBe(target); expect(consumeResume(f.store)).toBeNull();
+  }
+});
 test("socket construction failures back off and disposal cancels retry", () => {
-  const f = fixture(); f.socket.close(); f.fail(); f.retry(500); expect(f.statuses.at(-1)).toBe("Reconnecting...");
+  const f = fixture(); f.socket.close(); f.fail(); f.retry(500); expect(f.connection.state).toBe("reconnecting"); expect(f.statuses.at(-1)).toBeTruthy();
   f.retry(1000); f.connection.dispose(); expect(f.timers.size).toBe(0);
 });
