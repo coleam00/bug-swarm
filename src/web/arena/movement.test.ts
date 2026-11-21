@@ -42,6 +42,29 @@ test("remote interpolation runs 100ms behind, takes shortest angle, clamps gaps,
   interpolation.push({ ...snapshot(4, 0), players: [] }, 200); expect(interpolation.players(200)).toHaveLength(0);
   interpolation.clear(); expect(interpolation.players(300)).toHaveLength(0);
 });
+test("arriving shots and bugs stay on the delayed timeline without reversing as history arrives", () => {
+  const interpolation = new Interpolation(), p = player();
+  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, players: [p], events: [],
+    shots: tick < 2 ? [] : [{ id: 1, owner: p.id, life: 1, born: 50, x: 100 + (tick - 2) * 45, y: 100, vx: 900, vy: 0 }],
+    bugs: tick < 2 ? [] : [{ id: 2, kind: "crawler", x: 100 + (tick - 2) * 7, y: 100, vx: 140, vy: 0 }] });
+  const positions: number[] = [];
+  for (let tick = 1; tick <= 6; tick++) {
+    interpolation.push(snapshot(tick), tick * 50);
+    for (const now of [tick * 50, tick * 50 + 25]) {
+      const shots = interpolation.entities("shots", now), bugs = interpolation.entities("bugs", now);
+      if (tick < 4) { expect(shots).toHaveLength(0); expect(bugs).toHaveLength(0); }
+      else {
+        expect(shots[0]!.x).toBeCloseTo(100 + (tick - 4 + (now % 50) / 50) * 45);
+        expect(bugs[0]!.x).toBeCloseTo(100 + (tick - 4 + (now % 50) / 50) * 7);
+        positions.push(shots[0]!.x);
+      }
+    }
+  }
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  interpolation.push({ ...snapshot(7), shots: [], bugs: [] }, 350);
+  expect(interpolation.entities("shots", 350)).toHaveLength(0); expect(interpolation.entities("bugs", 350)).toHaveLength(0);
+  interpolation.clear(); expect(interpolation.entities("shots", 1000)).toHaveLength(0);
+});
 test("camera follows and stops at all world edges in desktop and phone viewports", () => {
   expect(cameraFor(1200, 1200, 1000, 800)).toEqual({ x: 700, y: 800 });
   expect(cameraFor(0, 0, 390, 844)).toEqual({ x: 0, y: 0 });

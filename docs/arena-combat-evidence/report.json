@@ -1,86 +1,75 @@
 {
-  "origin": "http://127.0.0.1:52527",
+  "origin": "http://127.0.0.1:54916",
   "errors": [],
   "samples": {
     "portrait": {
       "frame": {
-        "fps": "60.0",
-        "frameMs": "0.270",
+        "fps": "50.5",
+        "frameMs": "0.524",
         "players": "12",
-        "x": "1868.33",
-        "y": "2320.55"
+        "x": "1039.40",
+        "y": "1520.50"
       },
       "overflow": false,
       "errors": [],
       "players": 12,
       "own": {
-        "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+        "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
         "name": "Pilot-B",
         "team": "spaces",
-        "x": 1868.332,
-        "y": 2320.555,
-        "vx": 0,
-        "vy": 0,
+        "x": 1066.069,
+        "y": 1502.723,
+        "vx": 133.359,
+        "vy": -88.906,
         "facing": -2.356,
         "life": 1,
-        "hits": 0,
-        "heat": 1,
+        "hits": 3,
+        "heat": 6,
         "overheatUntil": 0,
-        "nextShotAt": 17566.667,
-        "immuneUntil": 18400,
-        "streak": 1,
-        "points": 110,
-        "score": 11,
-        "kills": 1,
+        "nextShotAt": 1350,
+        "immuneUntil": 1050,
+        "streak": 0,
+        "points": 0,
+        "score": 0,
+        "kills": 0,
         "startedTick": 1,
         "touch": true,
-        "ackSeq": 354,
-        "result": {
-          "v": 1,
-          "type": "life_over",
-          "playerId": "4179d394-d3d4-4e7e-82f3-634fc5374733",
-          "life": 1,
-          "score": 11,
-          "kills": 1,
-          "seconds": 17.4,
-          "touch": true,
-          "save": "saved"
-        }
+        "ackSeq": 24
       }
     },
     "landscape": {
       "frame": {
         "fps": "60.0",
-        "frameMs": "0.182",
+        "frameMs": "0.277",
         "players": "12",
-        "x": "75.00",
-        "y": "2325.00"
+        "x": "1130.48",
+        "y": "1469.41"
       },
       "overflow": false,
       "errors": [],
       "players": 12,
       "own": {
-        "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+        "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
         "name": "Pilot-B",
         "team": "spaces",
-        "x": 75,
-        "y": 2325,
-        "vx": 0,
-        "vy": 0,
-        "facing": -2.356,
-        "life": 2,
+        "x": 1147.776,
+        "y": 1460.758,
+        "vx": 115.445,
+        "vy": -57.722,
+        "facing": -0.644,
+        "life": 1,
         "hits": 3,
-        "heat": 0,
+        "heat": 4,
         "overheatUntil": 0,
-        "nextShotAt": 20250,
-        "immuneUntil": 20500,
+        "nextShotAt": 3216.667,
+        "immuneUntil": 1050,
         "streak": 0,
         "points": 0,
         "score": 0,
         "kills": 0,
-        "startedTick": 390,
+        "startedTick": 1,
         "touch": true,
-        "ackSeq": 368
+        "ackSeq": 63
       }
     }
   },
@@ -88,11 +77,11 @@
   "twinInput": {
     "v": 1,
     "type": "input",
-    "seq": 354,
+    "seq": 21,
     "life": 1,
     "touch": true,
     "move": {
-      "x": -0.7408833006291284,
+      "x": 0.7408833006291284,
       "y": -0.493922200419419
     },
     "aim": -2.356194490192345,
@@ -106,22 +95,22 @@
     {
       "v": 1,
       "type": "life_over",
-      "playerId": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+      "playerId": "77b933bb-c759-4543-b226-6801efd1d864",
       "life": 1,
-      "score": 22,
-      "kills": 2,
-      "seconds": 25.5,
+      "score": 33,
+      "kills": 3,
+      "seconds": 10.2,
       "touch": false,
       "save": "pending"
     },
     {
       "v": 1,
       "type": "life_over",
-      "playerId": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+      "playerId": "77b933bb-c759-4543-b226-6801efd1d864",
       "life": 1,
-      "score": 22,
-      "kills": 2,
-      "seconds": 25.5,
+      "score": 33,
+      "kills": 3,
+      "seconds": 10.2,
       "touch": false,
       "save": "saved"
     }
@@ -130,28 +119,28 @@
     "requested": 10,
     "joins": 10,
     "arenas": [
-      "02f22f57-98ac-48d0-b3df-aa1b6726455b"
+      "ab0314d6-dc57-4ed2-a072-541685a8feac"
     ],
     "arenaCount": 1,
     "sent": 7860,
     "received": 7925,
     "policy": "aimer",
     "messagesPerSecond": {
-      "sent": 196.4854836524678,
-      "received": 198.1103636063368
+      "sent": 196.48148112919986,
+      "received": 198.10632798332173
     },
     "errors": 0,
     "tick": {
       "windowMs": 60000,
-      "samples": 788,
-      "p50Ms": 0.34970000000612345,
-      "p95Ms": 0.8139999999998508
+      "samples": 789,
+      "p50Ms": 0.34930000000031214,
+      "p95Ms": 0.7351999999991676
     },
     "schedulerLateness": {
       "windowMs": 60000,
-      "samples": 788,
-      "p50Ms": 0.9213999999992666,
-      "p95Ms": 1.7619999999997162
+      "samples": 789,
+      "p50Ms": 0.980199999999968,
+      "p95Ms": 1.6988000000001193
     }
   },
   "fullRoomFrames": [
@@ -159,23 +148,23 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.475",
+          "frameMs": "0.452",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
@@ -188,30 +177,30 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 752
+          "ackSeq": 475
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.441",
+          "frameMs": "0.442",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
@@ -223,7 +212,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 540
+          "ackSeq": 290
         }
       }
     },
@@ -231,28 +220,28 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.362",
+          "frameMs": "0.457",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 42700,
+          "nextShotAt": 42650,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -260,34 +249,34 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 773
+          "ackSeq": 494
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.407",
+          "frameMs": "0.411",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 42700,
+          "nextShotAt": 42650,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -295,7 +284,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 560
+          "ackSeq": 309
         }
       }
     },
@@ -303,23 +292,23 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.377",
+          "frameMs": "0.368",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
@@ -332,30 +321,30 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 792
+          "ackSeq": 515
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.370",
+          "frameMs": "0.318",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
@@ -367,7 +356,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 580
+          "ackSeq": 330
         }
       }
     },
@@ -375,23 +364,23 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.413",
+          "frameMs": "0.432",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
@@ -404,30 +393,30 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 812
+          "ackSeq": 535
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.443",
+          "frameMs": "0.372",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
@@ -439,7 +428,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 600
+          "ackSeq": 350
         }
       }
     },
@@ -447,28 +436,28 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.358",
+          "frameMs": "0.338",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 45650,
+          "nextShotAt": 45600,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -476,34 +465,34 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 833
+          "ackSeq": 554
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.369",
+          "frameMs": "0.335",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 45650,
+          "nextShotAt": 45600,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -511,7 +500,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 620
+          "ackSeq": 369
         }
       }
     },
@@ -521,21 +510,21 @@
           "fps": "60.0",
           "frameMs": "0.297",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
@@ -548,30 +537,30 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 852
+          "ackSeq": 575
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.303",
+          "frameMs": "0.298",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
@@ -583,7 +572,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 640
+          "ackSeq": 390
         }
       }
     },
@@ -591,28 +580,28 @@
       "desktop": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.362",
+          "frameMs": "0.383",
           "players": "20",
-          "x": "2143.27",
-          "y": "2190.21"
+          "x": "105.67",
+          "y": "219.49"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "a00d6e87-5bc2-4d2f-b39c-4614fcdc78bc",
+          "id": "77b933bb-c759-4543-b226-6801efd1d864",
           "name": "Pilot-A",
           "team": "tabs",
-          "x": 2143.272,
-          "y": 2190.207,
+          "x": 105.668,
+          "y": 219.494,
           "vx": 0,
           "vy": 0,
-          "facing": 0.677,
+          "facing": -1.49,
           "life": 3,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 47600,
+          "nextShotAt": 47550,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -620,34 +609,34 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 873
+          "ackSeq": 594
         }
       },
       "phone": {
         "frame": {
           "fps": "60.0",
-          "frameMs": "0.373",
+          "frameMs": "0.313",
           "players": "20",
-          "x": "2299.59",
-          "y": "1983.46"
+          "x": "118.14",
+          "y": "313.21"
         },
         "overflow": false,
         "errors": [],
         "players": 20,
         "own": {
-          "id": "4179d394-d3d4-4e7e-82f3-634fc5374733",
+          "id": "9540dd5e-cec8-4f7e-8b98-12ff8dda7130",
           "name": "Pilot-B",
           "team": "spaces",
-          "x": 2299.593,
-          "y": 1983.458,
+          "x": 118.137,
+          "y": 313.214,
           "vx": 0,
           "vy": 0,
-          "facing": -2.356,
-          "life": 3,
+          "facing": -0.644,
+          "life": 2,
           "hits": 3,
           "heat": 0,
           "overheatUntil": 0,
-          "nextShotAt": 47600,
+          "nextShotAt": 47550,
           "immuneUntil": 40500,
           "streak": 0,
           "points": 0,
@@ -655,7 +644,7 @@
           "kills": 0,
           "startedTick": 790,
           "touch": false,
-          "ackSeq": 660
+          "ackSeq": 409
         }
       }
     }
@@ -664,28 +653,28 @@
     "requested": 18,
     "joins": 18,
     "arenas": [
-      "02f22f57-98ac-48d0-b3df-aa1b6726455b"
+      "ab0314d6-dc57-4ed2-a072-541685a8feac"
     ],
     "arenaCount": 1,
-    "sent": 6373,
-    "received": 6561,
+    "sent": 6354,
+    "received": 6543,
     "policy": "aimer",
     "messagesPerSecond": {
-      "sent": 353.9926078033856,
-      "received": 364.4351953237114
+      "sent": 352.96541135060664,
+      "received": 363.4643825097607
     },
     "errors": 0,
     "tick": {
       "windowMs": 60000,
-      "samples": 1143,
-      "p50Ms": 0.4256999999997788,
-      "p95Ms": 1.012800000004063
+      "samples": 1142,
+      "p50Ms": 0.42740000000048894,
+      "p95Ms": 1.068200000001525
     },
     "schedulerLateness": {
       "windowMs": 60000,
-      "samples": 1143,
-      "p50Ms": 0.9500000000007276,
-      "p95Ms": 1.724500000000262
+      "samples": 1142,
+      "p50Ms": 1.0103999999992084,
+      "p95Ms": 1.9120999999995547
     }
   },
   "legacyButtons": [
@@ -699,102 +688,102 @@
   "fixture": [
     {
       "fps": "60.0",
-      "frameMs": "0.977"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.410"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.703"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.453"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.497"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.007"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.030"
-    }
-  ],
-  "fixturePortrait": [
-    {
-      "fps": "60.0",
-      "frameMs": "1.175"
-    },
-    {
-      "fps": "60.0",
-      "frameMs": "1.125"
-    },
-    {
-      "fps": "60.0",
       "frameMs": "1.068"
     },
     {
       "fps": "60.0",
-      "frameMs": "0.947"
+      "frameMs": "1.092"
     },
     {
       "fps": "60.0",
-      "frameMs": "1.028"
+      "frameMs": "1.047"
     },
     {
       "fps": "60.0",
-      "frameMs": "0.893"
+      "frameMs": "0.978"
     },
     {
       "fps": "60.0",
-      "frameMs": "0.907"
+      "frameMs": "1.040"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "1.115"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "1.160"
+    }
+  ],
+  "fixturePortrait": [
+    {
+      "fps": "59.0",
+      "frameMs": "0.958"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.755"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.860"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.920"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.818"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.828"
+    },
+    {
+      "fps": "60.0",
+      "frameMs": "0.762"
     }
   ],
   "load": {
     "requested": 200,
     "joins": 200,
     "arenas": [
-      "7badbf56-6fc1-44d3-b09b-930d43d6596d",
-      "797a624a-1f61-45a0-b8b0-f9402662f0a8",
-      "ae6979ba-11de-4707-8340-285efb393301",
-      "1b343b02-8c13-4aa3-810f-4103fb99c827",
-      "3cb2168c-a0bd-45c4-a5c0-edf3cf14bda1",
-      "eb4544a0-3d66-480d-b14b-b3617a2f489f",
-      "989e9bde-ceb2-4bbb-ba06-cd0aea7c67b4",
-      "98f388be-fd6e-4369-85b8-e0d0ce3c07f1",
-      "eefed533-3d45-4133-b308-fcb11f424bfa",
-      "deca34de-5b87-4abe-8778-c11a66e725f4"
+      "2586fe0e-5e9e-41c6-9193-4c689e75fbb4",
+      "2c8a21f6-225c-40b8-bb21-d4801ce7dd6c",
+      "e1880b86-5640-4650-a2bc-44e941fd304e",
+      "e5bae834-c10b-4117-9b1a-5193c6de34f9",
+      "1ad62afe-24c2-400f-95ad-1d7df2520860",
+      "45ee7574-cd93-49d8-b09b-8d050c2bce88",
+      "52cd6f8a-97e7-4f70-9f0d-4edf5dbf6710",
+      "56867501-03a1-4838-9048-774d99cd3f4d",
+      "9ca52c78-b5d8-4642-9006-e55c84497cc7",
+      "b567988d-0974-437f-aa50-efaa834faf0b"
     ],
     "arenaCount": 10,
-    "sent": 234274,
-    "received": 438922,
+    "sent": 458026,
+    "received": 474100,
     "policy": "aimer",
     "messagesPerSecond": {
-      "sent": 1935.1674289308078,
-      "received": 3625.615980608894
+      "sent": 3816.6366609254073,
+      "received": 3950.5780041847747
     },
     "errors": 0,
     "tick": {
       "windowMs": 60000,
-      "samples": 11776,
-      "p50Ms": 0.7299000000057276,
-      "p95Ms": 1.3427000000083353
+      "samples": 11801,
+      "p50Ms": 0.6952999999921303,
+      "p95Ms": 1.1632000000099652
     },
     "schedulerLateness": {
       "windowMs": 60000,
-      "samples": 11776,
-      "p50Ms": 0.8861000000033528,
-      "p95Ms": 1.9695000000065193
+      "samples": 11801,
+      "p50Ms": 0.8539000000164378,
+      "p95Ms": 1.693200000008801
     }
   },
   "persistence": {
-    "lives": 368,
-    "finished": 368
+    "lives": 233,
+    "finished": 233
   }
 }

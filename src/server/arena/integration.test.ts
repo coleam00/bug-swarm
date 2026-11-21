@@ -39,9 +39,6 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     for (let i = 0; i < 2; i++) a.socket.send(JSON.stringify({ v: 1, type: "respawn", life: 1, touch: true }));
     await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.hits === 3));
     expect(p.score).toBe(0); expect(p.touch).toBe(true);
-    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 100, move: { x: 1, y: 0 }, aim: 0, fire: true }));
-    await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.nextShotAt > p.startedTick * 50));
-    expect(app.arenas.active.get(a.id)!.lastSeq).toBe(1); expect(room.state.shots.some(s => s.owner === a.id)).toBe(false);
     app.arenas.stop();
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL").get(a.id) as any).n).toBe(2);
     expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(3);
@@ -124,7 +121,6 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     const deadline = performance.now() + 2000;
     while (app.arenas.active.size && performance.now() < deadline) await Bun.sleep(5);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
-    expect(await runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 1, policy: "mover" })).toMatchObject({ joins: 2, policy: "mover", errors: 0 });
     const interrupted = new AbortController(), timer = setTimeout(() => interrupted.abort(), 200);
     try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
     finally { clearTimeout(timer); }

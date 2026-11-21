@@ -22,6 +22,8 @@ export function skillMatrix() {
     const seeds = Array.from({ length: 20 }, (_, seed) => skillSeed(seed, policy)), lives = seeds.flatMap(s => s.lives);
     return { policy, medianScore: median(lives.map(l => l.score)), medianSeconds: median(lives.map(l => l.seconds)), lives: lives.length,
       deaths: lives.filter(l => !l.cutoff).length, cutoffs: lives.filter(l => l.cutoff).length,
-      seeds: seeds.map(s => ({ seed: s.seed, lives: s.lives.length, medianScore: median(s.lives.map(l => l.score)), medianSeconds: median(s.lives.map(l => l.seconds)) })) };
+      seeds: seeds.map(s => ({ seed: s.seed, lives: s.lives.length, players: new Set(s.lives.map(l => l.playerId)).size,
+        playerSeconds: s.lives.reduce((sum, l) => sum + l.seconds, 0),
+        medianScore: median(s.lives.map(l => l.score)), medianSeconds: median(s.lives.map(l => l.seconds)) })) };
   });
 }

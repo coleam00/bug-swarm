@@ -1,0 +1,187 @@
+[
+  {
+    "name": "release cooldown",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "arrival timeline",
+    "tests": [
+      "src/web/arena/movement.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "mouse world camera",
+    "tests": [
+      "src/web/arena/engine.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "mouse held fire",
+    "tests": [
+      "src/web/arena/engine.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "right pointer forwarding",
+    "tests": [
+      "src/web/arena/engine.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "friendly fire",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "nearest crawler",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "living wave population",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "edge spawning",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "wire wave and bugs",
+    "tests": [
+      "src/server/arena/rooms.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "safe respawn",
+    "tests": [
+      "src/shared/arena/combat.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "life duration",
+    "tests": [
+      "src/shared/arena/combat.test.ts",
+      "src/server/arena/lives.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "overlay tap",
+    "tests": [
+      "src/web/arena/entry.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "matrix two players",
+    "tests": [
+      "src/shared/arena/skill.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "matrix repeated seed",
+    "tests": [
+      "src/shared/arena/skill.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "matrix 120 seconds",
+    "tests": [
+      "src/shared/arena/skill.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "mover dodging",
+    "tests": [
+      "src/shared/arena/policies/index.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "aimer retreat",
+    "tests": [
+      "src/shared/arena/policies/index.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "runner policy dispatch",
+    "tests": [
+      "scripts/bots.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "heat bar",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "heat warning",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "immunity flash",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  },
+  {
+    "name": "combat HUD",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "exit": 1
+  }
+]

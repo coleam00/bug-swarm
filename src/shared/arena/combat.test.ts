@@ -3,10 +3,33 @@ import { createArena, joinPlayer, stepArena, respawnPlayer, endLife } from "./si
 import { fireAndAdvance, circleEntry } from "./combat";
 import { crawler } from "./bugs/crawler";
 import { spawnBug, safeSpawn } from "./spawn";
-import { CRAWLER_SPEED, MAX_BUGS, MUZZLE_OFFSET, SHOT_SPEED, STEP_MS } from "./constants";
+import { CRAWLER_SPEED, MAX_BUGS, MAX_SHOTS, MAX_PLAYERS, MUZZLE_OFFSET, SHOT_RATE, SHOT_SPEED, STEP_MS } from "./constants";
+import { parseServer, serializeSnapshot } from "./protocol";
 import { neutralInput, type Bug } from "./types";
 function fixture() { const a = createArena(21), p = joinPlayer(a, { id: "a", name: "Robot", team: "tabs" })!; p.x = p.y = 1200; return { a, p }; }
 const bug = (id: number, x: number, y = 1200): Bug => ({ id, kind: "crawler", x, y, vx: 0, vy: 0 });
+test("release/repress preserves the six-per-second cooldown and full-room snapshot bounds", () => {
+  const a = createArena(1), inputs = new Map();
+  for (let i = 0; i < MAX_PLAYERS; i++) {
+    const p = joinPlayer(a, { id: crypto.randomUUID(), name: `bot-${i}`, team: "tabs" })!;
+    p.x = p.y = 1200;
+  }
+  const births: number[] = [], owner = a.players.keys().next().value!;
+  for (let time = 0; time < 1000; time += STEP_MS) {
+    for (const p of a.players.values()) inputs.set(p.id, { ...neutralInput(), fire: time % 100 === 0 });
+    const next = a.nextId; fireAndAdvance(a, inputs, time); a.tick++;
+    for (const shot of a.shots) if (shot.owner === owner && shot.id >= next) births.push(shot.born);
+    expect(a.shots.length).toBeLessThanOrEqual(MAX_SHOTS);
+    expect(parseServer(serializeSnapshot({ v: 1, type: "snapshot", arenaId: "room", tick: a.tick, wave: a.wave,
+      bugs: a.bugs, shots: a.shots, events: a.events, players: [...a.players.values()].map(p => ({ ...p, ackSeq: 0 })) }))).not.toBeNull();
+  }
+  expect(births.length).toBeLessThanOrEqual(SHOT_RATE);
+  for (let i = 1; i < births.length; i++) expect(births[i]! - births[i - 1]!).toBeGreaterThanOrEqual(1000 / SHOT_RATE - 1e-8);
+  // A long release makes the next shot ready, without accumulating a burst.
+  for (let time = 1000; time < 2000; time += STEP_MS) fireAndAdvance(a, new Map(), time);
+  const next = a.nextId; fireAndAdvance(a, new Map([[owner, { ...neutralInput(), fire: true }]]), 2000);
+  expect(a.nextId - next).toBe(1); expect(a.shots[0]!.born).toBe(2000);
+});
 test("shots start at the barrel, travel at 900/s, keep fractional 6/s cadence and expire once", () => {
   const { a, p } = fixture(), inputs = new Map([[p.id, { ...neutralInput(), fire: true }]]);
   fireAndAdvance(a, inputs, 0); expect(a.shots[0]!.x).toBe(1200 + MUZZLE_OFFSET + SHOT_SPEED * 0.05);
@@ -18,10 +41,12 @@ test("shots start at the barrel, travel at 900/s, keep fractional 6/s cadence an
   expect(a.shots).toHaveLength(0); p.streak = 9; fireAndAdvance(a, new Map(), 2000); expect(p.streak).toBe(9);
 });
 test("swept collision selects first entry, breaks ties by id, crosses moving targets and passes players", () => {
-  const { a, p } = fixture(); joinPlayer(a, { id: "friend", name: "Friend", team: "spaces" })!.x = 1240;
+  const { a, p } = fixture(), teammate = joinPlayer(a, { id: "friend", name: "Friend", team: "spaces" })!;
+  teammate.x = 1240; teammate.y = p.y;
   a.bugs.push(bug(9, 1260), bug(8, 1250), bug(7, 1250));
   fireAndAdvance(a, new Map([[p.id, { ...neutralInput(), fire: true }]]), 0);
   expect(a.bugs.map(b => b.id)).toEqual([9, 8]); expect(p.kills).toBe(1); expect(p.score).toBe(11); expect(a.shots).toHaveLength(0);
+  expect(teammate.hits).toBe(3); expect(a.bugs.some(b => b.id === 7)).toBe(false);
   expect(circleEntry(-100, 0, 200, 0, 15)).toBeCloseTo(0.425);
   expect(circleEntry(-100, 30, 200, -60, 15)).not.toBeNull();
   a.bugs = [{ ...bug(11, 1250, 1250), vy: -1000 }]; p.nextShotAt = 50;
@@ -54,14 +79,21 @@ test("held stream reaches 18th shot, locks for 1.5s, cools during lockout and re
 test("crawler targets nearest living player with stable ties; contact persists, immunity gates three-hit death", () => {
   const { a, p } = fixture(), q = joinPlayer(a, { id: "b", name: "Other", team: "tabs" })!;
   q.x = 1400; q.y = 1200; const b = bug(4, 1300); crawler.move(b, [q, p]); expect(b.vx).toBe(-CRAWLER_SPEED);
+  // Farther "a" must not override nearer "b" simply because its id sorts first.
+  p.x = 900; crawler.move(b, [q, p]); expect(b.vx).toBe(CRAWLER_SPEED); expect(b.vy).toBe(0); p.x = 1200;
   p.hits = 0; crawler.move(b, [p, q]); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3;
   a.tick = 21; p.immuneUntil = 0; a.bugs = [bug(5, 1200), bug(6, 1200)];
   stepArena(a, new Map()); expect(p.hits).toBe(2); expect(a.bugs).toHaveLength(2); expect(p.score).toBe(0);
   for (let i = 0; i < 19; i++) stepArena(a, new Map()); expect(p.hits).toBe(2);
   stepArena(a, new Map()); expect(p.hits).toBe(1);
   for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(p.hits).toBe(0); expect(a.ended).toHaveLength(1);
+  expect(a.ended[0]!.seconds).toBe((a.tick - p.startedTick) * STEP_MS / 1000);
   expect(endLife(a, p.id)).toBeNull(); expect(respawnPlayer(a, p.id, 9)).toBeNull();
-  const old = p.life; expect(respawnPlayer(a, p.id, old)).toBe(p); expect(p.life).toBe(old + 1); expect(p.hits).toBe(3); expect(p.heat).toBe(0);
+  const death = { x: p.x, y: p.y }, old = p.life;
+  a.bugs = [bug(1000, death.x, death.y)];
+  expect(respawnPlayer(a, p.id, old)).toBe(p); expect(p.life).toBe(old + 1); expect(p.hits).toBe(3); expect(p.heat).toBe(0);
+  expect(Math.hypot(p.x - death.x, p.y - death.y)).toBeGreaterThanOrEqual(300);
+  expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThanOrEqual(28);
   expect(respawnPlayer(a, p.id, old + 1)).toBeNull(); expect(p.immuneUntil).toBe(a.tick * STEP_MS + 1000);
 });
 test("waves start at first step and every 30s, scale with living count, trickle, cap and keep spawn clearance", () => {
@@ -71,9 +103,19 @@ test("waves start at first step and every 30s, scale with living count, trickle,
   stepArena(a, new Map()); expect(a.wave).toBe(2); expect(a.bugs).toHaveLength(12);
   a.bugs = []; a.spawnCredit = 0.99; stepArena(a, new Map()); expect(a.bugs).toHaveLength(1);
   a.bugs = []; for (let i = 0; i < 151; i++) spawnBug(a); expect(a.bugs).toHaveLength(MAX_BUGS);
+  const edge = (b: Bug) => b.x === 0 || b.x === 2400 || b.y === 0 || b.y === 2400;
+  expect(a.bugs.some(edge)).toBe(true); expect(a.bugs.some(b => !edge(b))).toBe(true);
   expect(a.bugs.every(b => Math.hypot(b.x - p.x, b.y - p.y) >= 500)).toBe(true);
   const safe = safeSpawn(a); expect(Number.isFinite(safe.x)).toBe(true);
   p.hits = 0; a.tick = 1200; a.bugs = []; a.spawnCredit = 0.9; stepArena(a, new Map()); expect(a.wave).toBe(3); expect(a.bugs).toHaveLength(0); expect(a.spawnCredit).toBe(0);
+  const scaled = createArena(5);
+  for (let i = 0; i < 3; i++) {
+    const q = joinPlayer(scaled, { id: String(i), name: `bot-${i}`, team: "tabs" })!;
+    q.x = 900 + i * 300; q.y = 1200; if (i === 2) q.hits = 0;
+  }
+  stepArena(scaled, new Map()); expect(scaled.bugs).toHaveLength((6 + 3) * 2);
+  scaled.tick = 600; scaled.bugs = []; scaled.spawnCredit = 0;
+  stepArena(scaled, new Map()); expect(scaled.wave).toBe(2); expect(scaled.bugs).toHaveLength((6 + 3 * 2) * 2);
 });
 test("kills precede contact; terminal scores freeze and cancel shots while dead inputs do nothing", () => {
   const { a, p } = fixture(); a.tick = 21; p.immuneUntil = 0; p.hits = 1;

@@ -14,7 +14,9 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
     if (!p.hits) continue;
     const firing = inputs.get(p.id)?.fire ?? false;
     if (!firing) {
-      p.heat = Math.max(0, p.heat - HEAT_COOLING * STEP_MS / 1000); p.nextShotAt = end; continue;
+      p.heat = Math.max(0, p.heat - HEAT_COOLING * STEP_MS / 1000);
+      // Release may discard overdue fire, but cannot shorten a shot's cooldown.
+      p.nextShotAt = Math.max(p.nextShotAt, end); continue;
     }
     const lockedUntil = Math.max(time, Math.min(end, p.overheatUntil));
     p.heat = Math.max(0, p.heat - HEAT_COOLING * (lockedUntil - time) / 1000);

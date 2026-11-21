@@ -14,3 +14,13 @@ test("mover aims along motion; aimer leads available targets, fires only in rang
   expect(intercept(400, 0, 1000, 0)).toBeNull(); expect(intercept(400, 0, 0, 0)).toBeCloseTo(400 / 900);
   expect(observation).toEqual(before);
 });
+test("mover dodges a nearby side threat while aimer retreats inside its desired separation", () => {
+  const waypoint = () => ({ ...createPolicy(1), steps: 1, x: 1800, y: 1200 });
+  const empty = { players: [player], bugs: [] };
+  expect(policyInput("mover", empty, player, waypoint()).move.y).toBe(0);
+  const dodge = policyInput("mover", { players: [player], bugs: [{ id: 1, kind: "crawler", x: 1200, y: 1250, vx: 0, vy: 0 }] }, player, waypoint());
+  expect(dodge.move.y).toBeLessThan(0); expect(dodge.fire).toBe(true); expect(dodge.aim).toBe(Math.atan2(dodge.move.y, dodge.move.x));
+  const target = { id: 1, kind: "crawler" as const, x: 1400, y: 1200, vx: 0, vy: 0 };
+  expect(policyInput("aimer", { players: [player], bugs: [target] }, player, createPolicy(1)).move.x).toBeLessThan(0);
+  expect(policyInput("aimer", { players: [player], bugs: [{ ...target, x: 1900 }] }, player, createPolicy(1)).move.x).toBeGreaterThan(0);
+});

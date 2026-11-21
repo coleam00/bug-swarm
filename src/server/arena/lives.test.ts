@@ -48,10 +48,12 @@ test("death, stale inputs, duplicate respawns, touch, disconnect and repeated sh
   try {
     send({ type: "hello", playerId: id, name: "Pilot", team: "tabs", touch: false, buildId: "test" });
     const room = c.room!, p = room.state.players.get(id)!;
+    for (let i = 0; i < 25; i++) manager.tick(room);
     send({ type: "input", life: 1, touch: true, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true });
     p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 99, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
     manager.tick(room); expect(p.hits).toBe(0); expect(messages.filter(m => m.type === "life_over")).toHaveLength(1);
-    manager.writer.flush(); expect(messages.at(-1)).toMatchObject({ type: "life_over", save: "saved", touch: true });
+    manager.writer.flush(); expect(messages.at(-1)).toMatchObject({ type: "life_over", save: "saved", touch: true, seconds: 1.3 });
+    expect(getRun(db, c.record!.runId)!.seconds).toBe(1);
     send({ type: "respawn", life: 1, touch: true }); send({ type: "respawn", life: 1, touch: false }); expect(p.life).toBe(2);
     send({ type: "input", life: 1, touch: false, seq: 10, move: { x: 1, y: 0 }, aim: 0, fire: true }); expect(c.pending).toBeUndefined();
     expect(c.held.fire).toBe(false); expect(p.score).toBe(0); expect(p.touch).toBe(true);

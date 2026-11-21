@@ -1,6 +1,6 @@
 import { INTERPOLATION_MS, MAX_SNAPSHOTS, STEP_MS } from "../../shared/arena/constants";
 import type { Snapshot } from "../../shared/arena/protocol";
-import type { Player } from "../../shared/arena/types";
+import type { Player, Bug, Shot } from "../../shared/arena/types";
 export class Interpolation {
   private samples: { snapshot: Snapshot; at: number }[] = [];
   clear() { this.samples = []; }
@@ -30,9 +30,12 @@ export class Interpolation {
     let a = this.samples[0]!, b = a;
     for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
     const f = a === b ? 0 : Math.max(0, Math.min(1, (target - a.snapshot.tick) / (b.snapshot.tick - a.snapshot.tick)));
-    return latest.snapshot[kind].map(current => {
+    const visible: (Bug | Shot)[] = [];
+    for (const current of latest.snapshot[kind]) {
       const p = a.snapshot[kind].find(p => p.id === current.id), q = b.snapshot[kind].find(p => p.id === current.id);
-      return p && q ? { ...current, x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f } : current;
-    }) as Snapshot[K];
+      // Publishing the latest position before history arrives would later rewind it.
+      if (p && q) visible.push({ ...current, x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f });
+    }
+    return visible as Snapshot[K];
   }
 }

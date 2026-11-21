@@ -20,7 +20,7 @@ globalThis.ResizeObserver = class { constructor(fn) { this.fn = fn; } observe() 
 globalThis.window = Object.assign(new EventTarget(), { devicePixelRatio: 1 });
 globalThis.document = new EventTarget();
 const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight: 844, dataset: {}, getContext: () => ({ setTransform() {} }),
-  getBoundingClientRect: () => ({ left: 0, top: 0 }),
+  getBoundingClientRect: () => ({ left: 20, top: 30 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
 mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events() {} draw(width, height, camera, players, local) {
   draws.push(structuredClone({ width, height, camera, players, local }));
@@ -33,6 +33,7 @@ const { mountArena } = await import(${moduleUrl("engine.ts")});
 const identity = { playerId: crypto.randomUUID(), name: "Robot", team: "tabs" };
 const key = (code, type = "keydown", repeat = false) => { const event = new Event(type); event.code = code; event.repeat = repeat; window.dispatchEvent(event); };
 const pointer = (type, id, x, y) => canvas.dispatchEvent(Object.assign(new Event(type), { pointerType: "touch", pointerId: id, clientX: x, clientY: y }));
+const mouse = (type, x, y) => (type === "pointerup" ? window : canvas).dispatchEvent(Object.assign(new Event(type), { pointerType: "mouse", pointerId: 9, button: 0, clientX: x + 20, clientY: y + 30 }));
 const send = () => timers.values().next().value();
 const frame = at => { clock = at; const [id, fn] = frames.entries().next().value; frames.delete(id); fn(clock); return draws.at(-1); };
 for (let cycle = 0; cycle < 2; cycle++) {
@@ -47,6 +48,12 @@ for (let cycle = 0; cycle < 2; cycle++) {
   snapshot(1, 1200, 1000, 0);
   let draw = frame(base); assert.equal(draw.local.x, 1200); assert.deepEqual(draw.camera, { x: 1005, y: 778 });
   assert.equal(draw.players.find(p => p.id === remote.id).x, 1000);
+  mouse("pointermove", 295, 322); send();
+  assert.ok(Math.abs(inputs.at(-1).aim + Math.PI / 4) < 1e-8, "Mouse aim must include camera and canvas offsets");
+  assert.equal(inputs.at(-1).fire, false);
+  mouse("pointerdown", 295, 322); send(); assert.equal(inputs.at(-1).fire, true, "Left mouse fires through bindings");
+  key("Space"); mouse("pointerup", 295, 322); send(); assert.equal(inputs.at(-1).fire, true, "Space survives mouse release");
+  key("Space", "keyup"); send(); assert.equal(inputs.at(-1).fire, false);
   clock = base + 50; key("ArrowRight"); send();
   draw = frame(clock); assert.equal(draw.local.x, 1209, "Local input must predict before acknowledgement");
   assert.equal(draw.camera.x, 1014); key("ArrowRight", "keyup");
@@ -63,16 +70,30 @@ for (let cycle = 0; cycle < 2; cycle++) {
   assert.deepEqual(inputs.at(-1).move, { x: 1, y: 0 });
   pointer("pointerdown", 2, 350, 400); pointer("pointermove", 2, 300, 300); send();
   assert.deepEqual(inputs.at(-1).move, { x: 1, y: 0 });
+  assert.equal(inputs.at(-1).fire, true); assert.equal(inputs.at(-1).touch, true);
+  assert.ok(Math.abs(inputs.at(-1).aim - Math.atan2(-100, -50)) < 1e-8, "Right-thumb moves must reach the aim input");
+  assert.ok(captures.has(1) && captures.has(2), "Both pointers are captured independently");
+  pointer("pointermove", 2, 353, 402); send(); assert.equal(inputs.at(-1).fire, false, "Right dead zone stops fire without stopping movement");
+  assert.deepEqual(inputs.at(-1).move, { x: 1, y: 0 });
+  pointer("pointermove", 2, 400, 450); send(); assert.equal(inputs.at(-1).fire, true);
+  assert.ok(Math.abs(inputs.at(-1).aim - Math.PI / 4) < 1e-8);
   pointer("pointercancel", 1, 110, 400); pointer("pointermove", 1, 160, 400); send();
   assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 }); assert.equal(inputs.at(-1).fire, false, "Cancellation clears both sticks, including held touch fire");
   key("KeyD"); send(); assert.equal(inputs.at(-1).move.x, 1);
   window.dispatchEvent(new Event("blur")); send(); assert.equal(inputs.at(-1).move.x, 0);
+  snapshot(4, 50, 1020, inputs.at(-1).seq); draw = frame(clock + 50);
+  assert.equal(draw.camera.x, 0);
+  mouse("pointermove", 150, 400); send();
+  const firstAim = inputs.at(-1).aim;
+  assert.ok(Math.abs(firstAim - Math.atan2(-22, 100)) < 1e-8);
+  key("KeyD"); send(); key("KeyD", "keyup"); send();
+  assert.ok(Math.abs(inputs.at(-1).aim - Math.atan2(-22, 91)) < 1e-8, "Stationary cursor must be resampled after player movement");
   key("Space"); send();
   own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
-  snapshot(4, 1203, 1020, inputs.at(-1).seq); assert.equal(lifePanel.score, 34);
+  snapshot(6, 1203, 1020, inputs.at(-1).seq); assert.equal(lifePanel.score, 34);
   const deadCount = inputs.length; key("Space", "keydown", true); send(); assert.equal(inputs.length, deadCount, "Held input at death cannot respawn");
   key("KeyW"); assert.equal(inputs.at(-1).type, "respawn"); assert.equal(inputs.at(-1).life, 1);
-  own.hits = 3; own.life = 2; delete own.result; snapshot(5, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
+  own.hits = 3; own.life = 2; delete own.result; snapshot(7, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
   receive({ v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, save: "saved" }); assert.equal(lifePanel, null, "Late save cannot reopen previous life");
   key("Space", "keydown", true); key("KeyW", "keydown", true);
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
