@@ -1,9 +1,9 @@
-import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANCE, DASHER_DODGE_FORCE, PLAYER_RADIUS, HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH } from "../constants";
+import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANCE, DASHER_DODGE_FORCE, PLAYER_RADIUS, HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
-import type { Bug, Input, Player } from "../types";
+import type { Bug, Input, Player, Life } from "../types";
 export type Policy = "mover" | "aimer";
-export interface Observation { players: readonly Player[]; bugs: readonly Bug[] }
+export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[] }
 export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
@@ -13,7 +13,8 @@ export function intercept(dx: number, dy: number, vx: number, vy: number): numbe
   const t1 = (-b - Math.sqrt(d)) / (2 * a), t2 = (-b + Math.sqrt(d)) / (2 * a);
   const t = Math.min(t1 > 0 ? t1 : Infinity, t2 > 0 ? t2 : Infinity); return Number.isFinite(t) ? t : null;
 }
-export function policyInput(policy: Policy, observation: Observation, p: Player & { heat?: number }, state: PolicyState): Input {
+export function policyInput(policy: Policy, observation: Observation, p: Player & { heat?: number; status: Life["status"] }, state: PolicyState): Input {
+  if (p.status !== "active") return { move: { x: 0, y: 0 }, aim: p.facing, fire: false };
   let x = 0, y = 0, aim = p.facing, fire = policy === "mover";
   let nearest: Bug | undefined, distance = Infinity;
   for (const b of observation.bugs) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < distance || d === distance && b.id < nearest!.id) { nearest = b; distance = d; } }
@@ -40,6 +41,7 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
   }
   x += Math.max(0, (180 - p.x) / 90) - Math.max(0, (p.x - WORLD_WIDTH + 180) / 90);
   y += Math.max(0, (180 - p.y) / 90) - Math.max(0, (p.y - WORLD_HEIGHT + 180) / 90);
+  let dodging = false;
   if (policy === "aimer") {
     const committed = observation.bugs.find(b => b.id === state.dodgeId && (b.phase === "windup" || b.phase === "dash"));
     let threat = committed;
@@ -68,8 +70,21 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
       // Keep the escape side through the dash, but preserve crowd avoidance and
       // stop pushing once clear of the corridor (or beyond the dash's reach).
       if (along >= 0 && along <= DASHER_DASH_SPEED * DASHER_DASH_MS / 1000 + PLAYER_RADIUS + DASHER_RADIUS && across < DASHER_DODGE_CLEARANCE) {
+        dodging = true;
         x += state.dodgeX! * DASHER_DODGE_FORCE; y += state.dodgeY! * DASHER_DODGE_FORCE;
       }
+    }
+  }
+  if (policy === "aimer" && distance > 200 && !dodging) {
+    let target: Observation["players"][number] | undefined, closest = 450;
+    for (const q of observation.players) {
+      if (q.id === p.id || q.status !== "downed") continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < closest || d === closest && (!target || q.id < target.id)) { target = q; closest = d; }
+    }
+    if (target) {
+      const strength = closest > REVIVE_RADIUS ? Math.min(1, (closest - REVIVE_RADIUS + 1) / (PLAYER_SPEED * STEP_MS / 1000)) : 0;
+      return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
     }
   }
   const move = clampMove(x, y);

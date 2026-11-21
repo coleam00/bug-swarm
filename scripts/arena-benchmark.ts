@@ -13,6 +13,12 @@ const bugs = Array.from({ length: MAX_BUGS }, (_, i) => {
   if (b.kind === "dasher") { b.phase = windupOnly ? "windup" : ["approach", "windup", "dash", "recovery"][i % 4]; b.phaseUntil = 700; b.facing = i * 0.7; }
   return b;
 });
+const rescue = new URLSearchParams(location.search).has("revive");
+if (rescue) for (let i = 1; i < players.length; i++) {
+  const p = players[i]!; p.status = "downed"; p.hits = 0; p.reviveMs = i % 4 * 500; p.reviving = i % 2 === 0;
+  // Both on-screen rings and off-screen indicators, bounded by room membership.
+  if (i > 10) { p.x = i % 2 ? 100 : 2300; p.y = i % 3 ? 100 : 2300; }
+}
 const shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: 500 + i, owner: String(i % 20), life: 1, born: 0, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, vx: 900, vy: 0 }));
 let count = 0, start = performance.now(), cost = 0, lastBurst = 0, eventId = 1;
 function frame(now: number) {
@@ -20,6 +26,7 @@ function frame(now: number) {
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
   if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, kind: "dasher" as const, ...(i % 2 ? { type: "kill" as const, points: 30 } : { type: "hit" as const, points: 0 as const }) })), now); lastBurst = now; }
   const view = worldView(width, height);
+  if (rescue) for (const p of players) if (p.status === "downed") p.downedUntil = now + 10000 - now % 10000;
   renderer.draw(width, height, cameraFor(1200, 1200, view.width, view.height), players, players[0]!, input, bugs, shots, 6, now / 50, now, view.scale);
   cost += performance.now() - begin; count++;
   if (now - start >= 1000) { canvas.dataset.fps = (count * 1000 / (now - start)).toFixed(1); canvas.dataset.frameMs = (cost / count).toFixed(3); count = cost = 0; start = now; }

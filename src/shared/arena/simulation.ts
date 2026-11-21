@@ -6,6 +6,7 @@ import { safeSpawn, spawnBug } from "./spawn";
 import { BUGS } from "./bugs/registry";
 import { fireAndAdvance, circleEntry } from "./combat";
 import { motionFor, stopAtBoundary } from "./motion";
+import { downPlayer, resolveRevives } from "./revive";
 export function createArena(seed: number): ArenaState { return { tick: 0, random: seed >>> 0, players: new Map(), slots: new Map(),
   wave: 0, bugs: [], shots: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
 export function joinPlayer(state: ArenaState, identity: Pick<Player, "id" | "name" | "team">) {
@@ -15,13 +16,14 @@ export function joinPlayer(state: ArenaState, identity: Pick<Player, "id" | "nam
   state.players.set(p.id, p); state.slots.set(p.id, slot); state.spawnCredits.set(p.id, 0); return p;
 }
 export function endLife(state: ArenaState, id: string): LifeResult | null {
-  const p = state.players.get(id); if (!p || !p.hits) return null;
+  const p = state.players.get(id); if (!p || p.status === "out") return null;
+  p.status = "out"; p.downedUntil = p.reviveMs = 0; p.reviving = false;
   p.hits = 0; p.vx = p.vy = 0; state.spawnCredits.delete(id);
   const result = { playerId: id, life: p.life, score: p.score, kills: p.kills, seconds: (state.tick - p.startedTick) * STEP_MS / 1000, touch: p.touch };
   state.shots = state.shots.filter(s => s.owner !== id || s.life !== p.life); state.ended.push(result); return result;
 }
 export function respawnPlayer(state: ArenaState, id: string, life: number) {
-  const p = state.players.get(id); if (!p || p.hits || p.life !== life) return null;
+  const p = state.players.get(id); if (!p || p.status !== "out" || p.life !== life) return null;
   Object.assign(p, safeSpawn(state, id), lifeDefaults(state.tick, life + 1), { hits: PLAYER_HITS, vx: 0, vy: 0 }); state.spawnCredits.set(id, 0); return p;
 }
 export function leavePlayer(state: ArenaState, id: string): void { endLife(state, id); state.players.delete(id); state.slots.delete(id); }
@@ -30,7 +32,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   const time = state.tick * STEP_MS;
   let requested = false;
   for (const [id, p] of state.players) {
-    if (!p.hits) { state.spawnCredits.delete(id); continue; }
+    if (p.status !== "active") { state.spawnCredits.delete(id); continue; }
     movePlayer(p, inputs.get(id) ?? neutralInput());
     const age = (state.tick - p.startedTick) * STEP_MS / 1000;
     // Knots align with fixed ticks: trapezoidal integration is exact on each segment.
@@ -57,17 +59,18 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;
   for (const p of state.players.values()) {
-    if (!p.hits || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
+    if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
     for (const b of state.bugs) {
       const m = motionFor(b), dt = STEP_MS / 1000, px = p.x - p.vx * dt, py = p.y - p.vy * dt, radius = PLAYER_RADIUS + BUGS[b.kind].radius;
       const moving = circleEntry(px - m.x, py - m.y, (p.vx - m.vx) * m.stop, (p.vy - m.vy) * m.stop, radius);
       const stopped = circleEntry(px + p.vx * m.stop - b.x, py + p.vy * m.stop - b.y, p.vx * (dt - m.stop), p.vy * (dt - m.stop), radius);
       if (moving === null && stopped === null) continue;
       p.immuneUntil = time + IMMUNITY_MS;
-      if (p.hits === 1) endLife(state, p.id); else p.hits--;
+      if (p.hits === 1) downPlayer(state, p); else p.hits--;
       break;
     }
   }
-  // Publish phase/velocity for the following interval, after resolving completed motion.
+  for (const p of resolveRevives(state, state.tick * STEP_MS)) endLife(state, p.id);
+  // Publish phase/velocity for the following interval, after resolving completed motion and life states.
   for (const b of state.bugs) { BUGS[b.kind].move(b, state.players.values(), state.tick * STEP_MS); stopAtBoundary(b); }
 }

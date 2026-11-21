@@ -48,7 +48,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   const beforeInitialSnapshot = inputs.length; clock += 3500; send();
   assert.equal(inputs.length, beforeInitialSnapshot); assert.equal(reconnects, cycle, "Missing prediction must not prevent waiting for the restart receipt");
   receive({ v: 1, type: "welcome" }); base = clock;
-  const own = { life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
+  const own = { status: "active", life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
   const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: tick + 4, bugs: [],
     shots: [{ id: 800, owner: own.id, life: 1, born: 0, x: 1200 + tick * 45, y: 1200, vx: 900, vy: 0 }], events,
@@ -103,7 +103,21 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   key("KeyD"); send(); key("KeyD", "keyup"); send();
   assert.ok(Math.abs(inputs.at(-1).aim - Math.atan2(-22, -21)) < 1e-8, "Stationary cursor must be resampled after player movement");
   key("Space"); send();
-  own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
+  own.status = "downed"; own.hits = 0; own.downedUntil = 10000; own.reviveMs = 0;
+  pointer("pointerdown", 1, 50, 400); pointer("pointerdown", 2, 350, 400);
+  snapshot(5, 1203, 1020, inputs.at(-1).seq);
+  assert.equal(captures.size, 0, "Downing releases both pointer captures"); assert.equal(lifePanel, null);
+  const downCount = inputs.length;
+  key("KeyA"); pointer("pointerdown", 3, 50, 400); pointer("pointermove", 3, 110, 400); send();
+  assert.equal(inputs.length, downCount, "Downed controls neither send input nor respawn"); assert.equal(captures.size, 0);
+  own.status = "active"; own.hits = 1; own.downedUntil = 0;
+  snapshot(5, 1203, 1020, inputs.at(-1).seq); send();
+  assert.equal(inputs.at(-1).life, 1, "Revive keeps the same life"); assert.equal(inputs.at(-1).fire, false);
+  assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 }, "Revive requires fresh input");
+  key("KeyA", "keydown", true); key("Space", "keydown", true); send();
+  assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 }); assert.equal(inputs.at(-1).fire, false);
+  key("KeyA", "keyup"); key("Space", "keyup"); key("Space"); send();
+  own.status = "out"; own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
   const oldEffects = effects.length;
   snapshot(6, 1203, 1020, inputs.at(-1).seq, [{ id: 100 + cycle, tick: 6, x: 1300, y: 1200, points: 11, type: "kill" as const, kind: "crawler" as const }]); assert.equal(lifePanel.score, 34);
   assert.equal(effects.length, oldEffects, "Receipt must not deliver kill feedback ahead of delayed combat");
@@ -116,7 +130,7 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   key(respawnKey);
   assert.equal(inputs.length, deadCount + 1, "A fresh replay key sends exactly one respawn");
   assert.deepEqual(inputs.at(-1), { v: 1, type: "respawn", life: 1, touch: false });
-  own.hits = 3; own.life = 2; delete own.result; snapshot(7, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
+  own.status = "active"; own.hits = 3; own.life = 2; delete own.result; snapshot(7, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
   receive({ v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, save: "saved" }); assert.equal(lifePanel, null, "Late save cannot reopen previous life");
   key("Space", "keydown", true); key(respawnKey, "keydown", true);
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });

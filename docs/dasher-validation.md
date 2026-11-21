@@ -17,7 +17,7 @@ The aimer retains its chosen perpendicular side through wind-up/dash, but blends
 
 Aimer scored **15.59x** mover (required >=2x). All **65 fairness cohorts** passed with 20 observations each. Newcomer medians were 312.475 seconds fresh and 276.95 seconds at an eight-minute join: **88.63%** (required >=80%). Both medians are exact, with 14 deaths and six 600-second horizon cutoffs in each cohort. All idle ages from 0 through 900 seconds at 15-second intervals, plus solo controls, passed; the minimum median was **11 seconds** (required >=10). Full observations and censoring are in `skill.json` with the uploaded evidence.
 
-The branch was rebased onto `main` at `596c023` to preserve the results/moderation work and root-arena cutover merged during validation. Neither rebase changed pure simulation or policy code; the full skill run remains applicable. The complete check, build and production Chrome/load validation were rerun after the final rebase. The then-current 372-test suite reflects main retiring release-1 gameplay tests; arena and fairness coverage are unchanged.
+The branch was rebased onto `main` at `596c023` to preserve the results/moderation work and root-arena cutover merged during validation. Neither rebase changed pure simulation or policy code at that stage. The complete check, build and production Chrome/load validation were rerun after that rebase. The then-current 372-test suite reflects main retiring release-1 gameplay tests; arena and fairness coverage are unchanged. These original skill and production measurements predate the revival merge described below.
 
 ## Production Chrome
 
@@ -54,6 +54,14 @@ Before the runner correction below, the snapshot-gap return attempted `bun run c
 Linux and Windows CI both exceeded the score and idle-survival tests' 30-second runner limits at roughly 34-36 seconds. These tests verify fixed-step outcomes, not wall-clock performance. A controlled local reproduction pinned two owned test processes to one CPU: score batches took 56.7-60.4 seconds, idle batches 61.5-66.2 seconds, and the admission batch also exceeded its shorter ten-second limit. All three finite batches now share a 120-second runner allowance. Callback code, seeds, cohort counts, simulated durations, survival thresholds and score assertions are unchanged.
 
 With the same CPU contention, both processes completed all six tests and 125 assertions with zero failures. The normal full check completed every simulation gate and passed 378/379 tests; only the previously observed, unchanged review/approve CLI test exceeded its 15-second limit (16.08 seconds locally). Only simulation test-runner deadlines changed; simulation, policies, interpolation and production performance budgets are untouched. Reproduction logs and the callback/coverage comparison are retained under `.evidence/71/host-return/`.
+
+## Merge with revival
+
+Merged `main` at `0f5b899` (downed lives and cross-team revival), resolving overlaps in simulation, policies, protocol, drawing and fixtures. Both registered kinds now use the shared active-player targeting rule. Swept contact downs the last-hit player; revive/timeout resolution precedes publishing the following bug interval. Committed dash interpolation, HP/scoring, phase timings and the shared 120-second simulation batch allowance remain intact, including every original simulation gate callback and assertion.
+
+The aimer keeps main's rescue behavior while prioritizing an advertised threatening dash corridor, then resumes rescuing once clear. A regression reproduces the rescue early return overriding a wind-up dodge and verifies the combined behavior. The payload test now combines 150 phase-bearing dashers with every downed/out population split from main, retaining the 64 KiB cap.
+
+`bun run check` passes all **403 tests** (25,089 assertions), including the simulation-history interpolation regressions, revival transport, kind/HP/scoring, and rescue/dodge cases. `bun run build` passes. Current full skill and automatic Linux/Windows CI results are recorded in the PR; the historical measurements above remain labeled by validation stage. Merge reproduction, source-preservation proof and check/build/skill logs are retained under `.evidence/71/main-merge/`.
 
 ## Reproduction and evidence
 

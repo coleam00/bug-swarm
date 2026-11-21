@@ -46,3 +46,34 @@ test("WebSocket bots actually send distinct mover and aimer inputs for the same 
 test("all supported bot identities pass the live name rules", () => {
   for (let i = 0; i < 10000; i++) expect(validateName(botName(i)).error).toBeUndefined();
 });
+
+test("bot transport waits downed, resumes the same life after revival and requests terminal respawn once", async () => {
+  const phases: string[] = []; let respawns = 0;
+  const server = Bun.serve<{}>({ hostname: "127.0.0.1", port: 0,
+    fetch(request, server) {
+      if (new URL(request.url).pathname === "/ws" && server.upgrade(request, { data: {} })) return;
+      return Response.json({ arenas: [{ id: "revive-test", players: 1 }], totalPlayers: 1, tick: { p50Ms: 0.1, p95Ms: 0.2 } });
+    },
+    websocket: { message(socket, raw) {
+      const m = parseClient(raw); if (!m) throw Error("Invalid input");
+      if (m.type === "hello") {
+        socket.send(JSON.stringify({ v: VERSION, type: "welcome", playerId: m.playerId, arenaId: "revive-test", buildId: "test",
+          world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } }));
+        snapshot.players = [{ ...lifeDefaults(), status: "downed", downedUntil: 10050, hits: 0, id: m.playerId, name: m.name, team: m.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 }];
+      } else if (m.type === "input") {
+        const p = snapshot.players[0]!; phases.push(p.status);
+        expect(m.life).toBe(1);
+        if (p.status === "downed") {
+          expect(m.fire).toBe(false); expect(m.move).toEqual({ x: 0, y: 0 });
+          p.status = "active"; p.hits = 1; p.downedUntil = 0;
+        } else { p.status = "out"; p.hits = 0; }
+      } else { respawns++; expect(m.life).toBe(1); }
+      snapshot.tick++; socket.send(JSON.stringify(snapshot));
+    } },
+  });
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "revive-test", tick: 0, wave: 1, players: [], bugs: [], shots: [], events: [] };
+  try {
+    await runBots({ url: server.url.origin, count: 1, seconds: 1, policy: "aimer" });
+    expect(phases).toEqual(["downed", "active"]); expect(respawns).toBe(1);
+  } finally { await server.stop(true); }
+});

@@ -17,7 +17,7 @@ test("approach moves toward the nearest living off-axis target, then locks that 
   const q = joinPlayer(a, { id: "b", name: "Other", team: "spaces" })!;
   Object.assign(q, { x: 1500, y: 1600 });
   const dead = joinPlayer(a, { id: "dead", name: "Down", team: "tabs" })!;
-  Object.assign(dead, { x: 910, y: 800, hits: 0 });
+  Object.assign(dead, { x: 910, y: 800, hits: 0, status: "out" });
   step();
   expect(b.phase).toBe("approach");
   expect(b.x).toBeCloseTo(900 + 0.6 * DASHER_SPEED * 0.05); expect(b.y).toBeCloseTo(800 + 0.8 * DASHER_SPEED * 0.05);
@@ -31,7 +31,7 @@ test("approach moves toward the nearest living off-axis target, then locks that 
 test("wind-up locks nearest living target with id ties; exact phase boundaries, straight dash and slow recovery", () => {
   const { a, p, b, step } = fixture();
   const q = { ...p, id: "b", x: 960, y: 1440 };
-  dasher.move(b, [q, { ...p, id: "dead", x: 960, hits: 0 }, p], 0);
+  dasher.move(b, [q, { ...p, id: "dead", x: 960, hits: 0, status: "downed" }, p], 0);
   expect(b).toMatchObject({ hp: 2, phase: "windup", phaseUntil: 700, facing: 0, vx: 0, vy: 0 });
   p.y = 1400;
   for (let i = 0; i < 13; i++) step();
@@ -52,7 +52,7 @@ test("stationary target takes contact, perpendicular movement during tell escape
   }
 });
 test("committed wind-up/dash finish without a living target; idle phases stop", () => {
-  const { b, p } = fixture(); dasher.move(b, [p], 0); p.hits = 0;
+  const { b, p } = fixture(); dasher.move(b, [p], 0); p.hits = 0; p.status = "downed";
   dasher.move(b, [p], 700); expect(b.phase).toBe("dash"); expect(b.vx).toBe(DASHER_DASH_SPEED);
   dasher.move(b, [p], 1150); expect(b.phase).toBe("recovery"); expect(b.vx).toBe(0);
   dasher.move(b, [p], 2150); expect(b.phase).toBe("approach"); expect(b.vx).toBe(0);

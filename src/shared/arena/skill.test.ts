@@ -1,9 +1,17 @@
 import { expect, test } from "bun:test";
 import { skillSeed, skillMatrix, median, lifeMedians, newcomerTrial, newcomerComparison, survivalSummary, fairnessPassed, IDLE_JOIN_AGES, type NewcomerLife } from "./skill";
+import { downPlayer } from "./revive";
 
 // Fixed-step outcome batches need headroom on shared CI CPUs; these are not wall-clock performance gates.
 const SIMULATION_BATCH_TIMEOUT_MS = 120_000;
 
+test("a downed measured newcomer remains the same unfinished life until timeout or horizon", () => {
+  const trial = (horizon: number) => newcomerTrial(1, "idle", 0, 0, horizon, arena => {
+    downPlayer(arena, arena.players.get("newcomer")!);
+  });
+  expect(trial(1)).toMatchObject({ cutoff: true, seconds: 1, score: 0 });
+  expect(trial(11)).toMatchObject({ cutoff: false, seconds: 10, score: 0 });
+});
 test("fixed-seed combat and private policy randomness replay exactly", () => {
   expect(skillSeed(4, "aimer", 400)).toEqual(skillSeed(4, "aimer", 400));
   expect(median([3, 1, 4, 2])).toBe(2.5);

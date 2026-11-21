@@ -6,12 +6,14 @@ import { countEvents, finishRun, getRun, leaderboard, openDb, startRun, teamTota
 import { report } from "./stats";
 import { finishArenaLife } from "../src/server/arena/lives";
 
+// Seventeen cold package-script starts took 28 seconds on factory Windows.
+// Bound each child independently and allow headroom for the complete scenario.
 test("review and approve package scripts use separate processes, retain history and respect hide", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarm-review-")), home = join(dir, "home"); mkdirSync(home);
   const env = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, DATA_DIR: dir };
   const path = join(dir, "app.db");
   const run = (script: string, args: string[] = []) => {
-    const child = Bun.spawnSync([process.execPath, "run", "--silent", script, ...args], { cwd: join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe" });
+    const child = Bun.spawnSync([process.execPath, "run", "--silent", script, ...args], { cwd: join(import.meta.dir, ".."), env, stdout: "pipe", stderr: "pipe", timeout: 5000 });
     return { code: child.exitCode, out: child.stdout.toString().trim(), error: child.stderr.toString().trim() };
   };
   let db: ReturnType<typeof openDb> | undefined;
@@ -61,4 +63,4 @@ test("review and approve package scripts use separate processes, retain history 
     }
     expect(report(db)).toBe(stats); expect(countEvents(db)).toEqual(events);
   } finally { db?.close(); rmSync(dir, { recursive: true, force: true }); }
-}, 15_000);
+}, 45_000);

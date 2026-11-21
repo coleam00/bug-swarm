@@ -13,7 +13,7 @@ export function safeSpawn(state: ArenaState, except?: string) {
     const y = SAFE_SPAWN_INSET + (i < 64 ? random(state) : (Math.floor((i - 64) / 16) + 0.5) / 16) * height;
     let clearance = Infinity, overlap = false;
     for (const b of state.bugs) clearance = Math.min(clearance, Math.hypot(x - b.x, y - b.y));
-    for (const p of state.players.values()) if (p.id !== except && p.hits && Math.hypot(x - p.x, y - p.y) < PLAYER_RADIUS * 2) { overlap = true; break; }
+    for (const p of state.players.values()) if (p.id !== except && p.status === "active" && Math.hypot(x - p.x, y - p.y) < PLAYER_RADIUS * 2) { overlap = true; break; }
     if (overlap) continue;
     const score = state.bugs.length ? clearance : -Math.hypot(x - WORLD_WIDTH / 2, y - WORLD_HEIGHT / 2);
     if (score > bestScore) { bestScore = score; best = { x, y }; }
@@ -32,7 +32,7 @@ export function pushBugsFromSpawn(state: ArenaState, point: { x: number; y: numb
   }
 }
 export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
-  if (state.bugs.length >= MAX_BUGS || !source.hits) return false;
+  if (state.bugs.length >= MAX_BUGS || source.status !== "active") return false;
   // Prefer outer candidates within the source annulus, leaving interior openings for drop-ins.
   let bestX = 0, bestY = 0, bestDistance = -1;
   for (let i = 0; i < 224; i++) {
@@ -42,7 +42,7 @@ export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
     const x = source.x + Math.cos(angle) * radius, y = source.y + Math.sin(angle) * radius;
     if (x < 0 || x > WORLD_WIDTH || y < 0 || y > WORLD_HEIGHT) continue;
     let valid = true;
-    for (const p of state.players.values()) if (p.hits) {
+    for (const p of state.players.values()) if (p.status === "active") {
       const camera = cameraFor(p.x, p.y, MAX_VIEW, MAX_VIEW);
       if (Math.hypot(p.x - x, p.y - y) < SPAWN_CLEARANCE ||
         x >= camera.x - VISIBILITY_PADDING && x <= camera.x + MAX_VIEW + VISIBILITY_PADDING &&
