@@ -48,7 +48,7 @@ export function connectArena(identity: Identity, touch: boolean, receive: (messa
         buildId = message.buildId; backoff = 500; state = "connected";
         if (!restartStatus) status("");
       }
-      if (message.type === "snapshot" && state === "connected" && message.players.some(p => p.id === identity.playerId.toLowerCase() && p.hits > 0)) {
+      if (message.type === "snapshot" && state === "connected" && restartStatus && message.players.some(p => p.id === identity.playerId.toLowerCase() && p.hits > 0)) {
         restartStatus = ""; status("");
       }
       if (message.type === "server_restart") {
