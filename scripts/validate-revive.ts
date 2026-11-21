@@ -43,9 +43,9 @@ async function page(width: number, height: number, url: string, touch = false) {
   await call('Page.navigate', { url }, sessionId); return { session: sessionId, targetId, browserContextId };
 }
 async function joinPage(p: any, name: string, teamIndex: number) {
-  await until(() => evaluate(p.session, `!!document.querySelector('#arena-name')`));
-  await evaluate(p.session, `document.querySelector('#arena-name').focus()`); await call('Input.insertText', { text: name }, p.session);
-  await evaluate(p.session, `document.querySelectorAll('.arena-teams button')[${teamIndex}].click()`);
+  await until(() => evaluate(p.session, `!!document.querySelector('#name')`));
+  await evaluate(p.session, `document.querySelector('#name').focus()`); await call('Input.insertText', { text: name }, p.session);
+  await evaluate(p.session, `document.querySelectorAll('.entry-teams button')[${teamIndex}].click()`);
   await until(() => evaluate(p.session, `!!window.evidence.snap`));
 }
 const ownExpr = `window.evidence.snap?.players.find(p=>p.id===window.evidence.id)`;
@@ -62,7 +62,7 @@ try {
     const m = JSON.parse(String(event.data)), p = pending.get(m.id);
     if (p) { clearTimeout(p.timer); pending.delete(m.id); m.error ? p.reject(new Error(JSON.stringify(m.error))) : p.resolve(m.result); }
   };
-  const desktop = await page(1280, 800, origin + '/arena'), phone = await page(390, 844, origin + '/arena', true);
+  const desktop = await page(1280, 800, origin + '/'), phone = await page(390, 844, origin + '/', true);
   await joinPage(desktop, 'Rescuer', 1); await joinPage(phone, 'Downed', 0);
   botAbort = new AbortController();
   botTask = runBots({ url: origin, count: 18, seconds: 120, policy: 'aimer' }, botAbort.signal); void botTask?.catch(() => {});

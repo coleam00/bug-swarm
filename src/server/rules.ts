@@ -9,7 +9,7 @@ export const POINTS_PER_SECOND = 1;
 export const MAX_SQUASHES_PER_SECOND = 4.5;
 // Longest measured gameplay was 156.933333 seconds; 300 adds headroom within #34's ceiling.
 export const MAX_RUN_SECONDS = 300;
-// bun run pacing --broad at 31b5ee6481b59ff19b78784e123f31a9ff96851f:
+// Historical release 1 broad calibration at 31b5ee6481b59ff19b78784e123f31a9ff96851f:
 // maximum 4,816 across 2,000 runs (Windows, Bun 1.4.2).
 // Evasive seed 46, 1280x800, ci-drone/review-laser/refactor-bomb/test-shield.
 // Owner moderation threshold, independent of that maximum: honest outliers need approval too.

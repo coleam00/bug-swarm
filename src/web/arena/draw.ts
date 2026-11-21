@@ -1,13 +1,12 @@
 import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS, DOWNED_MS, REVIVE_MS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
-import type { Player, CombatPlayer, Bug, Shot, KillEvent, LifeResult } from "../../shared/arena/types";
+import type { Player, CombatPlayer, Bug, Shot, KillEvent } from "../../shared/arena/types";
 import type { ArenaInput } from "./input";
 import { helpArrow } from "./help-arrow";
-export function lifeClock(p: CombatPlayer & { result?: LifeResult }, tick: number): string {
-  const seconds = Math.floor(p.result?.seconds ?? Math.max(0, tick - p.startedTick) * STEP_MS / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
+import type { Snapshot } from "../../shared/arena/protocol";
+import { drawMinimap, minimapBounds } from "./minimap";
 export class ArenaRenderer {
+  private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
   reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
@@ -27,10 +26,11 @@ export class ArenaRenderer {
       g.fillStyle = gradient; g.fillRect(0, 0, 100, 100); this.glows.set(team, glow);
     }
   }
-  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1) {
+  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null) {
     this.time = tick * STEP_MS;
     this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
+    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT);
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -50,6 +50,10 @@ export class ArenaRenderer {
       c.strokeStyle = "#ffc26055"; c.lineWidth = 9; c.beginPath(); c.moveTo(s.x - dx, s.y - dy); c.lineTo(s.x, s.y); c.stroke();
       c.strokeStyle = "#fff6c8"; c.lineWidth = 3; c.stroke();
     }
+    // Robots and their names remain readable where the corner map overlaps
+    // world feedback at a boundary; the map still overlays the swarm/floor.
+    c.restore(); drawMinimap(c, map, WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs);
+    c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y);
     for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
@@ -60,13 +64,27 @@ export class ArenaRenderer {
     }
     c.restore();
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
-      const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height);
+      const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height, map.y + map.height + 24);
       if (!arrow) continue;
       c.save(); c.globalAlpha = 0.75 + Math.sin(now / 180) * 0.25;
       c.fillStyle = "#ffe09a"; c.translate(arrow.x, arrow.y); c.rotate(arrow.angle);
       c.beginPath(); c.moveTo(12, 0); c.lineTo(-8, -8); c.lineTo(-8, 8); c.lineTo(12, 0); c.fill(); c.restore();
       c.textAlign = "center"; c.font = "bold 16px system-ui"; c.fillStyle = "#ffe09a";
       c.fillText("Help", arrow.x, arrow.y + 26);
+    }
+    if (local && "life" in local) {
+      const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
+      const population = snapshot?.players.length ?? players.length;
+      const key = `${p.score}/${p.streak}/${p.hits}/${wave}/${population}/${width}/${height}`;
+      if (key !== this.hudKey) {
+        this.hudKey = key; this.hudFont = Math.min(width, height) < 600 ? 16 : 20;
+        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  W${wave}  ${population} in this arena`;
+        this.hudText = text(p.score.toLocaleString()); c.font = `bold ${this.hudFont}px system-ui`;
+        if (c.measureText(this.hudText).width > width - 32) this.hudText = text(Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(p.score));
+        while (c.measureText(this.hudText).width > width - 32 && this.hudFont > 12) c.font = `bold ${--this.hudFont}px system-ui`;
+      }
+      c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
+      c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
     }
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
@@ -75,14 +93,12 @@ export class ArenaRenderer {
     }
     if (local && "life" in local) {
       const p = local as CombatPlayer;
-      c.fillStyle = "#060b12cc"; c.fillRect(10, 10, Math.min(width - 20, 330), 68);
-      c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = "bold 20px system-ui"; c.fillText(`Wave ${wave}   ${p.score.toLocaleString()} pts`, 22, 36);
-      c.font = "bold 16px system-ui"; c.fillStyle = "#7be7ca"; c.fillText(`×${Math.min(3, 1 + p.streak / 10).toFixed(1)}   ${p.hits} hits left   ${lifeClock(p, tick)}`, 22, 62);
       if (p.status === "downed") {
+        c.font = "bold 16px system-ui";
         const message = "Downed — a teammate can revive you", wide = c.measureText(message).width <= width - 32;
-        const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale;
+        const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale, preferredY = map.y + map.height + 8;
         // Keep the entire name/rings/Help clear, including at the top wall.
-        const panelY = robotY - 54 * scale >= 82 + panelHeight + 8 ? 82 : Math.ceil(robotY + 72 * scale);
+        const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
         c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
         c.textAlign = "center"; c.fillStyle = "#ffe09a";
         if (wide) c.fillText(message, width / 2, panelY + 20);
@@ -91,6 +107,7 @@ export class ArenaRenderer {
       }
     }
   }
+
   private robot(p: Player, local: boolean, camera: { x: number; y: number }, width: number, height: number) {
     const combat = p as CombatPlayer; if (combat.status === "out") return;
     if (p.x < camera.x - 70 || p.x > camera.x + width + 70 || p.y < camera.y - 70 || p.y > camera.y + height + 70) return;

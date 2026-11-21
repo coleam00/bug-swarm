@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
-import { createGlow } from "../game/assets";
-import { drawBeetle, drawRobot } from "../game/characters";
-import { BUG_STYLES } from "../game/styles";
+import { createGlow } from "../drawing/glow";
+import { drawBeetle, drawRobot } from "../drawing/characters";
+import { BUG_STYLES } from "../drawing/styles";
 
 /** Decorative only: no input, game state, or network lifecycle. */
 export function mountStartScene(canvas: HTMLCanvasElement): () => void {

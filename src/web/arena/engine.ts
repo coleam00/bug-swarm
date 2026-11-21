@@ -8,9 +8,12 @@ import { Interpolation } from "./interpolation";
 import { cameraFor } from "./camera";
 import { worldView } from "../../shared/arena/view";
 import { ArenaRenderer } from "./draw";
+import { FirstLifeHint, type HintView } from "./hint";
 export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch: boolean,
   status: (message: string) => void, refused: (message: string, team?: Identity["team"], code?: string) => void, accepted: () => void = () => {},
-  lifeView: (result: LifeOver | null, respawn: (touch: boolean) => void) => void = () => {}) {
+  lifeView: (result: LifeOver | null, respawn: (touch: boolean) => void) => void = () => {}, hintView: (view: HintView) => void = () => {}) {
+  const hint = new FirstLifeHint(hintView);
+  const touchEntry = touch || (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
   const ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx), input = new ArenaInput();
   const prediction = new Prediction(), interpolation = new Interpolation();
   let seq = 0, ready = false, lastSnapshot = 0, lastSend = performance.now(), previous = lastSend;
@@ -30,7 +33,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     shownLife = result.life; shownSave = result.save; lifeView(result, respawn);
   };
   const reset = () => { lastSend = performance.now(); };
-  const pause = () => { ready = false; input.blockHeld(); input.clear(); deadLife = shownLife = 0; shownSave = ""; lifeView(null, respawn); reset(); };
+  const pause = () => { hint.dismiss(); ready = false; input.blockHeld(); input.clear(); deadLife = shownLife = 0; shownSave = ""; lifeView(null, respawn); reset(); };
   const clear = () => { pause(); seq = 0; lastTick = -1; prediction.reset(); interpolation.clear(); renderer.reset(); latest = null; };
   const connection = connectArena(identity, touch, message => {
     if (message.type === "error") { refused(message.message, message.team, message.code); return; }
@@ -45,6 +48,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (prediction.player?.status !== own.status) { input.blockHeld(); input.clear(); }
     prediction.reconcile(own); interpolation.push(message, lastSnapshot);
     latest = message;
+    hint.observe(own, touchEntry || input.touch);
     if (own.status === "out") {
       if (deadLife !== own.life) { input.blockHeld(); input.clear(); deadLife = own.life; }
       if (own.result) showLife(own.result);
@@ -77,7 +81,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (local) camera = cameraFor(local.x, local.y, view.width, view.height);
     const combat = interpolation.combat(now);
     renderer.events(combat.events, now);
-    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale);
+    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest);
     cost += performance.now() - start; frames++;
     if (now - sampleAt >= 1000) {
       const fps = frames * 1000 / (now - sampleAt), ms = cost / frames;

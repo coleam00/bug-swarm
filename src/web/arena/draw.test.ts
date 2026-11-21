@@ -1,14 +1,83 @@
 import { expect, test } from "bun:test";
-import { ArenaRenderer, lifeClock } from "./draw";
+import { ArenaRenderer } from "./draw";
 import { ArenaInput } from "./input";
-import { canvasFixture } from "../game/canvas-fixture.test-support";
+import { canvasFixture } from "../test-support/canvas-fixture.test-support";
 import { TEAM_COLOURS } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults, type CombatPlayer } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import { worldView } from "../../shared/arena/view";
-import type { Paint } from "../game/canvas-fixture.test-support";
+import type { Paint } from "../test-support/canvas-fixture.test-support";
+import type { Snapshot } from "../../shared/arena/protocol";
+
+test("one HUD baseline uses authoritative combat and connected population, fitting large scores on phones", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context;
+    c.measureText = text => ({ width: text.length * Number.parseInt(c.font.replace("bold ", "")) * 0.6 } as TextMetrics);
+    const renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
+    const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
+    for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
+      players[0]!.score = score; c.paints.length = 0;
+      // Interpolated membership is deliberately stale; connected dead players still count.
+      renderer.draw(width!, height!, { x: 750, y: 750 }, [predicted], predicted, input, [], [], snapshot.wave, 1, 50, 1, snapshot);
+      // No effects or overheat in this fixture: all main-canvas text belongs to the HUD.
+      // Counting every text paint also catches persistent instructions outside that line.
+      const hud = c.paints.filter(p => p.op === "fillText" || p.op === "strokeText");
+      expect(hud).toHaveLength(1);
+      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+W19\s+20 in this arena$/);
+      if (score === 123) expect(String(hud[0]!.args[0])).toStartWith("123 pts");
+      c.font = hud[0]!.font;
+      expect(Number(hud[0]!.args[1]) + c.measureText(String(hud[0]!.args[0])).width).toBeLessThanOrEqual(width! - 16);
+      expect(hud[0]!.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("renderer draws the minimap outline, faint swarm, both living teams and one predicted local marker", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D);
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 2400, y: 0, vx: 0, vy: 0, facing: 0 };
+    const remote = { ...local, id: "remote", team: "spaces" as const, x: 1200, y: 1200 };
+    const screenSpace = (paint: Paint) => paint.transform.every((value, i) => value === [1, 0, 0, 1, 0, 0][i]);
+    for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) {
+      c.paints.length = 0;
+      renderer.draw(width!, height!, { x: 400, y: 500 },
+        [{ ...local, x: 0 }, remote, { ...remote, id: "dead", hits: 0 }], local, new ArenaInput(),
+        [{ id: 1, kind: "crawler", x: 600, y: 600, vx: 0, vy: 0 }], [], 1, 1, 50, 1.5);
+      const outlines = c.paints.filter(p => p.op === "strokeRect" && screenSpace(p));
+      expect(outlines).toHaveLength(1);
+      const outline = outlines[0]!, [x, y, mapWidth, mapHeight] = outline.args as number[];
+      expect(outline.globalAlpha).toBeGreaterThan(0); expect(outline.lineWidth).toBeGreaterThan(0);
+      expect(x!).toBeGreaterThan(width! / 2); expect(y!).toBeGreaterThan(0);
+      expect(mapWidth!).toBeGreaterThan(0); expect(mapHeight!).toBeCloseTo(mapWidth!);
+      expect(mapWidth!).toBeLessThan(width! / 2); expect(mapHeight!).toBeLessThan(height! / 2);
+      expect(x! + mapWidth!).toBeLessThan(width!); expect(y! + mapHeight!).toBeLessThan(height!);
+      const markers = c.paints.filter(p => p.op === "fill" && screenSpace(p) && p.path.some(command => command.op === "arc"));
+      expect(markers).toHaveLength(3); // Bug, living teammate, local; no dead or duplicate local marker.
+      const [bug, teammate, own] = markers as [Paint, Paint, Paint];
+      expect(teammate.fillStyle).toBe(TEAM_COLOURS.spaces); expect(own.fillStyle).toBe(TEAM_COLOURS.tabs);
+      const alpha = bug.globalAlpha * (typeof bug.fillStyle === "string" && /^#[\da-f]{8}$/i.test(bug.fillStyle) ? Number.parseInt(bug.fillStyle.slice(-2), 16) / 255 : 1);
+      expect(alpha).toBeGreaterThan(0); expect(alpha).toBeLessThan(0.5);
+      const circle = (paint: Paint) => paint.path.find(command => command.op === "arc")!.args;
+      expect(circle(bug)[0]).toBeCloseTo(x! + mapWidth! / 4); expect(circle(bug)[1]).toBeCloseTo(y! + mapHeight! / 4);
+      expect(circle(teammate)[0]).toBeCloseTo(x! + mapWidth! / 2); expect(circle(teammate)[1]).toBeCloseTo(y! + mapHeight! / 2);
+      const [ownX, ownY, radius] = circle(own) as [number, number, number];
+      expect(radius).toBeGreaterThan(circle(teammate)[2]!);
+      expect(ownX).toBeCloseTo(x! + mapWidth! - radius); expect(ownY).toBeCloseTo(y! + radius);
+      const ring = c.paints.find(p => p.op === "stroke" && screenSpace(p) && JSON.stringify(p.path) === JSON.stringify(own.path));
+      expect(ring).toBeDefined(); expect(ring!.strokeStyle).not.toBe(own.fillStyle);
+      expect(ring!.globalAlpha).toBeGreaterThan(0); expect(ring!.lineWidth).toBeGreaterThan(0);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
 
 test("downed robots remain visible with countdown/progress, local copy and remote edge Help; revival removes them", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -43,6 +112,16 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const rings = paints.filter(p => p.op === "stroke").flatMap(p => p.path.filter(c => c.op === "arc"));
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI) < 1e-8)).toBe(true);
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI * 1.6) < 1e-8)).toBe(true);
+    const fills: number[] = [];
+    for (const progress of [400, 1600]) {
+      p.reviveMs = progress;
+      const meter = ringsAt(draw(p)).filter(c => c.args[2] === PLAYER_RADIUS + 19);
+      expect(meter).toHaveLength(1);
+      const fill = (meter[0]!.args[4]! - meter[0]!.args[3]!) / (Math.PI * 2);
+      expect(fill).toBeCloseTo(progress === 400 ? 0.2 : 0.8);
+      fills.push(fill);
+    }
+    expect(fills[1]).toBeGreaterThan(fills[0]!); p.reviveMs = 1000;
     const markerAlphas: number[] = [], arrowAlphas: number[] = [];
     for (const now of [0, 180, 360, 540]) {
       const frame = draw(p, [q], now), help = marker(frame), edge = arrows(frame);
@@ -95,6 +174,58 @@ test("downed robots remain visible with countdown/progress, local copy and remot
   }
 });
 
+test("portrait north-wall countdown glyph bounds stay clear of the complete name", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  // Font-sensitive glyph metrics, including ascent/descent: a panel rectangle
+  // alone cannot detect text painted outside it or with an inherited large font.
+  const metrics = function(this: typeof fixture.context, text: string): TextMetrics {
+    const size = Number.parseFloat(this.font.match(/[\d.]+px/)![0]), width = text.length * size * 0.6;
+    return { width, actualBoundingBoxLeft: this.textAlign === "center" ? width / 2 : 0,
+      actualBoundingBoxRight: this.textAlign === "center" ? width / 2 : width,
+      actualBoundingBoxAscent: size * 0.8, actualBoundingBoxDescent: size * 0.2 } as TextMetrics;
+  };
+  fixture.context.measureText = metrics;
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => {
+    const canvas = fixture.factory(); fixture.surfaces.at(-1)!.context.measureText = metrics; return canvas;
+  } } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D);
+    const p = { ...lifeDefaults(), id: "local", name: "WideWWWWWWWWWWWW", team: "tabs" as const,
+      x: 1200, y: 14, vx: 0, vy: 0, facing: 0, status: "downed" as const, hits: 0, downedUntil: 10000, reviveMs: 400, spawnProtectedUntil: 0 };
+    const view = worldView(390, 844);
+    renderer.draw(390, 844, cameraFor(p.x, p.y, view.width, view.height), [p], p, new ArenaInput(), [], [], 1, 40, 0, view.scale);
+    const paints = fixture.context.paints;
+    const countdown = paints.find(p => p.op === "fillText" && /^\d+s$/.test(String(p.args[0])))!;
+    const name = paints.find(p => p.op === "drawImage" && fixture.source(p).paints.some(q => q.op === "strokeText" && q.args[0] === "WideWWWWWWWWWWWW"))!;
+    expect(countdown).toBeDefined(); expect(name).toBeDefined();
+    const glyphs = (context: typeof fixture.context, paint: Paint, outer = paint, offsetX = 0, offsetY = 0) => {
+      context.save(); context.font = paint.font; context.textAlign = paint.textAlign;
+      const m = context.measureText(String(paint.args[0])); context.restore();
+      const padding = paint.op === "strokeText" ? paint.lineWidth / 2 : 0;
+      const x = offsetX + Number(paint.args[1]) - m.actualBoundingBoxLeft - padding;
+      const y = offsetY + Number(paint.args[2]) - m.actualBoundingBoxAscent - padding;
+      const w = m.actualBoundingBoxLeft + m.actualBoundingBoxRight + padding * 2;
+      const h = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent + padding * 2;
+      const [a,b,c,d,e,f] = outer.transform as [number,number,number,number,number,number];
+      const corners = [[x,y],[x+w,y],[x,y+h],[x+w,y+h]];
+      const xs = corners.map(([x,y]) => a*x!+c*y!+e), ys = corners.map(([x,y]) => b*x!+d*y!+f);
+      return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+    };
+    const source = fixture.source(name), label = source.paints.find(p => p.op === "strokeText")!;
+    const n = glyphs(source, label, name, Number(name.args[1]), Number(name.args[2]));
+    const count = glyphs(fixture.context, countdown);
+    expect(count.left).toBeGreaterThanOrEqual(0); expect(count.right).toBeLessThanOrEqual(390);
+    expect(count.top).toBeGreaterThanOrEqual(0); expect(count.bottom).toBeLessThanOrEqual(844);
+    expect(count.right <= n.left || count.left >= n.right || count.bottom <= n.top || count.top >= n.bottom).toBe(true);
+    const map = paints.find(p => p.op === "fillRect" && p.args[2] === 96 && p.args[3] === 96)!;
+    expect(map).toBeDefined();
+    // The compact HUD's corner map must not paint over the long name either.
+    expect(paints.indexOf(name)).toBeGreaterThan(paints.indexOf(map));
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
 test("downed message leaves the complete name, rescue rings and Help clear at viewport boundaries", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
@@ -115,7 +246,7 @@ test("downed message leaves the complete name, rescue rings and Help clear at vi
         renderer.draw(width!, height!, cameraFor(x!, y!, view.width, view.height), [p], p, input, [], [], 1, 40, 0, view.scale);
         const paints = fixture.context.paints;
         const panels = paints.filter(paint => paint.op === "fillRect" && paint.transform[0] === 1 && paint.transform[4] === 0 &&
-          Number(paint.args[2]) > 200 && Number(paint.args[3]) >= 40 && Number(paint.args[3]) < 100);
+          Number(paint.args[2]) > 200 && Number(paint.args[3]) >= 30 && Number(paint.args[3]) < 100);
         expect(panels).toHaveLength(2);
         const occupied = panels.map(paint => rect(paint, ...paint.args.map(Number) as [number, number, number, number]));
         const name = paints.find(paint => paint.op === "drawImage" && fixture.source(paint).paints.some(p => p.op === "fillText"))!;
@@ -186,10 +317,8 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
     const first = draw(0), opening = protection(0), next = protection(10);
     surrounds(opening, [local, remote]); surrounds(next, [local, remote]);
     expect(opening.map(p => p.path)).not.toEqual(next.map(p => p.path));
-    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes("Wave"))!;
+    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"))!;
     expect(hud.transform).toEqual([1, 0, 0, 1, 0, 0]);
-    expect(first.some(p => p.op === "fillText" && /\b0:00\b/.test(String(p.args[0])))).toBe(true);
-    expect(draw(1260).some(p => p.op === "fillText" && /\b1:03\b/.test(String(p.args[0])))).toBe(true);
     const stick = first.find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[2] === 60))!;
     expect(stick.transform).toEqual([1, 0, 0, 1, 0, 0]);
     surrounds(protection(39), [local, remote]); expect(protection(40)).toHaveLength(0);
@@ -202,13 +331,6 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
   }
 });
 
-test("life clock uses authoritative ticks, resets on a new life and freezes at the terminal duration", () => {
-  const p = { ...lifeDefaults(9600), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
-  expect(lifeClock(p, 9600)).toBe("0:00"); expect(lifeClock(p, 10860)).toBe("1:03");
-  const dead = { ...p, status: "out" as const, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
-  expect(lifeClock(dead, 12000)).toBe("1:03");
-  expect(lifeClock({ ...p, ...lifeDefaults(12000, 2) }, 12020)).toBe("0:01");
-});
 
 test("renderer paints a grid, a distinguishing local ring, remote robots and complete names", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -290,7 +412,7 @@ test("phone boundaries and corners keep the robot, barrel and heat clear of the 
       Object.assign(p, { x, y, facing }); fixture.context.paints.length = 0;
       renderer.draw(width!, height!, cameraFor(x!, y!, width!, height!), [p], p, input);
       const paints = fixture.context.paints;
-      const hud = paints.find(q => q.op === "fillRect" && Number(q.args[2]) > 100 && Number(q.args[3]) > 40 && Number(q.args[3]) < 100)!;
+      const hud = paints.find(q => q.op === "fillRect" && Number(q.args[2]) > 100 && Number(q.args[3]) === 34)!;
       expect(hud).toBeDefined(); const panel = bounds(hud);
       const feedback = paints.filter(q => q.op === "drawImage" || q.op === "stroke" && q.path.some(c => c.op === "roundRect") ||
         q.op === "fillRect" && Number(q.args[2]) > 0 && Number(q.args[2]) <= 50 && Number(q.args[3]) > 0 && Number(q.args[3]) <= 10);

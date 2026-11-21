@@ -1,16 +1,20 @@
-.arena-entry, .arena-game { position: fixed; inset: 0; margin: 0; background: #0c1420; color: #e8f0f6; font-family: system-ui, sans-serif; }
-.arena-entry { display: grid; place-items: center; padding: 20px; overflow: auto; }
-.arena-entry form { width: min(100%, 390px); }
-.arena-entry h1 { font-size: clamp(36px, 8vw, 56px); letter-spacing: -2px; margin: 0 0 32px; }
-.arena-entry label { display: block; font-weight: 700; margin-bottom: 8px; }
-.arena-entry input { box-sizing: border-box; width: 100%; min-height: 52px; padding: 12px; border: 1px solid #456078; border-radius: 10px; background: #142536; color: white; font: 20px system-ui; }
-.arena-teams { display: flex; gap: 12px; margin-top: 20px; }
-.arena-teams button { flex: 1; min-height: 52px; padding: 12px; border: 0; border-radius: 10px; color: #0c1420; font: bold 18px system-ui; cursor: pointer; touch-action: manipulation; }
-.arena-entry [role=alert] { color: #ffd2a6; }
+.arena-game { position: fixed; inset: 0; margin: 0; background: #0c1420; color: #e8f0f6; font-family: system-ui, sans-serif; }
 .arena-game canvas { width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
+.arena-game { padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left); }
 .arena-status { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(100% - 64px); margin: 0; padding: 12px; background: #060b12dd; border-radius: 8px; text-align: center; pointer-events: none; }
-@media (max-height: 420px) { .arena-entry h1 { margin-bottom: 12px; } .arena-entry { padding: 12px; } }
-.arena-life { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #060b12d9; color: #f5f3dd; z-index: 2; }
-.arena-life h1 { margin: 0 0 12px; font-size: 36px; }
-.arena-life strong { font-size: 64px; }
-.arena-life button { min-height: 52px; min-width: 180px; font: bold 20px system-ui; border: 0; border-radius: 12px; background: #58e4c0; color: #081a22; }
+.arena-life { position: fixed; inset: 0; overflow-y: auto; overscroll-behavior: none; padding: max(16px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); box-sizing: border-box; background: #060b12ed; color: #f5f3dd; z-index: 2; text-align: center; touch-action: pan-y; }
+.arena-life-content { min-height: 100%; max-width: 520px; margin: auto; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+.arena-life h1 { margin: 0 0 8px; font-size: 36px; }
+.arena-life p { margin: 10px 0; }
+.arena-life .life-score { font-size: clamp(28px, 6vw, 48px); overflow-wrap: anywhere; }
+.arena-life .team-race { width: 100%; }
+.arena-life button { align-self: center; min-height: 52px; min-width: 180px; font: bold 20px system-ui; border: 0; border-radius: 12px; background: #58e4c0; color: #081a22; touch-action: manipulation; }
+@media (max-height: 480px) and (min-width: 600px) {
+  .arena-life-content { max-width: 850px; display: grid; grid-template-columns: 1fr 1fr; align-content: center; align-items: center; gap: 8px 24px; }
+  .arena-life button { grid-column: 1 / -1; justify-self: center; }
+  .arena-life h1 { font-size: 28px; }
+  .arena-life p { margin: 6px 0; }
+}
+.arena-hint { position: absolute; left: 16px; right: 16px; bottom: max(24px, env(safe-area-inset-bottom)); margin: 0; text-align: center; font: 600 16px/1.6 system-ui; color: #eff4db; text-shadow: 0 2px 4px #000; pointer-events: none; transition: opacity 200ms; }
+.arena-hint.fading { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .arena-hint { transition: none; } }

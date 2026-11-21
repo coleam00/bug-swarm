@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { mountStartScene } from "./StartScene";
-import { canvasFixture } from "../game/canvas-fixture.test-support";
+import { canvasFixture } from "../test-support/canvas-fixture.test-support";
 
 test("decorative scene resizes, pauses, honours reduced motion, and releases everything across effect replay", () => {
   const globals = ["window", "document", "matchMedia", "ResizeObserver", "requestAnimationFrame", "cancelAnimationFrame"] as const;

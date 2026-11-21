@@ -50,7 +50,7 @@ Release 1 was a single-player survival game where the robot fired on its own: yo
 
 ## How the work is filed
 
-There are no phase gates: the factory takes small items in dependency order from the owner (the orchestrator), each one pull request, each leaving `main` playable. The single-player game stays at `/` until the arena replaces it in one item near the end; until then the arena lives at `/arena`.
+There are no phase gates: the factory takes small items in dependency order from the owner (the orchestrator), each one pull request, each leaving `main` playable. The arena runs at `/` through the shared start screen; `/arena` redirects there. Release 1 gameplay is retired.
 
 ## Non-goals
 

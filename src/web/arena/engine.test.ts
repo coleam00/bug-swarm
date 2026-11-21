@@ -36,7 +36,8 @@ const pointer = (type, id, x, y) => canvas.dispatchEvent(Object.assign(new Event
 const mouse = (type, x, y) => (type === "pointerup" ? window : canvas).dispatchEvent(Object.assign(new Event(type), { pointerType: "mouse", pointerId: 9, button: 0, clientX: x + 20, clientY: y + 30 }));
 const send = () => timers.values().next().value();
 const frame = at => { clock = at; const [id, fn] = frames.entries().next().value; frames.delete(id); fn(clock); return draws.at(-1); };
-for (let cycle = 0; cycle < 2; cycle++) {
+const replayKeys = ["Enter", "KeyW", "Space"];
+for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   let base = clock;
   const cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result);
   assert.equal(timers.size, 1); assert.equal(frames.size, 1); assert.equal(observers, 1);
@@ -124,12 +125,16 @@ for (let cycle = 0; cycle < 2; cycle++) {
   frame(clock + 1); assert.equal(effects.length, oldEffects + 1);
   frame(clock + 10); assert.equal(effects.length, oldEffects + 1, "Kill feedback is delivered once");
   const deadCount = inputs.length; key("Space", "keydown", true); send(); assert.equal(inputs.length, deadCount, "Held input at death cannot respawn");
-  key("KeyW"); assert.equal(inputs.at(-1).type, "respawn"); assert.equal(inputs.at(-1).life, 1);
+  const respawnKey = replayKeys[cycle];
+  if (respawnKey === "Space") key("Space", "keyup");
+  key(respawnKey);
+  assert.equal(inputs.length, deadCount + 1, "A fresh replay key sends exactly one respawn");
+  assert.deepEqual(inputs.at(-1), { v: 1, type: "respawn", life: 1, touch: false });
   own.status = "active"; own.hits = 3; own.life = 2; delete own.result; snapshot(7, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
   receive({ v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, save: "saved" }); assert.equal(lifePanel, null, "Late save cannot reopen previous life");
-  key("Space", "keydown", true); key("KeyW", "keydown", true);
+  key("Space", "keydown", true); key(respawnKey, "keydown", true);
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
-  key("Space", "keyup"); key("KeyW", "keyup");
+  key("Space", "keyup"); key(respawnKey, "keyup");
   canvas.clientWidth = 1920; canvas.clientHeight = 1080; window.devicePixelRatio = 3; resize();
   draw = frame(clock + 50); assert.equal(draw.scale, 1920 / 900);
   assert.equal(canvas.width, 3840); assert.equal(canvas.height, 2160, "DPR remains bounded separately from world scale");

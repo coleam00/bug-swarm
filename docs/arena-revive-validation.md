@@ -1,5 +1,7 @@
 # Arena revive validation - issue 72
 
+The latest validation after merging main's arena cutover is recorded in the final section. Earlier measurements below retain the original before/after evidence.
+
 The completed revive flow passes simulation, lifecycle, production Chrome, touch, load and full skill validation. One owner-approved constant change restores late-join survival from 61.18% to 88.35% of fresh survival. Thresholds, seeds, populations, horizon extensions and censoring rules are unchanged.
 
 ## Reproduction and isolation
@@ -60,7 +62,7 @@ The same paired cohorts with the selected constant reach fresh **132 s** and lat
 
 Exploration stayed in `.evidence/72/`: minimum drop-in clearances 350/400/450 produced identical paired results, while a larger birth clearance and reduced later rate caps also failed. Of the tested quarter-step increases in the one-minute knot, 4.25 restored the gate; 4.5 and 4.75 did not. The selected correction changes one value and introduces no new mechanic. `tune-pacing.ts` and the raw candidate reports are scratch tools; they are not used by the final skill command.
 
-## Checks and full skill matrix
+## Checks and full skill matrix before the main cutover
 
 - `bun run check`: 612 tests passed, zero failures, including TypeScript checks after the returned visual repair; `.evidence/72/boundary-check.log`. The earlier 611-test run remains in `.evidence/72/check-after.log`.
 - `bun run build`: passed; `.evidence/72/build-after.log`.
@@ -84,7 +86,7 @@ Aimer/mover median score ratio is **8.546x**, above the unchanged 2x requirement
 
 Both final aimer medians are exact under the existing censoring rules, despite three late lives censored at the common 600-second horizon. Late survival reaches **88.352%**, above **80%**; no horizon extension was needed. Final observations match the exploratory pair exactly. The previously blocking gate is resolved.
 
-## Returned visual repairs
+## Returned visual repairs before the main cutover
 
 The short downed message now stays above the local robot only when that slot clears the complete name and rescue feedback; otherwise it moves below the Help marker. Positions are calculated in CSS pixels from the existing camera and world scale. Copy, camera behavior, simulation, pacing and controls are unchanged. This adds constant-time arithmetic to the existing downed banner draw, with no extra canvas operations or frame allocations.
 
@@ -103,3 +105,27 @@ A bounded renderer fixture additionally includes a downed local robot at the cen
 | 1280 x 800 | 60.0-60.0 | 0.803-0.892 |
 
 Initial local-file fixture runs without those foreground controls varied from 52.1 to 60 FPS, with CPU draw cost at most 1.564 ms; their reports remain under `boundary-browser-TkB8B7/` and `boundary-browser-NrG32n/`. The final controlled report above retains all samples. The earlier live two-browser/touch, server-load and full skill evidence remains applicable to the unchanged gameplay/server code; those long-running scenarios were not repeated for this renderer-only repair.
+
+## Main cutover merge and verdict guards
+
+Merged main `596c023f48694cd3b9957b09b3ad4adf8d435c47` into the existing issue branch. The arena now joins through StartScreen at `/`; legacy gameplay stays retired, `/arena` redirects, and the compact authoritative HUD, minimap, results and first-life hint are retained. The revive production probe now uses the root entry and its current selectors. Rescue arrows reserve the minimap's vertical space; the downed banner explicitly sets its text font and reserves that space too. Robots and complete names paint above the map so a long name at the north wall stays readable.
+
+Two renderer verdict guards measure behavior rather than panel placement alone. At 390 x 844 and the north boundary, the font-sensitive countdown glyph bounds must remain inside the viewport and disjoint from the complete stroked name. The second guard checks the revive arc at 400 and 1,600 ms of contact: exactly 20% and 80%, with increasing fill. Isolated mutations moving only countdown text over the name or freezing fill at 50% each fail the intended test; the untouched copy passes. See `.evidence/72/verdict-mutations-yWYBow/results.json`. Focused renderer, engine and indicator checks pass 11 tests / 5,536 assertions (`verdict-focused-final.log`).
+
+Chrome 157 native canvas measurements pass 57 cases: nine positions at both contact values in portrait, landscape and desktop, plus an on-screen downed teammate in each view. The final layer-order captures are in `.evidence/72/boundary-browser-1EGha4/`; `merged-final-390x844-north-400.png` and `merged-final-390x844-north-1600.png` show the complete name and visibly different meter fill. A subsequent identical renderer probe also checks actual countdown glyph bounds (`boundary-browser-x0Td6Q/report.json`): the portrait north name occupies x=88..302, y=104..134; the countdown occupies x=186.879..204.082, y=261..272. Both screenshots were inspected.
+
+The production probe was rerun after merging main, using built assets, two independent Chrome contexts and 18 bots: `.evidence/72/production-jW9xr9/report.json` and `production-merged.log`. Downing, the other browser's edge arrow, partial/completed rescue, preserved run/score/streak, rescuer +50, timeout/respawn and two-point touch all pass through `/`. Desktop full-room F samples are 60.0..61.2 FPS / 0.212..0.911 ms; portrait 60.0..61.4 FPS / 0.148..0.952 ms. The probe's subsequent 200-bot / 120-second run has 200 joins, ten arenas and zero errors: tick p50/p95 **0.921 / 1.711 ms** (7,417 samples), scheduler lateness p50/p95 **22.392 / 85.149 ms**. These bots run in the probe process; the separate CLI/server measurement above remains separately identified. Production validation preceded the final map/name paint-order adjustment; native Chrome geometry and bounded frame validation exercise that final renderer.
+
+`bun run skill` was rerun after the merge and passes unchanged gates (`skill-merged.log`, `skill-merged.json`). Results match the previous tuned run: mover/aimer median scores **202.5 / 1,730.5**, ratio **8.546x**; fresh/late newcomer medians **132 / 116.625 seconds**, ratio **88.352%**. Both medians are exact at the common 600-second horizon, with deaths/cutoffs **20/0** and **17/3**. All 65 cohorts / 1,300 observations remain present; all 63 idle cohorts pass, minimum median **20.775 seconds** at age 60. The owner-approved 4.25 spawn-rate knot, 2x score gate, 80% survival gate, ten-second idle gate, seeds and censoring are unchanged.
+
+The merged CLI review test launches 17 package-script processes sequentially. Profiling completed all 39 assertions in 27.7 seconds on factory Windows (`review-profile.log`), exceeding its former 15-second group limit. It now allows 45 seconds for the group and independently caps each child at five seconds; its assertions are unchanged. Earlier full checks also encountered unrelated Vite/startup process timeouts under concurrent host load; their raw logs are retained rather than treated as gameplay failures. The complete retry passed with no parallel validation jobs of ours, using AboveNormal scheduling for the invoking shell: **382 tests / 24,262 assertions, zero failures**, plus TypeScript checking (`check-merged-priority.log`, exit 0). No Vite/startup assertion or timeout was changed. `bun run build` also passes (`build-merged-final.log`). Main's removal of legacy gameplay accounts for the lower test count than the historical pre-merge runs.
+
+The final renderer was measured once more after the complete check finished, with no other validation job of ours running. `.evidence/72/boundary-browser-fXqsl5/report.json` contains all 57 successful native-glyph geometry cases, inspected 20%/80% portrait screenshots and four bounded maximum-effects samples per viewport:
+
+| View | FPS | Update/draw ms/frame |
+| --- | ---: | ---: |
+| 390 x 844 | 52.0..60.0 | 0.725..0.952 |
+| 844 x 390 | 60.0..60.0 | 0.838..1.192 |
+| 1280 x 800 | 60.0..60.0 | 0.863..1.338 |
+
+The portrait fixture's later frame cadence fell below 60 despite sub-millisecond update/draw work; these are raw factory scheduling observations, not a claim of sustained 60 FPS for that synthetic maximum-effects scene. The earlier concurrent sample in `boundary-browser-x0Td6Q/` ranged 45..60 FPS with update/draw at most 1.466 ms and is also retained. The live full-room readings above are separate. Every owned server, bot task, Chrome process and database handle has closed. All evidence remains inside this checkout.

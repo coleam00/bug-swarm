@@ -34,7 +34,7 @@ const assertCleanEntry = () => assert.doesNotMatch(text(tree.root.findByType("ma
 await mount(null);
 assertCleanEntry();
 assert.equal(text(tree.root.findByType("h1")), "Bug Swarm");
-assert.equal(text(tree.root.findByProps({ className: "entry-tagline" })), "Survive the swarm.");
+assert.equal(tree.root.findAllByProps({ className: "entry-tagline" }).length, 0);
 assert.equal(tree.root.findByType("input").props.placeholder, "Your name");
 assert.deepEqual(tree.root.findAllByType("button").map(text), ["Join Tabs", "Join Spaces"]);
 assert.equal(alerts().length, 0);
