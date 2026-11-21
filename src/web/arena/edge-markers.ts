@@ -9,7 +9,7 @@ interface Marker {
   x: number; y: number; angle: number;
 }
 export interface MarkerObstacle { x: number; y: number; width: number; height: number }
-interface Slot { x: number; y: number; column: number; used: boolean }
+interface Slot { x: number; y: number; used: boolean }
 
 /** A shared CSS-pixel grid keeps complete arrows and labels apart, including corners.
  * Only viewport or overlay changes rebuild slots; frame collection and insertion sort reuse storage. */
@@ -18,9 +18,9 @@ export class EdgeMarkers {
     id: "", hive: false, targetX: 0, targetY: 0,
     edge: 0, tangent: 0, x: 0, y: 0, angle: 0,
   }));
-  private readonly slots: Slot[] = Array.from({ length: CAPACITY * CAPACITY }, () => ({ x: 0, y: 0, column: 0, used: false }));
-  private slotCount = 0; private columns = 0;
-  private reservationKey = ""; private panel?: MarkerObstacle; private map?: MarkerObstacle; private panelY = 0; private celebration?: MarkerObstacle;
+  private readonly slots: Slot[] = Array.from({ length: CAPACITY * CAPACITY }, () => ({ x: 0, y: 0, used: false }));
+  private slotCount = 0;
+  private reservationKey = ""; private panel?: MarkerObstacle; private map?: MarkerObstacle; private panelY = 0; private celebration?: MarkerObstacle; private pickups?: MarkerObstacle;
   private width = -1; private height = -1; private top = -1;
   readonly halfWidth: number;
   readonly bottom: number;
@@ -34,10 +34,10 @@ export class EdgeMarkers {
     c.restore();
   }
   reset() { this.count = 0; this.width = -1; this.reservationKey = ""; this.slotCount = 0; }
-  begin(width: number, height: number, top: number, map?: MarkerObstacle, panel?: MarkerObstacle, celebration?: MarkerObstacle) {
+  begin(width: number, height: number, top: number, map?: MarkerObstacle, panel?: MarkerObstacle, celebration?: MarkerObstacle, pickups?: MarkerObstacle) {
     this.count = 0; this.width = width; this.height = height; this.top = top;
-    this.map = map; this.panel = panel; this.celebration = celebration;
-    const key = `${width}/${height}/${top}/${map?.x}/${map?.y}/${map?.width}/${map?.height}/${panel?.x}/${panel?.y}/${panel?.width}/${panel?.height}/${celebration?.x}/${celebration?.y}/${celebration?.width}/${celebration?.height}`;
+    this.map = map; this.panel = panel; this.celebration = celebration; this.pickups = pickups;
+    const key = `${width}/${height}/${top}/${map?.x}/${map?.y}/${map?.width}/${map?.height}/${panel?.x}/${panel?.y}/${panel?.width}/${panel?.height}/${celebration?.x}/${celebration?.y}/${celebration?.width}/${celebration?.height}/${pickups?.x}/${pickups?.y}/${pickups?.width}/${pickups?.height}`;
     if (key !== this.reservationKey) {
       this.reservationKey = key;
       this.panelY = panel?.y ?? 0; this.grid();
@@ -47,22 +47,23 @@ export class EdgeMarkers {
   private grid() {
     this.slotCount = 0;
     const cellWidth = this.halfWidth * 2, cellHeight = 15 + this.bottom;
-    const step = Math.max(cellHeight + GAP, (this.height - INSET - this.top - cellHeight) / (CAPACITY - 1));
-    this.columns = Math.max(0, Math.min(CAPACITY, Math.floor((this.width - INSET * 2 + GAP) / (cellWidth + GAP))));
-    for (let column = 0; column < this.columns; column++) {
-      const x = INSET + this.halfWidth + (this.columns < 2 ? 0 : column * (this.width - INSET * 2 - cellWidth) / (this.columns - 1));
-      let y = this.top;
-      for (let row = 0; row < CAPACITY && y + cellHeight <= this.height - INSET; row++) {
-        // Pack each column through its free vertical bands, rather than discarding
-        // the entire width above the minimap or losing rows to a uniform grid.
-        for (let pass = 0; pass < 4; pass++) for (const obstacle of [this.map, this.panel, this.celebration]) {
-          if (obstacle && x + this.halfWidth + GAP > obstacle.x && x - this.halfWidth - GAP < obstacle.x + obstacle.width &&
-            y + cellHeight + GAP > obstacle.y && y - GAP < obstacle.y + obstacle.height) y = obstacle.y + obstacle.height + GAP;
+    const rowStep = Math.max(cellHeight + GAP, (this.height - INSET - this.top - cellHeight) / (CAPACITY - 1));
+    const columnStep = Math.max(cellWidth + GAP, (this.width - INSET * 2 - cellWidth) / (CAPACITY - 1));
+    for (let row = 0; row < CAPACITY; row++) {
+      const y = this.top + row * rowStep;
+      if (y + cellHeight > this.height - INSET) break;
+      let x = INSET;
+      for (let column = 0; column < CAPACITY && x + cellWidth <= this.width - INSET; column++) {
+        // Pack each row through its free horizontal bands. Fixed full-width
+        // exclusions and fixed columns waste the short phone's usable area.
+        for (let pass = 0; pass < 5; pass++) for (const obstacle of [this.map, this.panel, this.celebration, this.pickups]) {
+          if (obstacle && x + cellWidth + GAP > obstacle.x && x - GAP < obstacle.x + obstacle.width &&
+            y + cellHeight + GAP > obstacle.y && y - GAP < obstacle.y + obstacle.height) x = obstacle.x + obstacle.width + GAP;
         }
-        if (y + cellHeight > this.height - INSET) break;
+        if (x + cellWidth > this.width - INSET) break;
         const slot = this.slots[this.slotCount++]!;
-        slot.x = x; slot.y = y + 15; slot.column = column; slot.used = false;
-        y += step;
+        slot.x = x + this.halfWidth; slot.y = y + 15; slot.used = false;
+        x += columnStep;
       }
     }
   }
@@ -96,7 +97,7 @@ export class EdgeMarkers {
       let best: Slot | undefined, bestLane = Infinity, bestDistance = Infinity;
       for (let j = 0; j < this.slotCount; j++) {
         const slot = this.slots[j]!; if (slot.used) continue;
-        const lane = marker.edge === 0 ? slot.y : marker.edge === 1 ? this.columns - 1 - slot.column : marker.edge === 2 ? -slot.y : slot.column;
+        const lane = marker.edge === 0 ? slot.y : marker.edge === 1 ? -slot.x : marker.edge === 2 ? -slot.y : slot.x;
         const distance = Math.abs((marker.edge % 2 ? slot.y : slot.x) - marker.tangent);
         if (lane < bestLane || lane === bestLane && distance < bestDistance) { best = slot; bestLane = lane; bestDistance = distance; }
       }

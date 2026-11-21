@@ -7,7 +7,7 @@ import { ServerDecoder, SnapshotEncoder } from "../snapshot-codec";
 test("hive fields, ring source and reward payload round trip in both JSON paths and binary extensions", () => {
   const s = createArena(84), p = joinPlayer(s, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
   spawnHive(s, 0);
-  const value: Snapshot = { v: 1, type: "snapshot", arenaId: "hive", tick: 1, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: s.bugs, shots: [], globs: [{ id: 2, x: 1200, y: 1200, vx: 180, vy: 0, born: 0, source: "hive" }], events: [] };
+  const value: Snapshot = { v: 1, type: "snapshot", arenaId: "hive", tick: 1, wave: 5, pickups: [], players: [{ ...p, ackSeq: 0 }], bugs: s.bugs, shots: [], globs: [{ id: 2, x: 1200, y: 1200, vx: 180, vy: 0, born: 0, source: "hive" }], events: [] };
   const readAll = (v: Snapshot) => {
     const json = serializeSnapshot(v);
     expect(parseServer(JSON.stringify(v))).toMatchObject(v);
@@ -25,6 +25,8 @@ test("hive fields, ring source and reward payload round trip in both JSON paths 
     const bad = structuredClone(original); Object.assign(bad.globs[0]!, fields); expect(parseServer(serializeSnapshot(bad))).toBeNull();
   }
   value.bugs = []; value.events = [{ id: 3, tick: 1, type: "kill", kind: "hive", x: 1200, y: 1200, points: 0, rewards: [{ playerId: p.id, life: 1, amount: 350, x: 1200, y: 1200 }] }]; readAll(value);
+  const legacy = { ...value, tick: 2, events: value.events.map(e => [e.id, e.tick, e.x, e.y, e.type, e.kind, e.points, "rewards" in e ? e.rewards : undefined]) };
+  for (const decoded of [parseServer(JSON.stringify(legacy)), new ServerDecoder().read(JSON.stringify(legacy))]) expect(decoded).toMatchObject({ ...value, tick: 2 });
   const reward = (value.events[0] as Extract<typeof value.events[number], { type: "kill" }>).rewards![0]!;
   for (const fields of [{ amount: 349 }, { amount: 351 }, { amount: 350.5 }, { life: 0 }, { life: -1 }, { life: 1.5 }, { life: Number.MAX_SAFE_INTEGER + 1 }, { playerId: "invalid" }, { x: -1 }]) {
     const bad = structuredClone(value); (bad.events[0] as any).rewards = [{ ...reward, ...fields }]; expect(parseServer(serializeSnapshot(bad))).toBeNull();

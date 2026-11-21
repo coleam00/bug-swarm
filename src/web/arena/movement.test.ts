@@ -12,7 +12,7 @@ const player = () => ({ ...lifeDefaults(), id: crypto.randomUUID(), name: "Robot
 
 test("glob birth, one-snapshot travel, removal and +5 share the monotonic delayed clock", () => {
   const interpolation = new Interpolation();
-  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 4, players: [], bugs: [], shots: [],
+  const snapshot = (tick: number): Snapshot => ({ pickups: [], v: 1, type: "snapshot", arenaId: "room", tick, wave: 4, players: [], bugs: [], shots: [],
     globs: tick === 2 ? [{ id: 1, x: 100, y: 100, vx: 320, vy: 0, born: 100 }] : [],
     events: tick === 4 ? [{ id: 2, tick: 4, x: 132, y: 100, type: "glob-pop", points: 5 }] : [] });
   interpolation.push(snapshot(1), 50); interpolation.push(snapshot(2), 100); interpolation.push(snapshot(4), 200);
@@ -27,7 +27,7 @@ test("glob birth, one-snapshot travel, removal and +5 share the monotonic delaye
 test("glob extrapolation clips at expiry and world exit; swell never emits predicted entities", () => {
   for (const x of [100, 2390]) {
     const interpolation = new Interpolation(), b = createBug("spitter", 3, 800, 100, 0); Object.assign(b, { phase: "swell", phaseUntil: 2200 });
-    const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 39, wave: 4, players: [], bugs: [b], shots: [], events: [], globs: [{ id: 1, x, y: 100, vx: 320, vy: 0, born: x === 100 ? 0 : 1950 }] };
+    const s: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 39, wave: 4, players: [], bugs: [b], shots: [], events: [], globs: [{ id: 1, x, y: 100, vx: 320, vy: 0, born: x === 100 ? 0 : 1950 }] };
     interpolation.push(s, 1950); interpolation.push({ ...s, tick: 45, bugs: [], globs: [] }, 2250);
     const view = interpolation.combat(2075); expect(view.globs[0]!.x).toBe(x + 8); expect(view.bugs[0]!.phase).toBe("swell");
     expect(interpolation.combat(2100).globs).toHaveLength(0);
@@ -39,8 +39,8 @@ function dasherHistory() {
   const arena = createArena(71), p = joinPlayer(arena, { id: "a", name: "Pilot", team: "tabs" })!;
   p.x = p.y = 1200;
   const bug = createBug("dasher", arena.nextId++, 960, 1200); arena.bugs.push(bug);
-  const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "gap", tick: arena.tick, wave: arena.wave,
-    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, globs: arena.globs, events: arena.events });
+  const snapshot = (): Snapshot => structuredClone({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "gap", tick: arena.tick, wave: arena.wave,
+    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
   const advance = () => { stepArena(arena, new Map()); if (arena.tick === 1) p.y = 1400; return snapshot(); };
   return { arena, p, bug, snapshot, advance };
 }
@@ -88,7 +88,7 @@ test("a committed diagonal dash stops at the first world edge across skipped sna
 test("delayed dasher timeline holds wind-up through gaps and keeps HP/facing and hit sparks at their snapshot", () => {
   const interpolation = new Interpolation(), b = createBug("dasher", 1, 100, 100);
   Object.assign(b, { phase: "windup", phaseUntil: 700 });
-  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 3, players: [], shots: [], globs: [], bugs: [{ ...b }], events: [] });
+  const snapshot = (tick: number): Snapshot => ({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick, wave: 3, players: [], shots: [], bugs: [{ ...b }], events: [] });
   interpolation.push(snapshot(12), 600);
   Object.assign(b, { x: 149, vx: 490, phase: "dash", phaseUntil: 1150, hp: 1 });
   interpolation.push({ ...snapshot(16), events: [{ id: 2, tick: 16, x: 149, y: 100, kind: "dasher", type: "hit", points: 0 }] }, 800);
@@ -125,7 +125,7 @@ test("prediction history is bounded", () => {
 
 test("same-life down/revive clears movement history and correction, and never interpolates across status", () => {
   const prediction = new Prediction(), p = player(), interpolation = new Interpolation();
-  const snapshot = (tick: number, current: typeof p): Snapshot => ({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, players: [current], bugs: [], shots: [], globs: [], events: [] });
+  const snapshot = (tick: number, current: typeof p): Snapshot => ({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick, wave: 1, players: [current], bugs: [], shots: [], events: [] });
   prediction.reconcile(p); prediction.advance({ v: 1, type: "input", seq: 1, life: 1, touch: false, move: { x: 1, y: 0 }, aim: 0, fire: true });
   interpolation.push(snapshot(1, p), 0);
   const downed = { ...p, status: "downed" as const, hits: 0, x: 1201, downedUntil: 10050, reviveMs: 1000, reviving: true };
@@ -138,7 +138,7 @@ test("same-life down/revive clears movement history and correction, and never in
 });
 test("remote interpolation runs 100ms behind, takes shortest angle, clamps gaps, removes leaves", () => {
   const interpolation = new Interpolation(), p = player();
-  const snapshot = (tick: number, x: number, facing = 0): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, bugs: [], shots: [], globs: [], events: [], players: [{ ...p, x, facing }] });
+  const snapshot = (tick: number, x: number, facing = 0): Snapshot => ({ globs: [], v: 1, type: "snapshot", pickups: [], tick, arenaId: "room", wave: 1, bugs: [], shots: [], events: [], players: [{ ...p, x, facing }] });
   interpolation.push(snapshot(1, 100, Math.PI - 0.1), 50);
   const latest = snapshot(3, 200, -Math.PI + 0.1); latest.players[0]!.spawnProtectedUntil = 0;
   interpolation.push(latest, 150);
@@ -151,8 +151,8 @@ test("remote interpolation runs 100ms behind, takes shortest angle, clamps gaps,
 });
 test("arriving shots and bugs stay on the delayed timeline without reversing as history arrives", () => {
   const interpolation = new Interpolation(), p = player();
-  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, players: [p], events: [],
-    globs: [], shots: tick < 2 ? [] : [{ id: 1, owner: p.id, life: 1, born: 50, x: 100 + (tick - 2) * 45, y: 100, vx: 900, vy: 0 }],
+  const snapshot = (tick: number): Snapshot => ({ globs: [], v: 1, type: "snapshot", pickups: [], tick, arenaId: "room", wave: 1, players: [p], events: [],
+    shots: tick < 2 ? [] : [{ id: 1, owner: p.id, life: 1, born: 50, x: 100 + (tick - 2) * 45, y: 100, vx: 900, vy: 0 }],
     bugs: tick < 2 ? [] : [{ id: 2, kind: "crawler", hp: 1, facing: 0, x: 100 + (tick - 2) * 7, y: 100, vx: 140, vy: 0 }] });
   const positions: number[] = [];
   for (let tick = 1; tick <= 6; tick++) {
@@ -177,8 +177,8 @@ test.each([1325, 1360])("a short-lived shot at crawler x=%i has visible travelli
   const arena = createArena(1), p = joinPlayer(arena, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
   p.x = p.y = 1200; arena.bugs = [{ id: arena.nextId++, kind: "crawler", hp: 1, facing: 0, x, y: 1200, vx: 0, vy: 0 }];
   const interpolation = new Interpolation();
-  const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "short", tick: arena.tick, wave: arena.wave,
-    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, globs: arena.globs, events: arena.events });
+  const snapshot = (): Snapshot => structuredClone({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "short", tick: arena.tick, wave: arena.wave,
+    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
   for (const tick of [8, 9, 10]) { arena.tick = tick; interpolation.push(snapshot(), tick * 50); }
   const positions: number[] = [], effects: { at: number; id: number }[] = [];
   let killedAt = 0;
@@ -204,8 +204,8 @@ test.each([1325, 1360])("a short-lived shot at crawler x=%i has visible travelli
 });
 test("combat does not rewind or replay effects after a delayed next snapshot", () => {
   const interpolation = new Interpolation(), p = player();
-  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "stall", tick, wave: 1, players: [p], bugs: [],
-    globs: [], shots: [{ id: 1, owner: p.id, life: 1, born: 0, x: 100 + tick * 45, y: 100, vx: 900, vy: 0 }],
+  const snapshot = (tick: number): Snapshot => ({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "stall", tick, wave: 1, players: [p], bugs: [],
+    shots: [{ id: 1, owner: p.id, life: 1, born: 0, x: 100 + tick * 45, y: 100, vx: 900, vy: 0 }],
     events: [{ id: tick + 1, tick, x: 100, y: 100, points: 11, type: "kill", kind: "crawler" }] });
   interpolation.push(snapshot(1), 50); interpolation.push(snapshot(2), 100);
   const caughtUp = interpolation.combat(250); expect(caughtUp.shots[0]!.x).toBe(190); expect(caughtUp.events).toHaveLength(2);

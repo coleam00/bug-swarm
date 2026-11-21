@@ -89,7 +89,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (local) camera = cameraFor(local.x, local.y, view.width, view.height);
     const combat = interpolation.combat(now);
     renderer.events(combat.events, now);
-    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest, interpolation.time, combat.globs);
+    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest, interpolation.time, combat.globs, combat.pickups);
     if (debug && latest && local) debug.publish({ at: now, epoch: performance.timeOrigin + now, receivedAt: lastSnapshot, generation, playerId: local.id, snapshot: latest, local: local as import("../../shared/arena/types").CombatPlayer,
       camera: { ...camera }, scale: view.scale, width, height, interpolation: interpolation.observation(now), players: interpolation.players(now) as import("../../shared/arena/types").CombatPlayer[],
       input: { left: !!input.stick, right: !!input.right, fire: input.sample().fire } });

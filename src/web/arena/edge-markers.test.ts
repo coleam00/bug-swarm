@@ -55,7 +55,7 @@ test("crowded downed phones retain all twenty markers outside the content-sized 
   const markers = new EdgeMarkers(context as unknown as CanvasRenderingContext2D);
   for (const [width, height] of [[568, 280], [568, 320], [667, 280], [844, 300]]) {
     const panel = { x: (width! - 329) / 2, y: Math.ceil(height! / 2 + 50), width: 329, height: 52 };
-    markers.begin(width!, height!, 94, minimapBounds(width!, height!, 2400, 2400, true), panel);
+    markers.begin(width!, height!, 94, minimapBounds(width!, height!, 2400, 2400, true), panel, { x: width! / 2 - 90, y: height! - 66, width: 180, height: 54 }, { x: 10, y: 90, width: 140, height: 44 });
     for (let i = 0; i < 20; i++) markers.add(String(i), i === 19, width! + 1000, height! / 2);
     markers.place(); expect(markers.count).toBe(20);
     for (let i = 0; i < markers.count; i++) {

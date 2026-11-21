@@ -4,7 +4,7 @@ import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
 
 test("hive countdown uses each authoritative schedule, exclusive ten-second threshold and inclusive zero boundary", () => {
-  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 0, wave: 1, players: [], bugs: [], shots: [], globs: [], events: [] };
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 0, wave: 1, players: [], bugs: [], shots: [], globs: [], pickups: [], events: [] };
   expect(hiveWarning()).toBeNull(); expect(hiveWarning(null)).toBeNull();
   for (const [wave, boundary] of [[4, 2400], [9, 5400], [14, 8400]] as const) {
     snapshot.wave = wave;

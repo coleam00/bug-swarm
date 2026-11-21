@@ -68,7 +68,7 @@ test("beetle plate follows facing, each lost HP cracks once, and pale bounces le
 test("bounce, HP cracks, facing and removal stay on the delayed combat clock and reset without replay", () => {
   const view = new Interpolation(), b = createBug("beetle", 1, 500, 500);
   const shot = { id: 2, owner: "a", life: 1, x: 550, y: 500, vx: -900, vy: 0, born: 0 };
-  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
+  const s: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
   view.push(structuredClone(s), 0);
   s.tick = 2; s.shots = []; s.events = [{ id: 3, tick: 2, kind: "beetle", type: "bounce", x: 522, y: 500, points: 0 }];
   view.push(structuredClone(s), 50);
@@ -90,7 +90,7 @@ test("hive has cached pulsing art, authoritative health, edge arrow, minimap dia
     const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const p = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
     const boss = createBug("hive", 1, 1200, 1200), authoritative = { ...boss, hp: 660 };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], pickups: [], events: [] };
     for (const [width, height] of [[1280, 720], [390, 844], [844, 390]] as const) {
       c.paints.length = 0;
       renderer.draw(width, height, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, 1000, 1, snapshot, 4900);
@@ -265,7 +265,7 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
     const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
     const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
     for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
       players[0]!.score = score; c.paints.length = 0;
       // Interpolated membership is deliberately stale; connected dead players still count.
@@ -290,7 +290,7 @@ test("HUD level follows authoritative life age, freezes at termination and reset
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const p: Snapshot["players"][number] = { ...local, startedTick: 73800, ackSeq: 0 };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], pickups: [], events: [] };
     const draw = (level: number, now = 0) => {
       fixture.context.paints.length = 0;
       renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], snapshot.wave, 1, now, 1, snapshot, 0);
@@ -771,18 +771,27 @@ test("mixed Help/Hive wiring keeps painted labels in view through scaling, short
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
   try {
     const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    c.measureText = text => {
+      const size = Number(c.font.match(/[\d.]+px/)?.[0].replace("px", "") ?? 16), width = text.length * 9 * size / 16;
+      return { width, actualBoundingBoxLeft: c.textAlign === "center" ? width / 2 : 0,
+        actualBoundingBoxRight: c.textAlign === "center" ? width / 2 : width, actualBoundingBoxDescent: 4 } as TextMetrics;
+    };
     const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot${i}`, team: "tabs" as const, x: i ? 5000 : 200, y: 200, vx: 0, vy: 0, facing: 0, status: i ? "downed" as const : "active" as const, hits: i ? 0 : 3 }));
+    players[0]!.effects = { shield: 20000, spread: 20000, rapid: 20000 };
     const boss = createBug("hive", 1, 5000, 200);
     renderer.events([{ id: 1, tick: 100, kind: "hive", type: "kill", x: 5000, y: 200, points: 0 }], 1000);
-    for (const [width, height, scale] of [[844, 390, 0.8], [568, 320, 1], [844, 300, 1.2], [667, 280, 1], [390, 844, 1], [1280, 720, 1.5]] as const) {
+    for (const [width, height, scale] of [[844, 390, 0.8], [568, 320, 1], [844, 300, 1.2], [667, 280, 1], [568, 280, 1], [390, 844, 1], [1280, 720, 1.5]] as const) {
       c.paints.length = 0; renderer.draw(width, height, { x: 0, y: 0 }, players, players[0]!, input, [boss], [], 5, 100, 1000, scale);
       const labels = c.paints.filter(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])));
       expect(labels.filter(p => p.args[0] === "Help")).toHaveLength(19); expect(labels.filter(p => p.args[0] === "Hive")).toHaveLength(1);
       for (const label of labels) {
         expect(label.transform).toEqual([1, 0, 0, 1, 0, 0]); expect(label.font).toBe("bold 16px system-ui");
-        const half = c.measureText(String(label.args[0])).width / 2;
+        c.save(); c.font = label.font; const half = c.measureText(String(label.args[0])).width / 2; c.restore();
         expect(Number(label.args[1]) - half).toBeGreaterThanOrEqual(8); expect(Number(label.args[1]) + half).toBeLessThanOrEqual(width - 8);
         expect(Number(label.args[2]) - 16).toBeGreaterThanOrEqual(94); expect(Number(label.args[2]) + 4).toBeLessThanOrEqual(height - 8);
+        const badges = c.paints.filter(p => p.op === "drawImage" && (p.args[0] as HTMLCanvasElement).width === 44);
+        expect(badges).toHaveLength(3);
+        for (const badge of badges) { const x = Number(badge.args[1]), y = Number(badge.args[2]); expect(Number(label.args[1]) + half <= x || Number(label.args[1]) - half >= x + 44 || Number(label.args[2]) + 4 <= y || Number(label.args[2]) - 16 >= y + 44).toBe(true); }
         const celebration = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12dd")!;
         const [x, y, w, h] = celebration.args.map(Number) as [number, number, number, number];
         expect(Number(label.args[1]) + half <= x || Number(label.args[1]) - half >= x + w || Number(label.args[2]) + 4 <= y || Number(label.args[2]) - 16 >= y + h).toBe(true);
@@ -818,7 +827,8 @@ test("authoritative hive warning reaches every life state before spawn and throu
   try {
     const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const p: CombatPlayer = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 2201, wave: 4, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], globs: [], events: [] };
+    p.effects.shield = 10000000;
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 2201, wave: 4, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], globs: [], pickups: [], events: [] };
     const boss = createBug("hive", 1, 1500, 1500);
     const draw = (authoritative: Snapshot | null = snapshot, delayed = [boss]) => { c.paints.length = 0; renderer.draw(390, 844, { x: 1000, y: 800 }, [p], p, input, delayed, [], 100, 100000, 999999, 1, authoritative, 0); const text = c.paints.filter(p => p.op === "fillText").map(p => String(p.args[0]));
       expect(text.some(t => /wave|\u2014/i.test(t))).toBe(false);
@@ -826,6 +836,8 @@ test("authoritative hive warning reaches every life state before spawn and throu
       if (message) {
         const countdown = c.paints.find(p => p.op === "fillText" && /^\d+s$/.test(String(p.args[0])) && p.args[2] === message.args[2])!;
         expect(countdown).toBeDefined();
+        const badges = c.paints.filter(p => p.op === "drawImage" && (p.args[0] as HTMLCanvasElement).width === 44);
+        expect(badges).toHaveLength(1); expect(Number(badges[0]!.args[2])).toBeGreaterThanOrEqual(86);
         const bounds = (paint: Paint) => {
           c.save(); c.font = paint.font; c.textAlign = paint.textAlign;
           const m = c.measureText(String(paint.args[0])); c.restore();

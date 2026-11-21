@@ -49,12 +49,12 @@ export class Interpolation {
         facing: p.facing + Math.atan2(Math.sin(q.facing - p.facing), Math.cos(q.facing - p.facing)) * fraction };
     });
   }
-  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "globs" | "events"> {
-    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], globs: [], events: [] };
+  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "events" | "pickups" | "globs"> {
+    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], events: [], globs: [], pickups: [] };
     // One monotonic clock owns births, movement, removals and their kill effects.
     const target = this.combatTick = Math.max(this.combatTick,
       Math.min(latest.snapshot.tick, latest.snapshot.tick + (now - latest.at - INTERPOLATION_MS) / STEP_MS));
-    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], globs: [], events: [] };
+    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [], globs: [], pickups: [] };
     let a = this.samples[0]!, b = a;
     for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
     const offset = target - a.snapshot.tick, events: CombatEvent[] = [];
@@ -64,7 +64,7 @@ export class Interpolation {
         events.push(event); this.lastEvent = event.id;
       }
     }
-    return { globs: this.entities("globs", a.snapshot, b.snapshot, offset), bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
+    return { globs: this.entities("globs", a.snapshot, b.snapshot, offset), pickups: a.snapshot.pickups, bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
   }
   private entities<K extends "bugs" | "shots" | "globs">(kind: K, a: Snapshot, b: Snapshot, offset: number): Snapshot[K] {
     const visible: (Bug | Shot | Glob)[] = [];

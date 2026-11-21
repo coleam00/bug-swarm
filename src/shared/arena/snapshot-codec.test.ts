@@ -2,13 +2,13 @@ import { expect, test } from "bun:test";
 import { SnapshotEncoder, ServerDecoder } from "./snapshot-codec";
 import { createArena, joinPlayer, stepArena, endLife, respawnPlayer } from "./simulation";
 import { lifeDefaults } from "./types";
-import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_GLOBS } from "./constants";
+import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_GLOBS, MAX_PICKUPS } from "./constants";
 import { parseServer, serializeSnapshot, type Snapshot } from "./protocol";
 import { createBug } from "./bugs/registry";
 function fixture() {
   const state = createArena(77), id = crypto.randomUUID();
   joinPlayer(state, { id, name: "Pilot", team: "tabs" });
-  const value = (): Snapshot => ({ v: 1, type: "snapshot", arenaId: "codec-test", tick: state.tick, wave: state.wave,
+  const value = (): Snapshot => ({ pickups: state.pickups, v: 1, type: "snapshot", arenaId: "codec-test", tick: state.tick, wave: state.wave,
     players: [...state.players.values()].map(p => ({ ...p, ackSeq: state.tick })), bugs: state.bugs, shots: state.shots, globs: state.globs, events: state.events });
   return { state, id, value };
 }
@@ -103,24 +103,28 @@ test("maximum supported collections, extension payloads and large ticks round tr
   for (let i = 0; i < MAX_PLAYERS; i++) { const id = crypto.randomUUID(); f.state.players.set(id, { id, name: "Pilot" + i, team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: Math.PI, ...lifeDefaults() }); }
   f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ ...createBug(id < 12 ? "spitter" : "dasher", id, 500, 500), phase: id < 12 ? "swell" : "windup", phaseUntil: f.state.tick * 50 + (id < 12 ? 500 : 700), tell: { time: 1.123456 } }));
   f.state.shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: [...f.state.players.keys()][i % MAX_PLAYERS]!, life: 1, x: 600, y: 600, vx: 900, vy: 0, born: 0 }));
-  f.state.globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 500 + i, x: 600, y: 600, vx: Math.cos(i) * (i < 12 ? 320 : 180), vy: Math.sin(i) * (i < 12 ? 320 : 180), ...(i < 12 ? {} : { source: "hive" as const }), born: f.state.tick * 50 - 50 }));
-  f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id: 1000 + id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
+  f.state.globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 1800 + i, x: 600, y: 600, vx: Math.cos(i) * (i < 12 ? 320 : 180), vy: Math.sin(i) * (i < 12 ? 320 : 180), ...(i < 12 ? {} : { source: "hive" as const }), born: f.state.tick * 50 - 50 }));
+  f.state.pickups = Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 1200, y: 1200, expiresAt: f.state.tick * 50 + 12000 }));
+  for (const p of f.state.players.values()) p.effects = { shield: f.state.tick * 50 + 20000, spread: f.state.tick * 50 + 8000, rapid: f.state.tick * 50 + 8000 };
+  const events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id: 1000 + id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
     ...(id % 2 ? { type: "hit" as const, points: 0 as const } : { type: "kill" as const, points: 27.5 }) }));
   const encoder = new SnapshotEncoder(), frame = encoder.encode(f.value()).keyframe, decoded = new ServerDecoder().read(frame) as Snapshot;
   expect(decoded.tick).toBe(2 ** 36); expect(decoded.players).toHaveLength(MAX_PLAYERS);
-  expect(decoded.bugs).toHaveLength(MAX_BUGS); expect(decoded.shots).toHaveLength(MAX_SHOTS); expect(decoded.events).toHaveLength(MAX_EVENTS);
+  expect(decoded.bugs).toHaveLength(MAX_BUGS); expect(decoded.shots).toHaveLength(MAX_SHOTS); expect(decoded.events).toHaveLength(0);
   expect((decoded.bugs[0] as any).tell).toEqual({ time: 1.123 });
-  expect(decoded.events[0]!.points).toBe(27.5); expect(decoded.bugs[0]!.phase).toBe("swell");
-  expect(decoded.events[1]!).toMatchObject({ type: "hit", points: 0, kind: "dasher" });
+  expect(decoded.bugs[0]!.phase).toBe("swell");
+  expect(decoded.pickups).toEqual(f.state.pickups); expect(decoded.players[0]!.effects).toEqual(f.state.players.values().next().value!.effects);
   expect(decoded.globs).toHaveLength(MAX_GLOBS);
   expect(frame.length).toBeLessThan(65536);
-  for (const all of [false, true]) {
-    const value = f.value(); value.events = value.events.map((e, i) => all || i % 2 ? { id: e.id, tick: e.tick, x: e.x, y: e.y, type: "glob-pop", points: 5 } : e);
+  for (const impacts of [1, 60, 330, 600, MAX_EVENTS]) for (const all of [false, true]) {
+    const value = f.value(); value.shots = value.shots.slice(impacts);
+    value.events = events.slice(0, impacts).map((e, i) => all || i % 2 ? { id: e.id, tick: e.tick, x: e.x, y: e.y, type: "glob-pop", points: 5 } : e);
     const wire = new SnapshotEncoder().encode(value).keyframe, roundTrip = new ServerDecoder().read(wire) as Snapshot;
     expect(wire.length).toBeLessThan(65536); expect(roundTrip.events).toEqual(value.events);
   }
   // Keep the phased-spitter/dasher worst case above; also exercise all collection bounds
   // together with the new kind, all crack states and mixed combat events.
+  f.state.events = events; f.state.shots = [];
   for (let i = 0; i < 10; i++) f.state.bugs[i] = { ...createBug("beetle", i, 500, 500), hp: i % 5 + 1 };
   for (let i = 0; i < MAX_EVENTS; i += 3) f.state.events[i] = { id: 1000 + i, tick: f.state.tick, x: 522, y: 500, kind: "beetle", type: "bounce", points: 0 };
   const mixed = f.value(), wire = serializeSnapshot(mixed), mixedFrame = new SnapshotEncoder().encode(mixed).keyframe;
@@ -129,6 +133,21 @@ test("maximum supported collections, extension payloads and large ticks round tr
   const decodedMixed = new ServerDecoder().read(mixedFrame) as Snapshot;
   expect(decodedMixed.bugs.filter(b => b.kind === "beetle")).toHaveLength(10);
   expect(decodedMixed.events[0]!.type).toBe("bounce");
+});
+
+test("compact pickup births, collection, refresh and consumption retain authoritative effects", () => {
+  const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder(), p = f.state.players.get(f.id)!;
+  p.x = p.y = 1200;
+  decoder.read(encoder.encode(f.value()).keyframe);
+  f.state.pickups = (["shield", "spread", "rapid"] as const).map(kind => ({ id: f.state.nextId++, kind, x: 1200, y: 1200, expiresAt: 12000 }));
+  f.state.tick++;
+  expect((decoder.read(encoder.encode(f.value()).delta) as Snapshot).pickups).toEqual(f.state.pickups);
+  stepArena(f.state, new Map());
+  const collected = decoder.read(encoder.encode(f.value()).delta) as Snapshot;
+  expect(collected.pickups).toEqual([]); expect(collected.players[0]!.effects).toEqual({ shield: 20050, spread: 8050, rapid: 8050 });
+  p.effects.rapid = 8100; delete p.effects.shield; f.state.tick++;
+  expect((decoder.read(encoder.encode(f.value()).delta) as Snapshot).players[0]!.effects).toEqual({ spread: 8050, rapid: 8100 });
+  expect(collected.players[0]!.effects).toEqual({ shield: 20050, spread: 8050, rapid: 8050 });
 });
 test("seeded full room combat survives hundreds of deltas without losing events or acknowledgements", () => {
   const f = fixture(); for (let i = 1; i < 20; i++) joinPlayer(f.state, { id: crypto.randomUUID(), name: "Pilot" + i, team: "spaces" });

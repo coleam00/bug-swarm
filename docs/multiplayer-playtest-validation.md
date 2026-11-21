@@ -2,6 +2,10 @@
 
 Factory Chrome `157.0.8103.51`, Windows, headless with GPU enabled by default. Servers, databases, homes, Chrome profiles and artifacts are isolated inside the checkout. Players use keyboard/mouse or simultaneous two-point touch; they do not send protocol messages or modify game state.
 
+## Pickup integration
+
+Issue 79 preserves the paint-observation hooks alongside pickup drawing and supplies pickup observations to browser/warm-up policies. Its revive scenario chooses the first casualty visible on every page and the nearest active rescuer, so guards falling before PilotA do not strand the intended rescue. Its boss scenario waits for the setup-only fifth-wave spawn before browser admission; browser startup timing therefore cannot change encounter HP. Every original assertion and deadline remains. The complete seven-scenario suite passes in 260.4 seconds, with reports and key screenshots in `.evidence/79/playtest/b6127f2d/`; [pickup validation](pickup-validation.md) records the integration checks and retained failed/baseline runs.
+
 ## Returned-check validation
 
 The corrected combat scenario credits **60 seconds with both actors active and receiving fresh browser input**. Every five credited seconds requires repeated aim dispatches, observed fire and authoritative shots from each actor. Downed time, saved-result validation and UI respawn earn no time. Ended browser lives are independently checked against SQLite and rendered results before respawning. The report retains the twelve activity windows. A fixture replacing 50 seconds with idle/dead players fails.

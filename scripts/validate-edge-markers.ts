@@ -148,7 +148,7 @@ try {
       await pause(1500); // Exclude viewport transition frames from the steady-state samples.
       const samples=[];for(let i=0;i<7;i++){await pause(1100);samples.push(await evaluate(p.session,`({frame:{...document.querySelector('canvas').dataset},errors:window.evidence.errors})`));}
       assert(samples.every(s=>s.errors.length===0&&Number(s.frame.frameMs)<16.67));
-      report.frames.push({width,height,controlled:true,collections:{players:20,bugs:150,shots:140,globs:24,help:19,hive:1},samples});
+      report.frames.push({width,height,controlled:true,collections:{...await evaluate(p.session,"window.arenaBenchmark.population()"),help:19,hive:1},samples});
       await shot(p.session,`${width}x${height}-full-arena-crowded-arrows`);
     }
     await call('Page.navigate',{url:`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&edges&quiet`},p.session);

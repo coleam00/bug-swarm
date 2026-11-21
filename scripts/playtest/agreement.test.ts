@@ -11,7 +11,7 @@ function fixture() {
   const snapshots: ServerObservation["snapshots"] = [];
   for (let i = 0; i < 5; i++) {
     stepArena(state, new Map([["remote", { move: { x: 1, y: 0 }, aim: 0, fire: false }]]));
-    snapshots.push(structuredClone({ observedAt: 800 + i * 50, v: 1, type: "snapshot", arenaId: "room", tick: state.tick, wave: state.wave, players: [...state.players.values()].map(p => ({ ...p, ackSeq: 0 })), bugs: state.bugs, shots: state.shots, globs: state.globs, events: state.events }));
+    snapshots.push(structuredClone({ observedAt: 800 + i * 50, v: 1, type: "snapshot", arenaId: "room", tick: state.tick, wave: state.wave, players: [...state.players.values()].map(p => ({ ...p, ackSeq: 0 })), pickups: state.pickups, bugs: state.bugs, shots: state.shots, globs: state.globs, events: state.events }));
   }
   const s = snapshots[4]!, local = s.players[0]!, remote = { ...s.players[1]!, x: (snapshots[2]!.players[1]!.x + snapshots[3]!.players[1]!.x) / 2 };
   const page: PageObservation = { now: 1000, text: "", fps: 60, frameMs: 1, result: null, frame: {
