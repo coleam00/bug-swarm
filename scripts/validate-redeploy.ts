@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, existsSync, appendFileSync, symlinkSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, existsSync, appendFileSync, symlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
@@ -10,8 +10,10 @@ mkdirSync(evidenceRoot, { recursive: true });
 const evidence = mkdtempSync(join(evidenceRoot, "redeploy-")), data = join(evidence, "data"), profile = join(evidence, "chrome-profile"), changed = join(evidence, "changed");
 mkdirSync(data, { recursive: true });
 const home = join(evidence, "home"), temp = join(evidence, "tmp");
-mkdirSync(home); mkdirSync(temp); mkdirSync(profile);
-const env = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home,
+// Windows known-folder lookups must succeed even for a brand-new scratch home.
+const local = join(home, "AppData/Local"), roaming = join(home, "AppData/Roaming");
+for (const path of [home, temp, profile, local, roaming]) mkdirSync(path, { recursive: true });
+const env = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: roaming, LOCALAPPDATA: local, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home,
   TEMP: temp, TMP: temp, DATA_DIR: data, NODE_ENV: "development", RAILWAY_GIT_COMMIT_SHA: "" };
 const chromePath = process.env.CHROME_PATH ?? [
   join(process.env.ProgramFiles ?? "C:/Program Files", "Google/Chrome/Application/chrome.exe"),
@@ -21,19 +23,10 @@ const chromePath = process.env.CHROME_PATH ?? [
 if (!chromePath || !existsSync(chromePath)) throw Error("Set CHROME_PATH to an installed Chrome executable");
 console.log(`Evidence: ${evidence}`);
 function run(command: string[], cwd = root) {
-  const result = Bun.spawnSync(command, { cwd, env: { ...env, NODE_ENV: "production" }, windowsVerbatimArguments: command[0] === "cmd.exe", stdout: "pipe", stderr: "pipe", timeout: 60000 });
+  const result = Bun.spawnSync(command, { cwd, env: { ...env, NODE_ENV: "production" }, stdout: "pipe", stderr: "pipe", timeout: 60000 });
   assert.equal(result.exitCode, 0, result.stdout.toString() + result.stderr.toString());
   return result.stdout.toString();
 }
-function chromeDirectory(path: string) {
-  // Chrome's Windows profile internals still exceed MAX_PATH in nested checkouts.
-  // Use the same owned directory's existing 8.3 spelling when available.
-  if (process.platform !== "win32") return path;
-  const short = run(["cmd.exe", "/d", "/c", `for %I in ("${path}") do @echo %~sI`]).trim();
-  assert.equal(statSync(short).ino, statSync(path).ino);
-  return short;
-}
-const browserProfile = chromeDirectory(profile), browserHome = chromeDirectory(home), browserTemp = chromeDirectory(temp);
 run(["git", "diff", "--exit-code", "HEAD"]);
 const originalCommit = run(["git", "rev-parse", "HEAD"]).trim();
 await Bun.write(join(evidence, "build.log"), run([process.execPath, "run", "build"]));
@@ -75,8 +68,8 @@ async function bots(origin: string, label: string, count = 10) {
 let app: Awaited<ReturnType<typeof server>> | undefined, chrome: any, ws: WebSocket | undefined;
 try {
   app = await server(root); const port = app.port, origin = `http://127.0.0.1:${port}`;
-  const chromeEnv: Record<string, string | undefined> = { ...env, HOME: browserHome, USERPROFILE: browserHome, APPDATA: browserHome, LOCALAPPDATA: browserHome, TEMP: browserTemp, TMP: browserTemp }; delete chromeEnv.CHROME_CRASHPAD_PIPE_NAME;
-  chrome = Bun.spawn([chromePath, `--user-data-dir=${browserProfile.replaceAll("\\", "/")}`, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", "about:blank"], { cwd: root, env: chromeEnv, stdout: "ignore", stderr: Bun.file(join(evidence, "chrome.log")) });
+  const chromeEnv: Record<string, string | undefined> = { ...env }; delete chromeEnv.CHROME_CRASHPAD_PIPE_NAME;
+  chrome = Bun.spawn([chromePath, `--user-data-dir=${profile.replaceAll("\\", "/")}`, "--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--remote-debugging-port=0", "about:blank"], { cwd: root, env: chromeEnv, stdout: "ignore", stderr: Bun.file(join(evidence, "chrome.log")) });
   processes.push(chrome);
   const debugPort = await until(() => { try { return readFileSync(join(profile, "DevToolsActivePort"), "utf8").split("\n")[0]; } catch {} }, "Chrome CDP");
   const targets: any[] = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
