@@ -33,6 +33,20 @@ test("prediction history is bounded", () => {
   for (let seq = 1; seq <= 120; seq++) expect(prediction.advance({ v: 1, type: "input", life: 1, touch: false, seq, ...neutralInput() })).toBe(true);
   expect(prediction.advance({ v: 1, type: "input", life: 1, touch: false, seq: 121, ...neutralInput() })).toBe(false);
 });
+
+test("same-life down/revive clears movement history and correction, and never interpolates across status", () => {
+  const prediction = new Prediction(), p = player(), interpolation = new Interpolation();
+  const snapshot = (tick: number, current: typeof p): Snapshot => ({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, players: [current], bugs: [], shots: [], events: [] });
+  prediction.reconcile(p); prediction.advance({ v: 1, type: "input", seq: 1, life: 1, touch: false, move: { x: 1, y: 0 }, aim: 0, fire: true });
+  interpolation.push(snapshot(1, p), 0);
+  const downed = { ...p, status: "downed" as const, hits: 0, x: 1201, downedUntil: 10050, reviveMs: 1000, reviving: true };
+  prediction.reconcile(downed); expect(prediction.pending).toHaveLength(0);
+  expect(prediction.visual({ move: { x: 1, y: 0 }, aim: 1, fire: true }, 1, 1)?.x).toBe(1201);
+  interpolation.push(snapshot(2, downed), 50); expect(interpolation.players(50)[0]).toMatchObject(downed);
+  const revived = { ...p, hits: 1, x: 1201 };
+  prediction.reconcile(revived); expect(prediction.visual(neutralInput(), 1, 1)?.x).toBe(1201);
+  interpolation.push(snapshot(3, revived), 100); expect(interpolation.players(100)[0]?.x).toBe(1201);
+});
 test("remote interpolation runs 100ms behind, takes shortest angle, clamps gaps, removes leaves", () => {
   const interpolation = new Interpolation(), p = player();
   const snapshot = (tick: number, x: number, facing = 0): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, bugs: [], shots: [], events: [], players: [{ ...p, x, facing }] });

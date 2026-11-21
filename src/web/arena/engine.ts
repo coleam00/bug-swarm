@@ -26,7 +26,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
       pause(); status("Reconnecting...");
       return;
     }
-    if (result.life !== prediction.player?.life || prediction.player.hits || shownLife === result.life && shownSave === result.save) return;
+    if (result.life !== prediction.player?.life || prediction.player.status !== "out" || shownLife === result.life && shownSave === result.save) return;
     shownLife = result.life; shownSave = result.save; lifeView(result, respawn);
   };
   const reset = () => { lastSend = performance.now(); };
@@ -42,9 +42,10 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (!own) return;
     if (message.tick < lastTick) return;
     lastTick = message.tick; lastSnapshot = performance.now();
+    if (prediction.player?.status !== own.status) { input.blockHeld(); input.clear(); }
     prediction.reconcile(own); interpolation.push(message, lastSnapshot);
     latest = message;
-    if (!own.hits) {
+    if (own.status === "out") {
       if (deadLife !== own.life) { input.blockHeld(); input.clear(); deadLife = own.life; }
       if (own.result) showLife(own.result);
     } else if (deadLife) { deadLife = 0; input.clear(); lifeView(null, respawn); }
@@ -52,7 +53,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   let lastTick = -1;
   const unbind = bindInput(canvas, input, (x, y) => {
     const p = prediction.player; return p ? Math.atan2(y / view.scale + camera.y - p.y, x / view.scale + camera.x - p.x) : 0;
-  }, () => { showStats = !showStats; }, reset, usedTouch => { if (!deadLife) return false; respawn(usedTouch); return true; });
+  }, () => { showStats = !showStats; }, reset, usedTouch => { if (prediction.player?.status === "downed") return true; if (!deadLife) return false; respawn(usedTouch); return true; });
   const resize = () => {
     width = canvas.clientWidth; height = canvas.clientHeight; dpr = Math.min(2, window.devicePixelRatio || 1);
     view = worldView(width, height);
@@ -64,7 +65,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     const now = performance.now();
     if (!ready) return;
     if (now - lastSnapshot > SNAPSHOT_TIMEOUT_MS) { pause(); connection.reconnect(); return; }
-    if (!prediction.player?.hits) return;
+    if (prediction.player?.status !== "active") return;
     const message: InputMessage = { v: 1, type: "input", seq: ++seq, life: prediction.player.life, touch: input.touch, ...input.sample() };
     if (connection.send(message)) { lastSend = now; if (!prediction.advance(message)) { pause(); connection.reconnect(); } }
   }, STEP_MS);

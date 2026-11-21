@@ -5,7 +5,7 @@ export const crawler = {
   move(bug: Bug, players: Iterable<CombatPlayer>) {
     let nearest: CombatPlayer | undefined, distance = Infinity;
     for (const p of players) {
-      if (!p.hits) continue;
+      if (p.status !== "active") continue;
       const d = Math.hypot(p.x - bug.x, p.y - bug.y);
       if (d < distance || (d === distance && p.id < nearest!.id)) { nearest = p; distance = d; }
     }

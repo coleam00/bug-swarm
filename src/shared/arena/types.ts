@@ -6,11 +6,12 @@ export interface Player {
   x: number; y: number; vx: number; vy: number; facing: number;
 }
 export interface Life {
+  status: "active" | "downed" | "out"; downedUntil: number; reviveMs: number; reviving: boolean;
   life: number; hits: number; heat: number; overheatUntil: number; nextShotAt: number;
   immuneUntil: number; spawnProtectedUntil: number; streak: number; points: number; score: number; kills: number; startedTick: number; touch: boolean;
 }
 export type CombatPlayer = Player & Life;
-export const lifeDefaults = (tick = 0, life = 1): Life => ({ life, hits: PLAYER_HITS, heat: 0, overheatUntil: 0, nextShotAt: tick * STEP_MS,
+export const lifeDefaults = (tick = 0, life = 1): Life => ({ status: "active", downedUntil: 0, reviveMs: 0, reviving: false, life, hits: PLAYER_HITS, heat: 0, overheatUntil: 0, nextShotAt: tick * STEP_MS,
   immuneUntil: 0, spawnProtectedUntil: tick * STEP_MS + SPAWN_PROTECTION_MS, streak: 0, points: 0, score: 0, kills: 0, startedTick: tick, touch: false });
 export interface Bug { id: number; kind: keyof typeof import("./bugs/registry").BUGS; x: number; y: number; vx: number; vy: number }
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }

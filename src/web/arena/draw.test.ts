@@ -9,6 +9,37 @@ import { lifeDefaults } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import type { Paint } from "../game/canvas-fixture.test-support";
 
+test("downed robots remain visible with countdown/progress, local copy and remote edge Help; revival removes them", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), status: "downed" as const, hits: 0, downedUntil: 10000, reviveMs: 1000, reviving: true,
+      id: "victim", name: "Victim", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
+    const q = { ...p, id: "remote", x: 1200 };
+    renderer.draw(390, 844, { x: 0, y: 0 }, [p, q], p, input, [], [], 1, 40, 1234);
+    const paints = fixture.context.paints;
+    expect(paints.some(p => p.op === "stroke" && p.globalAlpha === 0.4 && p.path.some(c => c.op === "roundRect"))).toBe(true);
+    const text = paints.filter(p => p.op === "fillText").map(p => p.args[0]);
+    expect(text).toContain("Help"); expect(text).toContain("8s");
+    expect(text.join(" ")).toContain("Downed — a teammate can revive you");
+    const rings = paints.filter(p => p.op === "stroke").flatMap(p => p.path.filter(c => c.op === "arc"));
+    expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI) < 1e-8)).toBe(true);
+    expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI * 1.6) < 1e-8)).toBe(true);
+    expect(paints.filter(p => p.op === "fillText" && p.args[0] === "Help")).toHaveLength(2);
+    fixture.context.paints.length = 0;
+    const revived = { ...p, status: "active" as const, hits: 1 };
+    renderer.draw(390, 844, { x: 0, y: 0 }, [revived], revived, input);
+    expect(fixture.context.paints.some(p => p.op === "fillText" && String(p.args[0]).includes("Help"))).toBe(false);
+    fixture.context.paints.length = 0;
+    const out = { ...p, status: "out" as const };
+    renderer.draw(390, 844, { x: 0, y: 0 }, [out], null, input);
+    expect(fixture.context.paints.some(p => p.op === "drawImage")).toBe(false);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
 test("spawn shimmer animates on both robots, expires independently of damage flash, and scales only world drawing", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
@@ -68,7 +99,7 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
 test("life clock uses authoritative ticks, resets on a new life and freezes at the terminal duration", () => {
   const p = { ...lifeDefaults(9600), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
   expect(lifeClock(p, 9600)).toBe("0:00"); expect(lifeClock(p, 10860)).toBe("1:03");
-  const dead = { ...p, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
+  const dead = { ...p, status: "out" as const, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
   expect(lifeClock(dead, 12000)).toBe("1:03");
   expect(lifeClock({ ...p, ...lifeDefaults(12000, 2) }, 12020)).toBe("0:01");
 });
