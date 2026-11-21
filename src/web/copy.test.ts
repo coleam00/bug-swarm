@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import ts from "typescript";
 
 const forbidden = /[\u2013\u2014]/u;
@@ -11,20 +11,33 @@ const entities = (text: string) => text.replace(/&(?:mdash|ndash|#(?:x[0-9a-f]+|
   return code <= 0x10ffff ? String.fromCodePoint(code) : entity;
 });
 
-// Conservatively scan all production literals, including shared/server errors
-// that can reach a player. Comments and test fixtures are not product copy.
-function copyViolations(file: string, source: string): string[] {
+// Client copy and server message boundaries, rather than server diagnostics.
+// Comments and test fixtures are not product copy.
+function copyViolations(file: string, source: string, scope: "client" | "messages" = "client"): string[] {
   const violations: string[] = [];
   const check = (text: string, offset: number) => {
     if (forbidden.test(text)) violations.push(`${file}:${source.slice(0, offset).split("\n").length}`);
   };
   if (/\.tsx?$/.test(file)) {
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
-    const visit = (node: ts.Node) => {
+    const visit = (node: ts.Node, include = scope === "client") => {
+      if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) &&
+        (node.expression.expression.getText(tree) === "console" || node.expression.getText(tree) === "this.log")) return;
+      if (ts.isNewExpression(node) && node.expression.getText(tree) === "Error") return;
+      if (!include) {
+        // API/name errors, arena refusals and the shared moderation message
+        // reach players; the other server literals are implementation details.
+        if (ts.isPropertyAssignment(node) && ["error", "message"].includes(node.name.getText(tree).replace(/["']/g, ""))) visit(node.initializer, true);
+        else if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === "refuse") {
+          if (node.arguments[2]) visit(node.arguments[2], true);
+        } else if (ts.isVariableDeclaration(node) && node.name.getText(tree) === "HIDDEN_IDENTITY_MESSAGE" && node.initializer) visit(node.initializer, true);
+        else ts.forEachChild(node, child => visit(child, false));
+        return;
+      }
       if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) || ts.isTemplateHead(node) || ts.isTemplateMiddle(node) || ts.isTemplateTail(node)) {
         check(ts.isJsxAttribute(node.parent) ? entities(node.text) : node.text, node.getStart(tree));
       } else if (ts.isJsxText(node)) check(entities(node.text), node.getStart(tree));
-      ts.forEachChild(node, visit);
+      ts.forEachChild(node, child => visit(child, include));
     };
     visit(tree);
   } else {
@@ -64,14 +77,32 @@ test("copy scanner decodes strings, templates, JSX, HTML and CSS while ignoring 
   expect(copyViolations("fixture.css", '/* — */ a::after { content: "…"; }')).toEqual([]);
 });
 
-test("production copy contains no em or en dashes", () => {
+test("copy scanning covers player messages and excludes diagnostics", () => {
+  const diagnostics = 'console.error("Shutdown failed — unable to save"); throw new Error("Config – invalid");';
+  expect(copyViolations("main.ts", diagnostics, "messages")).toEqual([]);
+  expect(copyViolations("client.ts", diagnostics + ' this.log("Read failed — retrying");')).toEqual([]);
+  for (const message of [
+    'return { error: "Use 2–16 letters." };',
+    'return c.json({ error: valid ? "Fine" : `Invalid — ${name}` });',
+    'send({ type: "error", message: "Try again — later" });',
+    'this.refuse(c, "invalid", "That name — refused");',
+    'export const HIDDEN_IDENTITY_MESSAGE = "Name – hidden";',
+  ]) expect(copyViolations("server.ts", diagnostics + message, "messages").length, message).toBeGreaterThan(0);
+});
+
+test("player-facing copy contains no em or en dashes", () => {
   const root = resolve(import.meta.dir, ".."), violations: string[] = [];
+  const messageSources = new Set(["server/rules.ts", "server/app.ts", "server/arena/rooms.ts", "shared/arena/protocol.ts"].map(path => join(root, path)));
   const scan = (directory: string) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) scan(path);
-      else if (/\.(tsx?|css)$/.test(entry.name) && !/\.(test|test-support)\./.test(entry.name))
-        violations.push(...copyViolations(path, readFileSync(path, "utf8")));
+      else if (/\.(tsx?|css)$/.test(entry.name) && !/\.(test|test-support)\./.test(entry.name)) {
+        const clientCopy = path.startsWith(join(root, "web") + sep) ||
+          path === join(root, "shared/teams.ts") || path === join(root, "server/share-assets.ts");
+        if (clientCopy || messageSources.has(path))
+          violations.push(...copyViolations(path, readFileSync(path, "utf8"), clientCopy ? "client" : "messages"));
+      }
     }
   };
   scan(root);

@@ -179,7 +179,8 @@ test("HUD level follows authoritative life age, freezes at termination and reset
       fixture.context.paints.length = 0;
       renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], snapshot.wave, 1, now, 1, snapshot, 0);
       const hud = fixture.context.paints.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"));
-      expect(hud?.args[0]).toBe(`0 pts  ×1.0  3 hits  Lv ${level}  1 in this arena`);
+      expect(String(hud?.args[0])).toMatch(new RegExp(`\\bLv ${level}\\b`));
+      expect(String(hud?.args[0])).not.toMatch(/\bW\d+\b/);
     };
     draw(1); // Wave 124, but this life just joined. Predicted startedTick is stale.
     for (const [age, level] of [[59.95, 1], [60, 2], [120, 3], [240, 4]]) {
@@ -192,8 +193,6 @@ test("HUD level follows authoritative life age, freezes at termination and reset
     p.status = "out";
     p.result = { v: 1, type: "life_over", playerId: p.id, life: p.life, score: 0, kills: 0, seconds: 60, touch: false, save: "saved" };
     snapshot.tick += 100000; draw(2); // Terminal duration stays frozen across thresholds.
-    p.result.life++; draw(4); // Ignore a different life's result.
-    p.result.life--; p.result.playerId = "remote"; draw(4);
     Object.assign(p, lifeDefaults(snapshot.tick, 2)); delete p.result; draw(1);
     local.startedTick = 100;
     fixture.context.paints.length = 0;

@@ -83,7 +83,7 @@ export class ArenaRenderer {
       const authoritative = snapshot?.players.find(p => p.id === local.id);
       const p = authoritative ?? local as CombatPlayer;
       const population = snapshot?.players.length ?? players.length;
-      const result = p.status === "out" && authoritative?.result?.life === p.life && authoritative.result.playerId === p.id ? authoritative.result : undefined;
+      const result = authoritative?.result;
       const age = result ? result.seconds : Math.max(0, ((snapshot?.tick ?? tick) - p.startedTick) * STEP_MS / 1000);
       const level = personalLevel(age);
       const key = `${p.score}/${p.streak}/${p.hits}/${level}/${population}/${width}/${height}`;

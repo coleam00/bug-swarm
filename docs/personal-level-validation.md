@@ -9,12 +9,14 @@ Boss presentation remains in #84 under the owner's scope split.
 `level.test.ts` checks each milestone immediately before, at and after its
 boundary, negative age and an hour-old life. `draw.test.ts` checks an old-arena
 join with conflicting prediction/time, cache refresh across milestones,
-revival, respawn, terminal identity and duration, fallback without a snapshot,
+revival, respawn, terminal duration, fallback without a snapshot,
 exact downed wording, and large-score fitting with 20 connected players at
 1280x720, 844x390 and 390x844. Board tests distinguish unavailable totals from
-zero and require the exact document title. The production copy scan checks
-decoded TypeScript/TSX literals and templates, JSX text/attributes, HTML copy
-and CSS strings, including encoded dashes; comments and test fixtures are
+zero and require the exact document title. The copy scan checks client
+TypeScript/TSX literals and templates, JSX text/attributes, HTML copy and CSS
+strings, including encoded dashes. It also checks shared team/share-asset copy,
+API/name error fields, arena refusal messages and the shared moderation
+message. Console/log diagnostics, Error objects, comments and test fixtures are
 excluded. No documentation pages are served or linked by the player UI.
 
 ## Chrome evidence
