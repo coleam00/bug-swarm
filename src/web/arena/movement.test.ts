@@ -36,8 +36,11 @@ test("prediction history is bounded", () => {
 test("remote interpolation runs 100ms behind, takes shortest angle, clamps gaps, removes leaves", () => {
   const interpolation = new Interpolation(), p = player();
   const snapshot = (tick: number, x: number, facing = 0): Snapshot => ({ v: 1, type: "snapshot", tick, arenaId: "room", wave: 1, bugs: [], shots: [], events: [], players: [{ ...p, x, facing }] });
-  interpolation.push(snapshot(1, 100, Math.PI - 0.1), 50); interpolation.push(snapshot(3, 200, -Math.PI + 0.1), 150);
+  interpolation.push(snapshot(1, 100, Math.PI - 0.1), 50);
+  const latest = snapshot(3, 200, -Math.PI + 0.1); latest.players[0]!.spawnProtectedUntil = 0;
+  interpolation.push(latest, 150);
   expect(interpolation.players(200)[0]!.x).toBe(150); expect(interpolation.players(200)[0]!.facing).toBeCloseTo(Math.PI);
+  expect((interpolation.players(200)[0] as typeof p).spawnProtectedUntil).toBe(0);
   expect(interpolation.players(10000)[0]!.x).toBe(200);
   interpolation.push(snapshot(2, 50), 200); expect(interpolation.players(10000)[0]!.x).toBe(200);
   interpolation.push({ ...snapshot(4, 0), players: [] }, 200); expect(interpolation.players(200)).toHaveLength(0);

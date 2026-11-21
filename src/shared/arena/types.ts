@@ -1,5 +1,5 @@
 import type { Team } from "../teams";
-import { STEP_MS, PLAYER_HITS, IMMUNITY_MS } from "./constants";
+import { STEP_MS, PLAYER_HITS, SPAWN_PROTECTION_MS } from "./constants";
 export interface Input { move: { x: number; y: number }; aim: number; fire: boolean }
 export interface Player {
   id: string; name: string; team: Team;
@@ -7,15 +7,15 @@ export interface Player {
 }
 export interface Life {
   life: number; hits: number; heat: number; overheatUntil: number; nextShotAt: number;
-  immuneUntil: number; streak: number; points: number; score: number; kills: number; startedTick: number; touch: boolean;
+  immuneUntil: number; spawnProtectedUntil: number; streak: number; points: number; score: number; kills: number; startedTick: number; touch: boolean;
 }
 export type CombatPlayer = Player & Life;
 export const lifeDefaults = (tick = 0, life = 1): Life => ({ life, hits: PLAYER_HITS, heat: 0, overheatUntil: 0, nextShotAt: tick * STEP_MS,
-  immuneUntil: tick * STEP_MS + IMMUNITY_MS, streak: 0, points: 0, score: 0, kills: 0, startedTick: tick, touch: false });
+  immuneUntil: 0, spawnProtectedUntil: tick * STEP_MS + SPAWN_PROTECTION_MS, streak: 0, points: 0, score: 0, kills: 0, startedTick: tick, touch: false });
 export interface Bug { id: number; kind: keyof typeof import("./bugs/registry").BUGS; x: number; y: number; vx: number; vy: number }
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }
 export interface KillEvent { id: number; tick: number; x: number; y: number; points: number }
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; players: Map<string, CombatPlayer>; slots: Map<string, number>;
-  wave: number; bugs: Bug[]; shots: Shot[]; events: KillEvent[]; ended: LifeResult[]; nextId: number; spawnCredit: number; spawnIndex: number }
+  wave: number; bugs: Bug[]; shots: Shot[]; events: KillEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }
 export const neutralInput = (): Input => ({ move: { x: 0, y: 0 }, aim: 0, fire: false });

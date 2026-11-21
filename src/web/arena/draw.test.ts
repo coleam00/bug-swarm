@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ArenaRenderer } from "./draw";
+import { ArenaRenderer, lifeClock } from "./draw";
 import { ArenaInput } from "./input";
 import { canvasFixture } from "../game/canvas-fixture.test-support";
 import { TEAM_COLOURS } from "../../shared/teams";
@@ -8,6 +8,70 @@ import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import type { Paint } from "../game/canvas-fixture.test-support";
+
+test("spawn shimmer animates on both robots, expires independently of damage flash, and scales only world drawing", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const remote = { ...local, id: "remote", x: 1300 };
+    input.down(1, 80, 400, 1280);
+    const draw = (tick: number) => {
+      fixture.context.paints.length = 0;
+      renderer.draw(1280, 800, { x: 750, y: 918.75 }, [local, remote], local, input, [], [], 17, tick, tick * 50, 1280 / 900);
+      return [...fixture.context.paints];
+    };
+    const protection = (tick: number) => {
+      const protectedPaints = draw(tick), timers = [local.spawnProtectedUntil, remote.spawnProtectedUntil];
+      local.spawnProtectedUntil = remote.spawnProtectedUntil = 0;
+      const ordinary = draw(tick);
+      [local.spawnProtectedUntil, remote.spawnProtectedUntil] = timers as [number, number];
+      const geometry = (paint: Paint) => JSON.stringify([paint.op, paint.path, paint.transform]);
+      return protectedPaints.filter(p => (p.op === "stroke" || p.op === "fill") && p.path.length && !ordinary.some(q => geometry(p) === geometry(q)));
+    };
+    const surrounds = (paints: Paint[], robots: typeof local[]) => {
+      const seen = new Set<string>(), scale = 1280 / 900;
+      expect(paints.length).toBeGreaterThan(0);
+      for (const paint of paints) for (const arc of paint.path.filter(c => c.op === "arc")) {
+        const [x, y, radius] = arc.args as [number, number, number], [a, b, c, d, e, f] = paint.transform as [number, number, number, number, number, number];
+        const cx = a * x + c * y + e, cy = b * x + d * y + f;
+        const robot = robots.find(p => Math.abs(cx - (p.x - 750) * scale) < 1e-6 && Math.abs(cy - (p.y - 918.75) * scale) < 1e-6);
+        expect(robot).toBeDefined(); seen.add(robot!.id);
+        expect(radius).toBeGreaterThan(PLAYER_RADIUS); expect(paint.globalAlpha).toBeGreaterThan(0);
+        const rx = radius * Math.hypot(a, c), ry = radius * Math.hypot(b, d);
+        expect(cx - rx).toBeGreaterThanOrEqual(0); expect(cx + rx).toBeLessThanOrEqual(1280);
+        expect(cy - ry).toBeGreaterThanOrEqual(0); expect(cy + ry).toBeLessThanOrEqual(800);
+        expect(a).toBeCloseTo(scale); expect(d).toBeCloseTo(scale);
+      }
+      expect([...seen].sort()).toEqual(robots.map(p => p.id).sort());
+    };
+    const first = draw(0), opening = protection(0), next = protection(10);
+    surrounds(opening, [local, remote]); surrounds(next, [local, remote]);
+    expect(opening.map(p => p.path)).not.toEqual(next.map(p => p.path));
+    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes("Wave"))!;
+    expect(hud.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(first.some(p => p.op === "fillText" && /\b0:00\b/.test(String(p.args[0])))).toBe(true);
+    expect(draw(1260).some(p => p.op === "fillText" && /\b1:03\b/.test(String(p.args[0])))).toBe(true);
+    const stick = first.find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[2] === 60))!;
+    expect(stick.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    surrounds(protection(39), [local, remote]); expect(protection(40)).toHaveLength(0);
+    local.spawnProtectedUntil = 0; remote.immuneUntil = 1000;
+    surrounds(protection(2), [remote]);
+    const afterFire = draw(2);
+    expect(afterFire.some(p => p.path.some(c => c.op === "roundRect") && p.globalAlpha === 0.4)).toBe(true);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
+test("life clock uses authoritative ticks, resets on a new life and freezes at the terminal duration", () => {
+  const p = { ...lifeDefaults(9600), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+  expect(lifeClock(p, 9600)).toBe("0:00"); expect(lifeClock(p, 10860)).toBe("1:03");
+  const dead = { ...p, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
+  expect(lifeClock(dead, 12000)).toBe("1:03");
+  expect(lifeClock({ ...p, ...lifeDefaults(12000, 2) }, 12020)).toBe("0:01");
+});
 
 test("renderer paints a grid, a distinguishing local ring, remote robots and complete names", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
