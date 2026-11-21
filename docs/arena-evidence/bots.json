@@ -1,0 +1,21 @@
+{
+  "requested": 18,
+  "joins": 18,
+  "arenas": [
+    "bd9ffd54-9de0-422e-886f-393c746a2287"
+  ],
+  "arenaCount": 1,
+  "sent": 21233,
+  "received": 21447,
+  "messagesPerSecond": {
+    "sent": 353.843301271444,
+    "received": 357.4095644689238
+  },
+  "errors": 0,
+  "tick": {
+    "windowMs": 60000,
+    "samples": 1181,
+    "p50Ms": 0.3629000000000815,
+    "p95Ms": 0.8605999999999767
+  }
+}

@@ -13,6 +13,7 @@
     "review": "bun scripts/review.ts",
     "approve": "bun scripts/approve.ts",
     "load": "bun scripts/load.ts",
+    "bots": "bun scripts/bots.ts",
     "reset": "bun scripts/reset.ts"
   },
   "dependencies": {

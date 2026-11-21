@@ -10,6 +10,7 @@ export const START_LIMIT = 300;
 export const PLAYER_START_LIMIT = 40;
 export const START_WINDOW_MS = 10 * 60 * 1000;
 export interface AppOptions {
+  arenaStats?: () => unknown;
   startLimit?: number;
   now?: () => number;
   clientIp?: (request: Request) => string;
@@ -83,6 +84,7 @@ export function createApp(db: Database, options: AppOptions = {}) {
     await next();
   });
   app.get("/api/events/count", (c) => c.json(countEvents(db)));
+  app.get("/api/arena/stats", (c) => c.json(options.arenaStats?.() ?? { arenas: [], totalPlayers: 0 }));
   app.post("/api/runs", async (c) => {
     const time = now();
     for (const budget of [buckets, playerBuckets]) {
