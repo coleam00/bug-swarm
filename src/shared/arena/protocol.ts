@@ -8,14 +8,16 @@ export interface Hello { v: 1; type: "hello"; playerId: string; name: string; te
 export interface InputMessage extends Input { v: 1; type: "input"; seq: number; life: number; touch: boolean }
 export interface Respawn { v: 1; type: "respawn"; life: number; touch: boolean }
 export type SaveStatus = "pending" | "saved" | "failed";
-export interface LifeOver extends LifeResult { v: 1; type: "life_over"; save: SaveStatus }
+export type EndReason = "death" | "disconnect" | "restart";
+export interface LifeOver extends LifeResult { v: 1; type: "life_over"; save: SaveStatus; reason?: EndReason }
+export interface ServerRestart { v: 1; type: "server_restart"; result?: LifeOver }
 export interface Welcome { v: 1; type: "welcome"; playerId: string; arenaId: string; buildId: string;
   world: { width: number; height: number }; constants: { stepMs: number; playerSpeed: number; playerRadius: number; maxPlayers: number } }
 export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; bugs: Bug[]; shots: Shot[]; events: KillEvent[];
   players: (CombatPlayer & { ackSeq: number; result?: LifeOver })[] }
 export interface ArenaError { v: 1; type: "error"; code: string; message: string; team?: Team }
 export type ClientMessage = Hello | InputMessage | Respawn;
-export type ServerMessage = Welcome | Snapshot | ArenaError | LifeOver;
+export type ServerMessage = Welcome | Snapshot | ArenaError | LifeOver | ServerRestart;
 export type DropReason = "malformed" | "unknown" | "oversized";
 type RecordValue = Record<string, any>;
 const object = (v: unknown): v is RecordValue => !!v && typeof v === "object" && !Array.isArray(v);
@@ -44,6 +46,7 @@ export function parseServer(raw: unknown): ServerMessage | null {
   const v = decode(raw, SERVER_MESSAGE_BYTES, () => {}); if (!v || v.v !== VERSION) return null;
   if (v.type === "error" && text(v.code) && text(v.message) && (v.team === undefined || isTeam(v.team))) return v as ArenaError;
   if (v.type === "life_over") return validResult(v) ? v as LifeOver : null;
+  if (v.type === "server_restart") return v.result === undefined || validResult(v.result) && v.result.reason === "restart" && v.result.save !== "pending" ? v as ServerRestart : null;
   if (v.type === "welcome" && isId(v.playerId) && text(v.arenaId) && text(v.buildId) && object(v.world) && object(v.constants) &&
     [v.world.width, v.world.height, v.constants.stepMs, v.constants.playerSpeed, v.constants.playerRadius, v.constants.maxPlayers].every(n => finite(n) && n > 0)) return v as Welcome;
   if (v.type !== "snapshot" || !text(v.arenaId) || !integer(v.tick) || !integer(v.wave) || !Array.isArray(v.players) || v.players.length > MAX_PLAYERS) return null;
@@ -75,7 +78,7 @@ export function parseServer(raw: unknown): ServerMessage | null {
   }
   return v as Snapshot;
 }
-function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type === "life_over" && isId(v.playerId) && integer(v.life) && v.life > 0 && integer(v.score) && integer(v.kills) && finite(v.seconds) && v.seconds >= 0 && typeof v.touch === "boolean" && ["pending", "saved", "failed"].includes(v.save); }
+function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type === "life_over" && isId(v.playerId) && integer(v.life) && v.life > 0 && integer(v.score) && integer(v.kills) && finite(v.seconds) && v.seconds >= 0 && typeof v.touch === "boolean" && ["pending", "saved", "failed"].includes(v.save) && (v.reason === undefined || ["death", "disconnect", "restart"].includes(v.reason)); }
 /** Quantize the wire only. The authoritative simulation keeps full precision. */
 export function serializeSnapshot(snapshot: Snapshot): string {
   return JSON.stringify(snapshot, (_key, value) => typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);

@@ -40,6 +40,7 @@ export function openDb(path: string): Database {
       CREATE INDEX IF NOT EXISTS runs_finished ON runs(ended_at_ms) WHERE ended_at_ms IS NOT NULL;
     `);
     const runColumns = db.query("PRAGMA table_info(runs)").all() as { name: string }[];
+    if (!runColumns.some(column => column.name === "end_reason")) db.exec("ALTER TABLE runs ADD COLUMN end_reason TEXT;");
     if (!runColumns.some(column => column.name === "mode")) db.exec("ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'release1';");
     if (!runColumns.some(column => column.name === "held")) {
       db.exec("ALTER TABLE runs ADD COLUMN held INTEGER NOT NULL DEFAULT 0 CHECK (held IN (0,1));");
@@ -71,6 +72,7 @@ export function countEvents(db: Database): Record<EventType, number> {
 }
 
 export interface Run {
+  end_reason: import("../shared/arena/protocol").EndReason | null;
   mode: "release1" | "arena";
   held: number; team: Team | null;
   id: string; player_id: string; started_at_ms: number; ended_at_ms: number | null;

@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { registerArenaPlayer } from "../db";
 import { nameKey, validateName } from "../rules";
 import { HELLO_TIMEOUT_MS, INPUT_LIMIT, INPUT_STALE_MS, INPUT_WINDOW_MS, MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STALL_TIMEOUT_MS, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "../../shared/arena/constants";
-import { HIDDEN_IDENTITY_MESSAGE, parseClient, serializeSnapshot, type ArenaError, type InputMessage, type Snapshot, type Welcome, type LifeOver } from "../../shared/arena/protocol";
+import { HIDDEN_IDENTITY_MESSAGE, parseClient, serializeSnapshot, type ArenaError, type InputMessage, type Snapshot, type Welcome, type LifeOver, type EndReason, type ServerRestart } from "../../shared/arena/protocol";
 import { createArena, joinPlayer, leavePlayer, stepArena, endLife, respawnPlayer } from "../../shared/arena/simulation";
 import { neutralInput, type ArenaState, type Input, type LifeResult } from "../../shared/arena/types";
 import { TickMetrics } from "./metrics";
@@ -29,6 +29,8 @@ export class RoomManager {
   private now; private schedule; private cancel; private seed; private id;
   private moderation: ReturnType<typeof setInterval>;
   private stopped = false;
+  private stopping?: Promise<boolean>;
+  get accepting() { return !this.stopped; }
   private wallNow; readonly writer: LifeWriter;
   // Retain closed-room samples until their window expires, without retaining players/sockets.
   private metrics = new Map<string, { tick: TickMetrics; lateness: TickMetrics }>();
@@ -53,6 +55,7 @@ export class RoomManager {
   }
   message(c: Connection, raw: unknown) {
     if (c.closed) return;
+    if (this.stopped) return;
     // Decode only after the UTF-8 size check. Input-shaped schema failures also consume budget.
     const message = parseClient(raw, reason => this.dropped[reason]++, () => {
       const now = this.now(); c.attempts = c.attempts.filter(at => at > now - INPUT_WINDOW_MS);
@@ -115,6 +118,7 @@ export class RoomManager {
     }
   }
   tick(room: Room) {
+    if (this.stopped) return;
     const start = this.now(); const inputs = new Map<string, Input>();
     room.lateness.add(Math.max(0, start - room.nextTickAt)); room.nextTickAt = start + STEP_MS;
     for (const c of room.members) {
@@ -131,22 +135,25 @@ export class RoomManager {
     c.record = { runId: crypto.randomUUID(), playerId: c.storedId!, team: p.team, started: this.wallNow() };
     this.writer.enqueue({ ...c.record });
   }
-  private finishLife(c: Connection, result: LifeResult) {
+  private finishLife(c: Connection, result: LifeResult, reason: EndReason = "death") {
     if (!c.record || c.record.result) return;
-    c.record = { ...c.record, result: { ...result }, ended: this.wallNow() };
-    c.result = { v: 1, type: "life_over", ...result, save: "pending" };
+    c.record = { ...c.record, result: { ...result }, ended: this.wallNow(), reason };
+    c.result = { v: 1, type: "life_over", ...result, save: "pending", reason };
     // Terminal messages are independent of cosmetic snapshot backpressure.
-    if (!c.closed) c.socket.send(JSON.stringify(c.result));
+    if (!c.closed) this.sendTerminal(c, c.result);
     const terminal = c.result;
     this.writer.enqueue(c.record, saved => {
       terminal.save = saved ? "saved" : "failed";
-      if (!c.closed && c.result === terminal) c.socket.send(JSON.stringify(terminal));
+      if (!c.closed && c.result === terminal) this.sendTerminal(c, terminal);
     });
     c.pending = undefined; c.held = neutralInput();
   }
+  private sendTerminal(c: Connection, message: LifeOver | ServerRestart) {
+    try { c.socket.send(JSON.stringify(message)); } catch (error) { console.error(`Arena terminal notification failed: ${c.record?.runId ?? "unjoined"}`, error); }
+  }
   leave(c: Connection) {
     if (c.closed) return;
-    if (c.room && c.id) { const result = endLife(c.room.state, c.id); if (result) this.finishLife(c, result); }
+    if (c.room && c.id) { const result = endLife(c.room.state, c.id); if (result) this.finishLife(c, result, this.stopped ? "restart" : "disconnect"); }
     c.closed = true; clearTimeout(c.helloTimer); this.connections.delete(c);
     if (c.id && this.active.get(c.id) === c) this.active.delete(c.id);
     const room = c.room;
@@ -166,9 +173,32 @@ export class RoomManager {
     // Merge raw samples across rooms so a quiet room cannot distort percentiles.
     this.expireMetrics();
     const rooms = [...this.rooms.values()];
-    return { arenas: rooms.map(r => ({ id: r.id, players: r.members.size })), totalPlayers: this.active.size,
+    return { buildId: this.buildId, arenas: rooms.map(r => ({ id: r.id, players: r.members.size })), totalPlayers: this.active.size,
       tick: TickMetrics.combine([...this.metrics.values()].map(m => m.tick)),
       schedulerLateness: TickMetrics.combine([...this.metrics.values()].map(m => m.lateness)), dropped: { ...this.dropped } };
   }
-  stop() { if (this.stopped) return; this.stopped = true; clearInterval(this.moderation); for (const c of [...this.connections]) { this.leave(c); c.socket.close(1012, "server-restarting"); } this.writer.stop(); }
+  stop(deadline = performance.now() + 4000): Promise<boolean> {
+    if (this.stopping) return this.stopping;
+    this.stopped = true; clearInterval(this.moderation);
+    for (const room of this.rooms.values()) this.cancel(room.timer);
+    const clients = [...this.connections];
+    for (const c of clients) {
+      clearTimeout(c.helloTimer); c.pending = undefined; c.held = neutralInput();
+      if (c.room && c.id) { const result = endLife(c.room.state, c.id); if (result) this.finishLife(c, result, "restart"); }
+    }
+    return this.stopping = (async () => {
+      let saved = false;
+      try { saved = await this.writer.drain(deadline); }
+      catch (error) { console.error("Arena shutdown drain failed", error); }
+      finally { for (const c of clients) {
+        if (c.result?.reason === "restart" && c.result.save === "pending") c.result.save = "failed";
+        if (!c.closed) {
+          this.sendTerminal(c, { v: 1, type: "server_restart", ...(c.result?.reason === "restart" ? { result: c.result } : {}) });
+          try { c.socket.close(1012, "server-restarting"); } catch (error) { console.error("Arena restart close failed", error); }
+        }
+        this.leave(c);
+      } }
+      return saved;
+    })();
+  }
 }
