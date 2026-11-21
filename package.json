@@ -12,6 +12,7 @@
     "review": "bun scripts/review.ts",
     "approve": "bun scripts/approve.ts",
     "bots": "bun scripts/bots.ts",
+    "playtest": "bun scripts/playtest.ts",
     "skill": "bun scripts/skill.ts",
     "reset": "bun scripts/reset.ts"
   },

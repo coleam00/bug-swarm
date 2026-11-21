@@ -1,0 +1,42 @@
+import { test, expect } from "bun:test";
+import { guardInput, Player } from "./player";
+import type { Browser } from "./browser";
+import type { PageObservation } from "./types";
+import type { Input } from "../../src/shared/arena/types";
+import { createPolicy } from "../../src/shared/arena/policies";
+import { lifeDefaults } from "../../src/shared/arena/types";
+import { createBug } from "../../src/shared/arena/bugs/registry";
+import type { ArenaFrame } from "../../src/web/arena/observation";
+test("guards shoot incoming threats before contact and dodge without rescuing the victim early", () => {
+  const a = { ...lifeDefaults(), id: "a", name: "PilotA", team: "tabs" as const, x: 1000, y: 1000, vx: 0, vy: 0, facing: 0 };
+  const b = { ...a, id: "b", name: "PilotB", x: 1180 };
+  const incoming = createBug("crawler", 1, 1380, 1000); incoming.vx = -140;
+  const f = { local: b, players: [a,b], snapshot: { tick: 50, globs: [] }, paint: { bugs: [incoming] } } as unknown as ArenaFrame;
+  expect(guardInput(f, b, createPolicy(86)).fire).toBe(true);
+  f.paint.bugs = [createBug("crawler", 2, a.x, a.y)];
+  expect(guardInput(f, b, createPolicy(86)).fire).toBe(false);
+  b.x = 1160; incoming.x = 1280; f.paint.bugs = [incoming];
+  const input = guardInput(f, b, createPolicy(86));
+  expect(Math.hypot(b.x - a.x + input.move.x * 20, b.y - a.y + input.move.y * 20)).toBeGreaterThanOrEqual(150);
+});
+test("approaching a teammate keeps normal aim/fire burst cooling instead of forcing held fire", async () => {
+  const local = { ...lifeDefaults(), id: "b", name: "PilotB", team: "spaces" as const, x: 1180, y: 1000, vx: 0, vy: 0, facing: 0, heat: 12 };
+  const bug = createBug("crawler", 1, 1380, 1000); bug.vx = -140;
+  const frame = { local, players: [local], snapshot: { tick: 50, globs: [] }, paint: { bugs: [bug] } } as unknown as ArenaFrame;
+  const player = new Player({} as Browser, {} as Awaited<ReturnType<Browser["page"]>>, "PilotB", "spaces");
+  player.observation = { frame } as PageObservation; player.plan = { x: 1000, y: 1000, radius: 75, fire: true };
+  let applied: Input | undefined; player.input = async input => { applied = input; };
+  await player.drive(); expect(applied!.fire).toBe(false);
+  local.heat = 3; await player.drive(); expect(applied!.fire).toBe(true);
+});
+test("boss plan focuses the hive while dodging, defends imminent contact and retains burst cooling", async () => {
+  const local = { ...lifeDefaults(), id: "a", name: "PilotA", team: "tabs" as const, x: 1000, y: 1000, vx: 0, vy: 0, facing: 0 };
+  const hive = createBug("hive", 1, 1400, 1000), crawler = createBug("crawler", 2, 1000, 1200);
+  const frame = { local, players: [local], snapshot: { tick: 50, globs: [], bugs: [hive, crawler] }, paint: { bugs: [hive, crawler] } } as unknown as ArenaFrame;
+  const player = new Player({} as Browser, {} as Awaited<ReturnType<Browser["page"]>>, "PilotA", "tabs");
+  player.observation = { frame } as PageObservation; player.plan = "boss";
+  let applied: Input | undefined; player.input = async input => { applied = input; };
+  await player.drive(); expect(applied!.fire).toBe(true); expect(applied!.aim).toBeCloseTo(0);
+  crawler.y = 1080; await player.drive(); expect(applied!.aim).toBeCloseTo(Math.PI / 2);
+  local.heat = 12; await player.drive(); expect(applied!.fire).toBe(false);
+});

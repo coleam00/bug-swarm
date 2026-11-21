@@ -10,6 +10,8 @@ import { worldView } from "../../shared/arena/view";
 import { ArenaRenderer } from "./draw";
 import { FirstLifeHint, type HintView } from "./hint";
 import { hiveWarning } from "./hive-warning";
+import { ArenaObservation } from "./observation";
+declare const __ARENA_PLAYTEST__: boolean;
 export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch: boolean,
   status: (message: string) => void, refused: (message: string, team?: Identity["team"], code?: string) => void, accepted: () => void = () => {},
   lifeView: (result: LifeOver | null, respawn: (touch: boolean) => void) => void = () => {}, hintView: (view: HintView) => void = () => {}, warningView: (seconds: number | null) => void = () => {}) {
@@ -17,7 +19,9 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   let warning: number | null = null;
   const publishWarning = (seconds: number | null) => { if (warning !== seconds) { warning = seconds; warningView(seconds); } };
   const touchEntry = touch || (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
-  const ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx), input = new ArenaInput();
+  const debug = typeof __ARENA_PLAYTEST__ !== "undefined" && __ARENA_PLAYTEST__ ? new ArenaObservation(window) : undefined;
+  const ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx, debug?.paint), input = new ArenaInput();
+  let generation = 0;
   const prediction = new Prediction(), interpolation = new Interpolation();
   let seq = 0, ready = false, lastSnapshot = 0, lastSend = performance.now(), previous = lastSend;
   let width = 0, height = 0, dpr = 1, camera = { x: 0, y: 0 }, frames = 0, sampleAt = previous, cost = 0;
@@ -40,7 +44,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   const clear = () => { pause(); seq = 0; lastTick = -1; prediction.reset(); interpolation.clear(); renderer.reset(); latest = null; };
   const connection = connectArena(identity, touch, message => {
     if (message.type === "error") { refused(message.message, message.team, message.code); return; }
-    if (message.type === "welcome") { clear(); ready = true; lastSnapshot = performance.now(); accepted(); return; }
+    if (message.type === "welcome") { clear(); generation++; ready = true; lastSnapshot = performance.now(); accepted(); return; }
     if (message.type === "server_restart") { pause(); return; }
     if (message.type === "life_over") { if (ready || message.reason === "restart") showLife(message); return; }
     if (!ready) return;
@@ -86,6 +90,9 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     const combat = interpolation.combat(now);
     renderer.events(combat.events, now);
     renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now, view.scale, latest, interpolation.time, combat.globs);
+    if (debug && latest && local) debug.publish({ at: now, epoch: performance.timeOrigin + now, receivedAt: lastSnapshot, generation, playerId: local.id, snapshot: latest, local: local as import("../../shared/arena/types").CombatPlayer,
+      camera: { ...camera }, scale: view.scale, width, height, interpolation: interpolation.observation(now), players: interpolation.players(now) as import("../../shared/arena/types").CombatPlayer[],
+      input: { left: !!input.stick, right: !!input.right, fire: input.sample().fire } });
     cost += performance.now() - start; frames++;
     if (now - sampleAt >= 1000) {
       const fps = frames * 1000 / (now - sampleAt), ms = cost / frames;
@@ -99,5 +106,5 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     raf = requestAnimationFrame(frame);
   }
   raf = requestAnimationFrame(frame);
-  return () => { disposed = true; clearInterval(sendTimer); cancelAnimationFrame(raf); observer.disconnect(); unbind(); connection.dispose(); clear(); };
+  return () => { disposed = true; clearInterval(sendTimer); cancelAnimationFrame(raf); observer.disconnect(); unbind(); connection.dispose(); clear(); debug?.dispose(); };
 }

@@ -1,23 +1,24 @@
-import type { Bug, CombatEvent } from "../../shared/arena/types";
+import type { Bug, CombatEvent, HiveReward } from "../../shared/arena/types";
 import { HIVE_WARNING } from "./hive-warning";
 import { MAX_PLAYERS } from "../../shared/arena/constants";
 
 export class HiveHud {
   private warningWidth = 0; private countdownWidth = 0;
   private bannerAt = -Infinity;
-  private awards = Array.from({ length: MAX_PLAYERS }, () => ({ x: 0, y: 0, amount: 0, at: -Infinity }));
+  private awards = Array.from({ length: MAX_PLAYERS }, () => ({ playerId: "", life: 0, x: 0, y: 0, amount: 0, at: -Infinity }));
   reset() { this.bannerAt = -Infinity; for (const a of this.awards) a.at = -Infinity; }
   event(event: CombatEvent, now: number) {
     if (event.type !== "kill" || event.kind !== "hive") return;
     this.bannerAt = now;
     event.rewards?.forEach((r, i) => Object.assign(this.awards[i]!, r, { at: now }));
   }
-  world(c: CanvasRenderingContext2D, now: number) {
+  world(c: CanvasRenderingContext2D, now: number, observe?: (reward: HiveReward & { at: number }) => void) {
     for (const r of this.awards) {
       const age = now - r.at; if (age < 0 || age > 1600) continue;
       c.save(); c.globalAlpha = Math.min(1, (1600 - age) / 400); c.font = "bold 32px system-ui"; c.textAlign = "center";
       c.strokeStyle = "#060b12"; c.lineWidth = 5; c.strokeText(`+${r.amount}`, r.x, r.y - 65 - age / 35);
       c.fillStyle = "#edff9c"; c.fillText(`+${r.amount}`, r.x, r.y - 65 - age / 35); c.restore();
+      observe?.(r);
     }
   }
   private bannerPosition(width: number, height: number, camera: { x: number; y: number }, scale: number, now: number, panelWidth: number, awardHalf: number, top: number) {
