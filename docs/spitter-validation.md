@@ -1,5 +1,7 @@
 # Spitter validation (issue 78)
 
+The original delivery measurements below are from `ad6bb3b`. The returned-check section records the collision fix and current measurements; the original full age sweep and Chrome captures remain historical evidence.
+
 The spitter is a third registered bug kind: 2 HP, 30 base points, radius 18. Initial and final gameplay tuning match the plan: desired distance 400 (within 350-450), radial correction 1.4 capped at 140 units/s, tangent strafe 35 units/s, 1,700 ms movement followed by 500 ms swelling, and 2,200 ms between emissions. New sources receive the full first delay. Glob radius is 9, speed 320 units/s, lifetime 2,000 ms and muzzle offset 28. Pop reward is a fixed 5 points, one accuracy hit and no kill. Spitters unlock at wave four with a constant 1/8 share and a twelve-source live cap. Personal spawn volume is unchanged.
 
 The server-only boundary attack hook is separate from movement/phase interpolation. Globs persist after source death. Swept shot/glob collisions cannot intercept after the glob's earliest player contact; an exact tie intercepts. Shared damage preserves spawn protection, immunity, downing and revival ordering. Expiry and world exit bound both simulation and delayed rendering. Tests cover the actual two-movement-calls-per-step path, current-position aim, interrupted/targetless tells, spacing, both damage phases, moving-player escape, grazing, competing shots, nearer bug blockers, stale owners, fixed scoring, cap replacement, malformed snapshots and two real clients receiving the same tell/glob/pop/score.
@@ -110,3 +112,22 @@ Full per-seed newcomer observations, score/seconds/censor flags, cohort summarie
 | idle | 900 | 8 | 23.250 | 20 / 0 | yes |
 | idle | 0 | 0 | 22.225 | 20 / 0 | yes |
 | idle | 480 | 0 | 22.225 | 20 / 0 | yes |
+
+## Returned checks: contact ordering and acceptance fixtures
+
+The review reproduced stale contact eligibility: an early glob downs a player, but that player's cached contact still prevents a later interception. Contacts now supply geometry and time only. Combat advances shots to each still-eligible contact boundary, resolves interception first on a tie, then consumes the glob and applies damage. Downing cancels pending shots and invalidates later contacts immediately. Bug/shot motion, expiry/world clipping, fixed +5 rewards and life ownership checks remain shared with the existing shot loop. Shot order remains stable within each interval; ticks without glob contacts keep the single original interval. Downing deadlines still use the completed tick, preserving the full revive window.
+
+The original two-glob probe fails on the delivery code and passes with this fix. Its adjacent cases reverse glob array order, put another active teammate later on the same path within the tick, and queue a shot whose owner is downed before its birth. Existing early/late/tied interception, nearer-bug blocking, competing shots, protection/immunity, inactive owners, source death and revive tests remain green. Inspection found no other cached eligibility cutoff: remaining motion caches contain geometry, while owner status/life checks run for every shot interval.
+
+The existing spitter timing fixture now moves the target through real input during emission. The engine fixture checks that received globs reach the renderer on the delayed clock. The draw fixture checks an actual cached gradient paint around the glob and distinct trail endpoints; it accepts a harmless width change. The world-exit fixture uses an unexpired glob, and the room fixture asserts snapshot glob membership.
+
+Mutation probes reject 0.5 s velocity lead, empty renderer globs, removed glow, zero-length trail, omitted world-exit rejection and empty room globs. Changing trail width from 12 to 11 passes. Sources are restored in `finally`. Probe logs and restoration driver are under `.evidence/78/returned/`.
+
+Current validation:
+
+- `bun run check`: **433 tests, zero failures, 25,454 assertions**; `bun run build` passes. The focused eight-file group passed 84 tests.
+- Current 20-seed/eight-bot/180-second score matrix: mover **214 points / 64.85 s**, aimer **3,908 points / 100.85 s**, ratio **18.26x**. Mover has 201 deaths / 160 cutoffs; aimer 104 deaths / 160 cutoffs.
+- Fresh and eight-minute newcomer cohorts, twenty seeds each at a 600 s horizon, pass the unchanged comparison: fresh **149.125 s** (12 deaths / 8 cutoffs, exact median), late **519.750 s** (10 deaths / 10 cutoffs, a censored lower bound), ratio at least **348.53%**. Raw observations are in `returned/newcomers.json`.
+- Fresh production CLI load: all **200 bots** joined ten arenas for 120 seconds with **zero errors**; tick p50 **1.158 ms**, p95 **2.516 ms**, over 11,767 room ticks in the rolling minute. Activity reached twelve spitters and twelve globs. All owned sockets, processes and database handles closed afterward.
+
+The contact list is built once per tick (at most 12 x 20 player checks). Each consumed glob adds at most one shot-advancement boundary, so there are at most thirteen shot intervals; interval scans reuse the existing bug motions and shot/glob clipping. The fresh load above measures the extra tick work. Rendering implementation is unchanged, so the original Chrome/F measurements remain the presentation evidence. The full 65-cohort age sweep and Chrome campaign were not repeated for this return; the current check, score matrix, forty newcomer observations, mutations and load measurements are separate artifacts in `.evidence/78/returned/`.

@@ -28,6 +28,7 @@ test("room broadcasts authoritative spitter phase, globs and independent pop sco
     Object.assign(bug, { phase: "swell", phaseUntil: 100 });
     f.manager.tick(room); expect(a.messages.at(-1).bugs[0].phase).toBe("swell");
     f.manager.tick(room); const glob = room.state.globs[0]!; expect(glob.born).toBe(100);
+    expect(a.messages.at(-1).globs).toEqual([glob]);
     expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(parseServer(JSON.stringify(a.messages.at(-1)))).not.toBeNull();
     room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: p.life, born: 100, x: glob.x + 20, y: glob.y, vx: -900, vy: 0 });
     f.manager.tick(room); expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(a.messages.at(-1).events[0].type).toBe("glob-pop");

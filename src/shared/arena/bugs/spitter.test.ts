@@ -29,7 +29,9 @@ test("two movement calls per tick yield 1700ms movement, 500ms swell, one curren
   const position = { x: b.x, y: b.y };
   for (let i = 0; i < 9; i++) stepArena(a, new Map());
   expect(a.globs).toHaveLength(0); expect({ x: b.x, y: b.y }).toEqual(position);
-  p.y += 80; stepArena(a, new Map());
+  const before = p.y;
+  stepArena(a, new Map([[p.id, { ...neutralInput(), move: { x: 0, y: 1 } }]]));
+  expect(p.y).toBeGreaterThan(before); expect(p.vy).toBeGreaterThan(0);
   expect(a.globs).toHaveLength(1); const g = a.globs[0]!; expect(g.born).toBe(2200);
   expect(Math.atan2(g.vy, g.vx)).toBeCloseTo(Math.atan2(p.y - b.y, p.x - b.x));
   expect(Math.hypot(g.x - b.x, g.y - b.y)).toBeCloseTo(28); expect(Math.hypot(g.vx, g.vy)).toBeCloseTo(320);

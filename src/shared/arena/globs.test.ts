@@ -38,6 +38,25 @@ test.each(["early", "late", "tie"])("%s interception respects earliest player co
   a.shots.push({ id: a.nextId++, owner: p.id, life: 1, born: 0, x, y: 1200, vx: 900, vy: 0 });
   stepArena(a, new Map()); expect(p.hits).toBe(timing === "late" ? 2 : 3); expect(p.score).toBe(timing === "late" ? 0 : 5); expect(a.globs).toHaveLength(0);
 });
+test.each(["original", "reversed", "later contact", "pending downed shot"])("an earlier glob downing releases later interceptions: %s", variant => {
+  const { a, p } = scene(1224), teammate = joinPlayer(a, { id: "b", name: "Scout", team: "spaces" })!;
+  Object.assign(teammate, { x: 1165, y: 1200, spawnProtectedUntil: 0 }); p.hits = 1;
+  a.globs.push({ id: a.nextId++, x: 1230, y: 1200, vx: -320, vy: 0, born: 0 });
+  if (variant === "reversed") a.globs.reverse();
+  const nextTarget = variant === "later contact" ? joinPlayer(a, { id: "c", name: "Helper", team: "spaces" })! : undefined;
+  if (nextTarget) Object.assign(nextTarget, { x: 1192, y: 1200, spawnProtectedUntil: 0 });
+  const inputs = new Map([[teammate.id, { ...neutralInput(), fire: true }]]);
+  if (variant === "pending downed shot") { p.nextShotAt = 10; inputs.set(p.id, { ...neutralInput(), fire: true }); }
+  stepArena(a, inputs);
+  expect(p.status).toBe("downed"); expect(p.downedUntil).toBe(10050);
+  expect(a.globs).toHaveLength(0); expect(a.shots).toHaveLength(0);
+  expect(a.events).toMatchObject([{ type: "glob-pop", points: 5 }]);
+  expect(teammate.score).toBe(5); expect(teammate.streak).toBe(1); expect(teammate.kills).toBe(0);
+  expect(p.score).toBe(0);
+  for (let i = 0; i < 5; i++) stepArena(a, new Map());
+  expect(teammate.hits).toBe(3);
+  if (nextTarget) expect(nextTarget.hits).toBe(3);
+});
 test("nearer bugs block interception, stale-life and downed owners never receive credit", () => {
   const f = scene(1300); f.a.bugs.push(createBug("crawler", f.a.nextId++, 1240, 1200));
   f.a.shots.push({ id: f.a.nextId++, owner: f.p.id, life: 1, born: 0, x: 1230, y: 1200, vx: 900, vy: 0 });

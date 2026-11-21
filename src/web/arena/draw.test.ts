@@ -24,7 +24,17 @@ test("spitter swells on the combat clock; green globs have a larger core, cached
     const radius = (p: Paint[]) => p.find(p => p.op === "fill" && p.fillStyle === "#aaff38" && p.path.some(q => q.op === "ellipse"))!.path.find(q => q.op === "ellipse")!.args[2]!;
     expect(radius(late)).toBeGreaterThan(radius(early));
     expect(late.some(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[2] === 9))).toBe(true);
-    expect(late.some(p => p.op === "stroke" && p.strokeStyle === "#8dff3866" && p.lineWidth === 12)).toBe(true);
+    const trail = late.find(p => p.op === "stroke" && p.strokeStyle === "#8dff3866")!;
+    expect(trail).toBeDefined(); expect(trail.lineWidth).toBeGreaterThan(0);
+    const start = trail.path.find(p => p.op === "moveTo")!.args, end = trail.path.find(p => p.op === "lineTo")!.args;
+    expect(Math.hypot(end[0]! - start[0]!, end[1]! - start[1]!)).toBeGreaterThan(0);
+    const glow = late.find(p => p.op === "drawImage" &&
+      Number(p.args[1]) < glob.x && Number(p.args[1]) + (p.args[0] as HTMLCanvasElement).width > glob.x &&
+      Number(p.args[2]) < glob.y && Number(p.args[2]) + (p.args[0] as HTMLCanvasElement).height > glob.y)!;
+    expect(glow).toBeDefined(); expect(glow.globalAlpha).toBeGreaterThan(0);
+    expect(fixture.source(glow).paints.some(p => p.op === "fillRect" && typeof p.fillStyle !== "string" &&
+      p.fillStyle.stops.some(s => s.colour.length === 9 && Number.parseInt(s.colour.slice(-2), 16) > 0) &&
+      p.fillStyle.stops.some(s => s.offset === 1 && s.colour.endsWith("00")))).toBe(true);
     const cached = fixture.created; draw(2150); expect(fixture.created).toBe(cached);
     renderer.events([{ id: 4, tick: 100, x: 600, y: 500, type: "glob-pop", points: 5 }], 0);
     expect(draw(2150).some(p => p.op === "fillText" && p.args[0] === "+5" && p.fillStyle === "#d8ff80")).toBe(true);

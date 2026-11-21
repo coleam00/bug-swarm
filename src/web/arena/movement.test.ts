@@ -27,7 +27,7 @@ test("glob birth, one-snapshot travel, removal and +5 share the monotonic delaye
 test("glob extrapolation clips at expiry and world exit; swell never emits predicted entities", () => {
   for (const x of [100, 2390]) {
     const interpolation = new Interpolation(), b = createBug("spitter", 3, 800, 100, 0); Object.assign(b, { phase: "swell", phaseUntil: 2200 });
-    const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 39, wave: 4, players: [], bugs: [b], shots: [], events: [], globs: [{ id: 1, x, y: 100, vx: 320, vy: 0, born: 0 }] };
+    const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 39, wave: 4, players: [], bugs: [b], shots: [], events: [], globs: [{ id: 1, x, y: 100, vx: 320, vy: 0, born: x === 100 ? 0 : 1950 }] };
     interpolation.push(s, 1950); interpolation.push({ ...s, tick: 45, bugs: [], globs: [] }, 2250);
     const view = interpolation.combat(2075); expect(view.globs[0]!.x).toBe(x + 8); expect(view.bugs[0]!.phase).toBe("swell");
     expect(interpolation.combat(2100).globs).toHaveLength(0);
