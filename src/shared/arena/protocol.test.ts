@@ -7,6 +7,18 @@ import { createBug } from "./bugs/registry";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
 
+test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
+  const bug = createBug("crawler", 1, 1200, 1200);
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], events: [] };
+  const parse = () => parseServer(serializeSnapshot(snapshot));
+  expect(parse()).not.toBeNull(); Object.assign(bug, { vx: 84, vy: 112 }); expect(parse()).not.toBeNull();
+  const valid = { ...bug };
+  for (const fields of [{ vx: 1000 }, { vx: 100, vy: 100 }, { phase: "windup" }, { phaseUntil: 750 },
+    { phase: "approach", phaseUntil: 0 }, { phase: null }, { phaseUntil: null }]) {
+    snapshot.bugs[0] = { ...valid, ...fields } as any; expect(parse()).toBeNull();
+  }
+});
+
 test("registered kind validation accepts each dasher phase and hit/kill events, rejects malformed state", () => {
   const b = createBug("dasher", 1, 1200, 1200);
   const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 3, players: [], bugs: [b], shots: [], events: [] };

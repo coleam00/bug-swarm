@@ -4,6 +4,8 @@ export interface BugDefinition {
   initialize(bug: Bug): void;
   /** Advance only committed phase/timer/velocity state, including skipped snapshots. */
   advancePhase?(bug: Bug, time: number): void;
+  /** Velocity is locked until phaseUntil in these phases; advancePhase supplies the next interval. */
+  committedPhases?: readonly string[];
   move(bug: Bug, players: Iterable<CombatPlayer>, time: number): void;
   valid(bug: Bug, time: number): boolean;
 }

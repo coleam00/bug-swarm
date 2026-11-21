@@ -16,6 +16,7 @@ export const dasher: BugDefinition = {
   radius: DASHER_RADIUS, health: DASHER_HEALTH, points: DASHER_POINTS,
   initialize(bug) { bug.phase = "approach"; bug.phaseUntil = 0; },
   advancePhase,
+  committedPhases: ["windup", "dash"],
   move(bug, players, time) {
     advancePhase(bug, time);
     if (bug.phase === "dash") { bug.vx = Math.cos(bug.facing) * DASHER_DASH_SPEED; bug.vy = Math.sin(bug.facing) * DASHER_DASH_SPEED; return; }

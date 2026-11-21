@@ -2,8 +2,8 @@ import { STEP_MS, WORLD_WIDTH, WORLD_HEIGHT } from "./constants";
 import type { Bug } from "./types";
 export interface BugMotion { x: number; y: number; vx: number; vy: number; stop: number }
 const motions = new WeakMap<Bug, BugMotion>();
-export function boundaryTime(x: number, y: number, vx: number, vy: number) {
-  let stop = STEP_MS / 1000;
+export function boundaryTime(x: number, y: number, vx: number, vy: number, seconds = STEP_MS / 1000) {
+  let stop = seconds;
   if (vx > 0) stop = Math.min(stop, (WORLD_WIDTH - x) / vx); else if (vx < 0) stop = Math.min(stop, -x / vx);
   if (vy > 0) stop = Math.min(stop, (WORLD_HEIGHT - y) / vy); else if (vy < 0) stop = Math.min(stop, -y / vy);
   return Math.max(0, stop);

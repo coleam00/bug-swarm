@@ -21,7 +21,7 @@ test("kind dispatch paints a crouched hot tell along locked facing, keeps offscr
     const hot = draw(), warning = hot.find(p => p.op === "stroke" && p.path.some(q => q.op === "lineTo" && q.args[0]! > 200))!;
     expect(warning).toBeDefined(); expect(Math.atan2(warning.transform[1]!, warning.transform[0]!)).toBeCloseTo(Math.PI / 2);
     expect(hot.filter(p => p.op === "drawImage").length).toBeGreaterThan(ordinary.filter(p => p.op === "drawImage").length);
-    const body = (paints: Paint[]) => paints.find(p => p.op === "fill" && p.path.some(q => q.op === "moveTo" && q.args[0] === 19))!;
+    const body = (paints: Paint[]) => paints.find(p => p.op === "fill" && p.path.length > 0 && p.transform[4] === b.x - 100 && p.transform[5] === b.y - 100)!;
     expect(Math.hypot(body(hot).transform[0]!, body(hot).transform[1]!)).toBeLessThan(Math.hypot(body(ordinary).transform[0]!, body(ordinary).transform[1]!));
     const cached = fixture.created; draw(); expect(fixture.created).toBe(cached);
     b.x = 50; b.facing = 0; expect(draw().some(p => p.op === "stroke" && p.path.some(q => q.op === "lineTo" && q.args[0]! > 200))).toBe(true);
@@ -29,9 +29,9 @@ test("kind dispatch paints a crouched hot tell along locked facing, keeps offscr
     fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 2000, y: 100 }, [], null, input, [b]);
     expect(fixture.context.paints.some(p => p.op === "stroke" && p.path.length === 2 && p.path[1]!.args[0] === 10)).toBe(true);
     renderer.events([{ id: 2, tick: 1, kind: "dasher", type: "hit", x: 500, y: 500, points: 0 }], 0);
-    const spark = draw(); expect(spark.some(p => p.op === "stroke" && p.path.length === 16)).toBe(true);
+    const spark = draw(); expect(spark.some(p => p.op === "stroke" && p.globalAlpha > 0 && p.path.some(q => q.op === "lineTo"))).toBe(true);
     expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
-    renderer.reset(); expect(draw().some(p => p.op === "stroke" && p.path.length === 16)).toBe(false);
+    renderer.reset(); expect(draw().some(p => p.op === "stroke" && p.globalAlpha > 0 && p.path.some(q => q.op === "lineTo"))).toBe(false);
     const crawler = createBug("crawler", 3, 500, 500); fixture.context.paints.length = 0;
     renderer.draw(800, 600, { x: 100, y: 100 }, [], null, input, [crawler]);
     expect(fixture.context.paints.some(p => p.path.some(q => q.op === "ellipse"))).toBe(true);

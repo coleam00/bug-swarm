@@ -2,6 +2,12 @@ import { INTERPOLATION_MS, MAX_SNAPSHOTS, STEP_MS, WORLD_WIDTH, WORLD_HEIGHT } f
 import type { Snapshot } from "../../shared/arena/protocol";
 import type { Player, Bug, Shot, CombatEvent } from "../../shared/arena/types";
 import { BUGS } from "../../shared/arena/bugs/registry";
+import { boundaryTime, stopAtBoundary } from "../../shared/arena/motion";
+function advancePosition(bug: Bug, ms: number) {
+  const seconds = ms / 1000, travel = boundaryTime(bug.x, bug.y, bug.vx, bug.vy, seconds);
+  bug.x += bug.vx * travel; bug.y += bug.vy * travel;
+  if (travel < seconds) bug.vx = bug.vy = 0;
+}
 export class Interpolation {
   private samples: { snapshot: Snapshot; at: number }[] = [];
   private combatTick = -Infinity;
@@ -49,18 +55,33 @@ export class Interpolation {
     const visible: (Bug | Shot)[] = [];
     for (const p of a[kind]) {
       const q = b[kind].find(q => q.id === p.id);
-      // Even a one-snapshot shot travels until its removal tick, never to latest-only membership.
-      let elapsed = offset;
-      let fraction = a === b ? 0 : offset / (b.tick - a.tick);
-      if ("phase" in p && p.phase === "windup") {
-        const hold = Math.max(0, p.phaseUntil! / STEP_MS - a.tick);
-        elapsed = Math.max(0, offset - hold);
-        fraction = a === b || b.tick - a.tick <= hold ? 0 : elapsed / (b.tick - a.tick - hold);
+      const entity = { ...p }, target = (a.tick + offset) * STEP_MS;
+      let anchor = a.tick * STEP_MS;
+      if ("kind" in entity) {
+        const definition = BUGS[entity.kind];
+        // Consume the known path before blending any unknown tracking movement.
+        // This also runs when the next snapshot has already removed the bug.
+        while (anchor < target && entity.phaseUntil! > anchor && definition.committedPhases?.includes(entity.phase!)) {
+          const until = Math.min(target, entity.phaseUntil!);
+          advancePosition(entity, until - anchor); anchor = until;
+          if (anchor === entity.phaseUntil) {
+            if (definition.advancePhase) definition.advancePhase(entity, anchor);
+            else entity.vx = entity.vy = 0;
+          }
+        }
       }
-      const x = q ? p.x + (q.x - p.x) * fraction : p.x + p.vx * elapsed * STEP_MS / 1000;
-      const y = q ? p.y + (q.y - p.y) * fraction : p.y + p.vy * elapsed * STEP_MS / 1000;
-      const entity = { ...p, x: Math.max(0, Math.min(WORLD_WIDTH, x)), y: Math.max(0, Math.min(WORLD_HEIGHT, y)) };
-      if ("kind" in entity && entity.phaseUntil && entity.phaseUntil <= (a.tick + offset) * STEP_MS) BUGS[entity.kind].advancePhase?.(entity, (a.tick + offset) * STEP_MS);
+      // Even a one-snapshot shot travels until its removal tick, never to latest-only membership.
+      if (q && b.tick * STEP_MS > anchor) {
+        const fraction = (target - anchor) / (b.tick * STEP_MS - anchor);
+        entity.x += (q.x - entity.x) * fraction; entity.y += (q.y - entity.y) * fraction;
+      } else if ("kind" in entity) {
+        const until = entity.phaseUntil! > anchor ? Math.min(target, entity.phaseUntil!) : target;
+        advancePosition(entity, until - anchor);
+      } else {
+        entity.x += entity.vx * (target - anchor) / 1000; entity.y += entity.vy * (target - anchor) / 1000;
+      }
+      entity.x = Math.max(0, Math.min(WORLD_WIDTH, entity.x)); entity.y = Math.max(0, Math.min(WORLD_HEIGHT, entity.y));
+      if ("kind" in entity) { BUGS[entity.kind].advancePhase?.(entity, target); stopAtBoundary(entity); }
       visible.push(entity);
     }
     return visible as Snapshot[K];

@@ -10,6 +10,56 @@ import { createArena, joinPlayer, stepArena } from "../../shared/arena/simulatio
 import { createBug } from "../../shared/arena/bugs/registry";
 const player = () => ({ ...lifeDefaults(), id: crypto.randomUUID(), name: "Robot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 });
 
+function dasherHistory() {
+  const arena = createArena(71), p = joinPlayer(arena, { id: "a", name: "Pilot", team: "tabs" })!;
+  p.x = p.y = 1200;
+  const bug = createBug("dasher", arena.nextId++, 960, 1200); arena.bugs.push(bug);
+  const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "gap", tick: arena.tick, wave: arena.wave,
+    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
+  const advance = () => { stepArena(arena, new Map()); if (arena.tick === 1) p.y = 1400; return snapshot(); };
+  return { arena, p, bug, snapshot, advance };
+}
+
+test.each([13, 21])("committed dash stays on its authoritative path across a gap from tick %i into recovery", start => {
+  const f = dasherHistory(), history = new Map<number, Snapshot>();
+  while (f.arena.tick < 29) { const s = f.advance(); history.set(s.tick, s); }
+  const interpolation = new Interpolation(); interpolation.push(history.get(start)!, start * 50); interpolation.push(history.get(29)!, 1450);
+  for (let tick = start; tick <= 29; tick++) {
+    const rendered = interpolation.combat(tick * 50 + 100).bugs[0]!, actual = history.get(tick)!.bugs[0]!;
+    expect(rendered.x).toBeCloseTo(actual.x); expect(rendered.y).toBeCloseTo(actual.y);
+    if (tick <= 23) { expect(rendered.y).toBe(1200); expect(rendered.facing).toBe(0); }
+    expect(rendered.phase).toBe(actual.phase);
+  }
+});
+
+test("committed wind-up and dash advance before a lethal removal, with the kill effect at removal time", () => {
+  const f = dasherHistory(), history = new Map<number, Snapshot>(); f.bug.hp = 1;
+  while (f.arena.tick < 18) {
+    if (f.arena.tick === 17) f.arena.shots.push({ id: f.arena.nextId++, owner: f.p.id, life: f.p.life,
+      x: f.bug.x, y: f.bug.y, vx: 900, vy: 0, born: 850 });
+    const s = f.advance(); history.set(s.tick, s);
+  }
+  const removed = history.get(18)!; expect(removed.bugs).toHaveLength(0); expect(removed.events[0]!.type).toBe("kill");
+  const interpolation = new Interpolation(); interpolation.push(history.get(13)!, 650); interpolation.push(removed, 900);
+  for (const tick of [13, 14, 15, 16, 17]) {
+    const combat = interpolation.combat(tick * 50 + 100), actual = history.get(tick)!.bugs[0]!;
+    expect(combat.bugs[0]!.x).toBeCloseTo(actual.x); expect(combat.bugs[0]!.y).toBe(actual.y);
+    expect(combat.bugs[0]!.phase).toBe(actual.phase); expect(combat.events).toHaveLength(0);
+  }
+  expect(interpolation.combat(1000)).toMatchObject({ bugs: [], events: removed.events });
+  expect(interpolation.combat(1001).events).toHaveLength(0);
+});
+
+test("a committed diagonal dash stops at the first world edge across skipped snapshots", () => {
+  const f = dasherHistory();
+  Object.assign(f.bug, { x: 2390, y: 1200, phase: "dash", phaseUntil: 450, facing: Math.PI / 4,
+    vx: 490 / Math.sqrt(2), vy: 490 / Math.sqrt(2) });
+  const first = f.snapshot(); while (f.arena.tick < 13) f.advance();
+  const interpolation = new Interpolation(); interpolation.push(first, 0); interpolation.push(f.snapshot(), 650);
+  const wall = interpolation.combat(200).bugs[0]!;
+  expect(wall.x).toBe(2400); expect(wall.y).toBeCloseTo(1210); expect(wall.phase).toBe("dash"); expect(wall.vx).toBe(0); expect(wall.vy).toBe(0);
+});
+
 test("delayed dasher timeline holds wind-up through gaps and keeps HP/facing and hit sparks at their snapshot", () => {
   const interpolation = new Interpolation(), b = createBug("dasher", 1, 100, 100);
   Object.assign(b, { phase: "windup", phaseUntil: 700 });

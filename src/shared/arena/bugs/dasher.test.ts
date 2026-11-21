@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { createArena, joinPlayer, stepArena } from "../simulation";
 import { createBug } from "./registry";
 import { dasher } from "./dasher";
-import { DASHER_DASH_SPEED, DASHER_RECOVERY_SPEED } from "../constants";
+import { DASHER_SPEED, DASHER_DASH_SPEED, DASHER_RECOVERY_SPEED } from "../constants";
 import { neutralInput } from "../types";
 function fixture() {
   const a = createArena(71), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;
@@ -11,6 +11,23 @@ function fixture() {
   const step = (x = 0, y = 0) => stepArena(a, new Map([[p.id, { ...neutralInput(), move: { x, y } }]]));
   return { a, p, b, step };
 }
+test("approach moves toward the nearest living off-axis target, then locks that direction during wind-up", () => {
+  const { a, p, b, step } = fixture();
+  Object.assign(b, { x: 900, y: 800 });
+  const q = joinPlayer(a, { id: "b", name: "Other", team: "spaces" })!;
+  Object.assign(q, { x: 1500, y: 1600 });
+  const dead = joinPlayer(a, { id: "dead", name: "Down", team: "tabs" })!;
+  Object.assign(dead, { x: 910, y: 800, hits: 0 });
+  step();
+  expect(b.phase).toBe("approach");
+  expect(b.x).toBeCloseTo(900 + 0.6 * DASHER_SPEED * 0.05); expect(b.y).toBeCloseTo(800 + 0.8 * DASHER_SPEED * 0.05);
+  expect(b.vx).toBeCloseTo(0.6 * DASHER_SPEED); expect(b.vy).toBeCloseTo(0.8 * DASHER_SPEED);
+  Object.assign(b, { x: 1200, y: 1000 }); step();
+  expect(b).toMatchObject({ phase: "windup", vx: 0, vy: 0 }); expect(b.facing).toBeCloseTo(Math.PI / 2);
+  const until = b.phaseUntil!, locked = b.facing; p.x = 1400; q.x = 1200; q.y = 1010;
+  while (a.tick * 50 < until + 450 - 50) { step(); expect(b.facing).toBe(locked); expect(b.x).toBeCloseTo(1200); }
+});
+
 test("wind-up locks nearest living target with id ties; exact phase boundaries, straight dash and slow recovery", () => {
   const { a, p, b, step } = fixture();
   const q = { ...p, id: "b", x: 960, y: 1440 };

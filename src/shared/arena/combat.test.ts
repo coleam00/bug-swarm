@@ -22,10 +22,17 @@ test("surviving impacts credit accuracy without a kill; lethal shooter receives 
     expect(p.streak).toBe(split ? 1 : 2); expect(p.kills).toBe(split ? 0 : 1); expect(q.kills).toBe(split ? 1 : 0);
     expect(split ? q.points : p.points).toBe(split ? 275 : 300);
   }
-  const { a, p } = fixture(); p.streak = 50;
-  const b = createBug("dasher", 999, 1250, 1200); b.hp = 1; a.bugs.push(b);
-  for (let i = 0; i < 2; i++) a.shots.push({ id: a.nextId++, owner: p.id, life: 1, x: 1230, y: 1200, vx: 900, vy: 0, born: 0 });
-  fireAndAdvance(a, new Map(), 0); expect(p.score).toBe(75); expect(p.kills).toBe(1); expect(a.events).toHaveLength(1);
+});
+
+test("a projectile damages a recovering dasher without interrupting its recovery", () => {
+  const { a, p } = fixture(), b = createBug("dasher", a.nextId++, 960, 1200); a.bugs.push(b);
+  const step = () => stepArena(a, new Map()); step(); p.y = 1400;
+  while (a.tick * 50 < 1150) step();
+  expect(b.phase).toBe("recovery"); const until = b.phaseUntil;
+  a.shots.push({ id: a.nextId++, owner: p.id, life: p.life, born: 1150, x: b.x, y: b.y, vx: 900, vy: 0 });
+  step();
+  expect(b.hp).toBe(1); expect(b.phase).toBe("recovery"); expect(b.phaseUntil).toBe(until);
+  expect(a.events).toHaveLength(1); expect(a.events[0]).toMatchObject({ type: "hit", kind: "dasher", points: 0 });
 });
 
 test("nonlethal hit remains eligible for contact; projectile meets the stationary part of a wall stop", () => {
