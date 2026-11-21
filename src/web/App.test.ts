@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -36,6 +36,7 @@ mock.module(${moduleUrl("game/session.ts")}, () => ({ CHOICE_GUARD_MS: 350, Sess
     session = this;
   }
 } }));
+mock.module(${moduleUrl("entry/StartScene.tsx")}, () => ({ StartScene: () => null }));
 mock.module(${moduleUrl("game/engine.ts")}, () => ({ mountGame: (_canvas, _session, _hud, _debug, observer) => {
   movement = observer; return () => { movement = undefined; };
 } }));
@@ -109,11 +110,11 @@ try {
         act(() => { input.props.onChange({ target: { value: "New Robot" } }); });
       }
       act(() => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
-      assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
+      assert.equal(tree.root.findAllByProps({ role: "alert" }).length, 0);
       assert.equal(session, undefined, "Submitting without a team must stay on entry");
       const start = api.start;
       api.start = async () => { throw new Error("offline"); };
-      if (process.env.HINT_TOUCH === "entry") act(() => { tree.root.findByType("form").props.onPointerDown({ pointerType: "touch" }); });
+      if (process.env.HINT_TOUCH === "entry") act(() => { tree.root.findByProps({ className: "entry" }).props.onPointerDown({ pointerType: "touch" }); });
       await act(async () => { tree.root.findAllByType("button")[team === "tabs" ? 0 : 1].props.onClick(); });
       assert.ok(session.current, "Offline entry must start immediately");
       const hints = tree.root.findAllByProps({ className: "steering-hint" });
@@ -142,8 +143,12 @@ try {
       assert.equal(tree.root.findAllByType("input").length, 0);
       act(() => { tree.unmount(); }); tree = undefined;
       api.start = start;
+      session = undefined;
       await act(async () => { tree = create(createElement(App), { createNodeMock }); });
       assert.equal(tree.root.findAllByType("input").length, 0, "Reload must keep team");
+      assert.equal(session, undefined, "Saved entry must not construct Session");
+      assert.ok(text(tree.root.findByProps({ className: "entry-player" })).includes(selected.name));
+      await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
       assert.equal(session.identity.playerId, selected.playerId);
       assert.equal(tree.root.findAllByProps({ className: "steering-hint" }).length, 0, "Reload must not rearm");
       act(() => { tree.unmount(); }); tree = undefined;
@@ -160,7 +165,7 @@ try {
     act(() => { input.props.onChange({ target: { value: name } }); });
     act(() => { tree.root.findAllByType("button")[0].props.onClick(); });
     assert.ok(text(tree.root.findByProps({ role: "alert" })).trim());
-    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "That name is reserved");
+    if (name === "admin") assert.equal(text(tree.root.findByProps({ role: "alert" })).trim(), "Pick a different name.");
     assert.equal(session, undefined); assert.equal(saved.identity, previous);
     act(() => { input.props.onChange({ target: { value: "Scunthorpe" } }); });
     await act(async () => { tree.root.findAllByType("button")[0].props.onClick(); });
@@ -177,9 +182,16 @@ try {
   assert.equal(session.identity.team, "tabs"); assert.equal(saved.identity, null);
   act(() => { wait(800); session.start(); }); assert.equal(tree.root.findAllByType("input").length, 0);
   act(() => { tree.unmount(); }); tree = undefined;
-  storageFails = false; saved.identity = JSON.stringify(identity);
+  storageFails = false; saved.identity = JSON.stringify(identity); session = undefined;
+  values.delete("bug-swarm-steering-hint-seen");
   await act(async () => { tree = create(createElement(App), { createNodeMock }); });
-  assert.ok(session?.current, "App did not start its real Session");
+  assert.equal(session, undefined);
+  assert.equal(values.has("bug-swarm-steering-hint-seen"), false, "Saved entry must not consume hint");
+  if (process.env.HINT_TOUCH === "entry") act(() => { tree.root.findByProps({ className: "entry" }).props.onPointerDown({ pointerType: "touch" }); });
+  await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
+  assert.ok(session?.current, "Play must start its real Session");
+  assert.equal(session.current.touch, process.env.HINT_TOUCH === "entry");
+  act(() => { movement.moved(session.view.token); });
   const phase = () => tree.root.findByProps({ className: "game" }).props["data-phase"];
   assert.equal(phase(), "playing");
   const portrait = session.current;
@@ -451,6 +463,7 @@ try {
 
     saved.identity = JSON.stringify({ ...authoritative, team: "spaces" }); offline = true;
     await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
     assert.ok(session.current, "A conflicted identity still plays offline");
     assert.equal(tree.root.findAllByType("input").length, 0, "Recovery must not ask for another selection");
     offline = false;
@@ -461,6 +474,7 @@ try {
 
     saved.identity = JSON.stringify({ ...authoritative, team: "spaces" });
     await act(async () => { tree = create(createElement(App), { createNodeMock }); });
+    await act(async () => { tree.root.findByType("form").props.onSubmit({ preventDefault() {} }); });
     assert.deepEqual(session.identity, authoritative, "Online reload must recover an already-conflicted identity");
     assert.deepEqual(JSON.parse(saved.identity), authoritative);
     session.current.simulation.seconds = session.current.simulation.score = 1;
@@ -478,9 +492,11 @@ try {
 assert.equal(timers.size, 0, "Unmount must clear outstanding UI timers");
 assert.ok(logged.length > 0, "Expected failures must be logged");
 `;
+  const probePath = join(scratch, "app-probe.mjs");
+  writeFileSync(probePath, probe);
   try {
     for (const touch of ["false", "true", "entry", "fallback"]) {
-      const child = Bun.spawnSync([process.execPath, "--eval", probe], {
+      const child = Bun.spawnSync([process.execPath, probePath], {
         cwd: scratch, env: { ...process.env, HOME: home, USERPROFILE: home,
           APPDATA: join(home, "AppData", "Roaming"), LOCALAPPDATA: join(home, "AppData", "Local"),
           XDG_CONFIG_HOME: join(home, ".config"), XDG_CACHE_HOME: join(home, ".cache"), DATA_DIR: join(scratch, "data"), HINT_TOUCH: touch },

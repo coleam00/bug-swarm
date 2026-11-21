@@ -1,0 +1,507 @@
+{
+  "chrome": "155.0.8059.84",
+  "assertions": [
+    "1280x720: clean copy, delayed errors/retry, Enter/Tab, both teams, Join/Play, stable UUID, no pre-start request/hint, targets/bounds, stopped loop, reduced motion",
+    "390x844: clean copy, delayed errors/retry, Enter/Tab, both teams, Join/Play, stable UUID, no pre-start request/hint, targets/bounds, stopped loop, reduced motion, touch activation and rotation",
+    "844x390: clean copy, delayed errors/retry, Enter/Tab, both teams, Join/Play, stable UUID, no pre-start request/hint, targets/bounds, stopped loop, reduced motion, touch activation and rotation"
+  ],
+  "layouts": [
+    {
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "state": "first",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 738.25,
+          "y": 289.984375,
+          "width": 441.75,
+          "height": 60,
+          "top": 289.984375,
+          "right": 1180,
+          "bottom": 349.984375,
+          "left": 738.25
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 738.25,
+          "y": 369.984375,
+          "width": 214.875,
+          "height": 60,
+          "top": 369.984375,
+          "right": 953.125,
+          "bottom": 429.984375,
+          "left": 738.25
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 965.125,
+          "y": 369.984375,
+          "width": 214.875,
+          "height": 60,
+          "top": 369.984375,
+          "right": 1180,
+          "bottom": 429.984375,
+          "left": 965.125
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "sceneFrames": 128,
+      "meanMs": 0.1664062524214387,
+      "p95Ms": 0.2999999523162842
+    },
+    {
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "state": "error",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 738.25,
+          "y": 272.796875,
+          "width": 441.75,
+          "height": 60,
+          "top": 272.796875,
+          "right": 1180,
+          "bottom": 332.796875,
+          "left": 738.25
+        },
+        {
+          "tag": "P",
+          "text": "Use 2 to 16 letters or numbers.",
+          "x": 738.25,
+          "y": 344.796875,
+          "width": 441.75,
+          "height": 22.390625,
+          "top": 344.796875,
+          "right": 1180,
+          "bottom": 367.1875,
+          "left": 738.25
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 738.25,
+          "y": 387.1875,
+          "width": 214.875,
+          "height": 60,
+          "top": 387.1875,
+          "right": 953.125,
+          "bottom": 447.1875,
+          "left": 738.25
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 965.125,
+          "y": 387.1875,
+          "width": 214.875,
+          "height": 60,
+          "top": 387.1875,
+          "right": 1180,
+          "bottom": 447.1875,
+          "left": 965.125
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 1280,
+        "height": 720
+      },
+      "state": "returning",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "Play",
+          "x": 738.25,
+          "y": 380.984375,
+          "width": 441.75,
+          "height": 60,
+          "top": 380.984375,
+          "right": 1180,
+          "bottom": 440.984375,
+          "left": 738.25
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "state": "first",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 24,
+          "y": 521.4375,
+          "width": 342,
+          "height": 60,
+          "top": 521.4375,
+          "right": 366,
+          "bottom": 581.4375,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 24,
+          "y": 601.4375,
+          "width": 165,
+          "height": 60,
+          "top": 601.4375,
+          "right": 189,
+          "bottom": 661.4375,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 201,
+          "y": 601.4375,
+          "width": 165,
+          "height": 60,
+          "top": 601.4375,
+          "right": 366,
+          "bottom": 661.4375,
+          "left": 201
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "sceneFrames": 128,
+      "meanMs": 0.16249999776482582,
+      "p95Ms": 0.2999999523162842
+    },
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "state": "error",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 24,
+          "y": 504.25,
+          "width": 342,
+          "height": 60,
+          "top": 504.25,
+          "right": 366,
+          "bottom": 564.25,
+          "left": 24
+        },
+        {
+          "tag": "P",
+          "text": "Use 2 to 16 letters or numbers.",
+          "x": 24,
+          "y": 576.25,
+          "width": 342,
+          "height": 22.390625,
+          "top": 576.25,
+          "right": 366,
+          "bottom": 598.640625,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 24,
+          "y": 618.640625,
+          "width": 165,
+          "height": 60,
+          "top": 618.640625,
+          "right": 189,
+          "bottom": 678.640625,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 201,
+          "y": 618.640625,
+          "width": 165,
+          "height": 60,
+          "top": 618.640625,
+          "right": 366,
+          "bottom": 678.640625,
+          "left": 201
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "state": "returning",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "Play",
+          "x": 24,
+          "y": 612.4375,
+          "width": 342,
+          "height": 60,
+          "top": 612.4375,
+          "right": 366,
+          "bottom": 672.4375,
+          "left": 24
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 390,
+        "height": 844
+      },
+      "state": "rotation",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 24,
+          "y": 521.4375,
+          "width": 342,
+          "height": 60,
+          "top": 521.4375,
+          "right": 366,
+          "bottom": 581.4375,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 24,
+          "y": 601.4375,
+          "width": 165,
+          "height": 60,
+          "top": 601.4375,
+          "right": 189,
+          "bottom": 661.4375,
+          "left": 24
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 201,
+          "y": 601.4375,
+          "width": 165,
+          "height": 60,
+          "top": 601.4375,
+          "right": 366,
+          "bottom": 661.4375,
+          "left": 201
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "state": "first",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 488.515625,
+          "y": 125,
+          "width": 323.484375,
+          "height": 60,
+          "top": 125,
+          "right": 812,
+          "bottom": 185,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 488.515625,
+          "y": 205,
+          "width": 155.734375,
+          "height": 60,
+          "top": 205,
+          "right": 644.25,
+          "bottom": 265,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 656.25,
+          "y": 205,
+          "width": 155.75,
+          "height": 60,
+          "top": 205,
+          "right": 812,
+          "bottom": 265,
+          "left": 656.25
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "sceneFrames": 130,
+      "meanMs": 0.18076923076923077,
+      "p95Ms": 0.3999999761581421
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "state": "error",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 488.515625,
+          "y": 107.796875,
+          "width": 323.484375,
+          "height": 60,
+          "top": 107.796875,
+          "right": 812,
+          "bottom": 167.796875,
+          "left": 488.515625
+        },
+        {
+          "tag": "P",
+          "text": "Use 2 to 16 letters or numbers.",
+          "x": 488.515625,
+          "y": 179.796875,
+          "width": 323.484375,
+          "height": 22.390625,
+          "top": 179.796875,
+          "right": 812,
+          "bottom": 202.1875,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 488.515625,
+          "y": 222.1875,
+          "width": 155.734375,
+          "height": 60,
+          "top": 222.1875,
+          "right": 644.25,
+          "bottom": 282.1875,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 656.25,
+          "y": 222.1875,
+          "width": 155.75,
+          "height": 60,
+          "top": 222.1875,
+          "right": 812,
+          "bottom": 282.1875,
+          "left": 656.25
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "state": "returning",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "Play",
+          "x": 488.515625,
+          "y": 216,
+          "width": 323.484375,
+          "height": 60,
+          "top": 216,
+          "right": 812,
+          "bottom": 276,
+          "left": 488.515625
+        }
+      ]
+    },
+    {
+      "size": {
+        "width": 844,
+        "height": 390
+      },
+      "state": "rotation",
+      "overflow": false,
+      "controls": [
+        {
+          "tag": "INPUT",
+          "text": "",
+          "x": 488.515625,
+          "y": 125,
+          "width": 323.484375,
+          "height": 60,
+          "top": 125,
+          "right": 812,
+          "bottom": 185,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Tabs",
+          "x": 488.515625,
+          "y": 205,
+          "width": 155.734375,
+          "height": 60,
+          "top": 205,
+          "right": 644.25,
+          "bottom": 265,
+          "left": 488.515625
+        },
+        {
+          "tag": "BUTTON",
+          "text": "Join Spaces",
+          "x": 656.25,
+          "y": 205,
+          "width": 155.75,
+          "height": 60,
+          "top": 205,
+          "right": 812,
+          "bottom": 265,
+          "left": 656.25
+        }
+      ]
+    }
+  ]
+}

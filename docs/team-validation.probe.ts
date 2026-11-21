@@ -122,7 +122,7 @@ try {
   assert.equal(await page.locator("#name").inputValue(), "Legacy Robot");
   await page.getByRole("button", { name: "Join Spaces" }).tap();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("bug-swarm-player")!).playerId), legacyId);
-  const returning = performance.now(); await page.reload(); await page.locator("canvas").waitFor();
+  const returning = performance.now(); await page.reload(); await page.getByRole("button", { name: "Play", exact: true }).click(); await page.locator(".game canvas").waitFor();
   results.returnEntryMs = Math.round(performance.now() - returning);
   assert.equal(await page.locator("#name").count(), 0);
   // Every API request fails, but a fresh identity still starts and moves locally.

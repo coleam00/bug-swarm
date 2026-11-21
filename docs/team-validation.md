@@ -1,5 +1,7 @@
 # Tabs vs Spaces validation
 
+Issue #58 changes entry to a clean title/name/team screen and a returning-player Play button. The entry copy and automatic-return timings below are historical; see [current entry evidence](start-validation.md). The probe now activates Play before expecting gameplay.
+
 Recorded on 2026-11-19 on the factory Windows desktop, Bun 1.4.2 and headless Chrome for Testing 156.0.8078.4. The production Vite bundle ran with touch emulation at 390×844 and 844×390 CSS pixels. No simulation or frame-loop code changed, so no frame-rate benchmark was required.
 
 `bun install`, the adjacent persistence/API/identity/Session/React/owner-command tests, `bun run build`, and `bun run check` passed. The check ran TypeScript and all 141 tests across 24 files (13,409 assertions), including production startup and browser bundle coverage.

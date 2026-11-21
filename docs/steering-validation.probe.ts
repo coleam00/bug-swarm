@@ -111,11 +111,11 @@ try {
         await page.keyboard.down("d"); await hint.waitFor({ state: "detached" }); await page.keyboard.up("d");
       }
       assert.notDeepEqual(await snapshot(), robot);
-      await restart(); await page.reload(); await page.locator("canvas").waitFor(); assert.equal(await hint.count(), 0);
+      await restart(); await page.reload(); await page.getByRole("button", { name: "Play", exact: true }).click(); await page.locator(".game canvas").waitFor(); assert.equal(await hint.count(), 0);
       // Existing identity without a flag, with API unavailable: untouched deadline.
       offline = true;
       await page.evaluate(identity => { localStorage.setItem("bug-swarm-player", JSON.stringify(identity)); localStorage.removeItem("bug-swarm-steering-hint-seen"); }, identity);
-      await page.reload(); await hint.waitFor(); await discover();
+      await page.reload(); await page.getByRole("button", { name: "Play", exact: true }).click(); await hint.waitFor(); await discover();
       await page.waitForTimeout(3500); assert.equal(await hint.count(), 1);
       await hint.waitFor({ state: "detached", timeout: 1200 });
       assert.ok(await page.evaluate(() => (window as any).hintSession.current.simulation.time) > 3);

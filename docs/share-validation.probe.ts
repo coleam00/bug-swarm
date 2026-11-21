@@ -128,7 +128,7 @@ try {
     await page.locator(".over").tap({ position: { x: 20, y: 20 } });
     await page.locator(".over").waitFor({ state: "detached" });
     await page.waitForTimeout(100); assert.equal(starts, restart + 1);
-    const returning = performance.now(); await page.reload(); await page.locator("canvas").waitFor();
+    const returning = performance.now(); await page.reload(); await page.getByRole("button", { name: "Play", exact: true }).click(); await page.locator(".game canvas").waitFor();
     timing.returnEntryMs = Math.round(performance.now() - returning); assert.ok(Number(timing.returnEntryMs) < 2000);
     results[key] = { entry, hudState, menus, dialog, scroll, ...timing, steeringDistance: Math.round(Math.hypot(afterDrag.x - beforeDrag.x, afterDrag.y - beforeDrag.y)) };
     for (const path of ["/board", "/board/"]) {
@@ -174,8 +174,10 @@ try {
     assert.ok(!/resvg|share-assets/.test(readFileSync(join("dist/assets", file), "utf8")), "Rasterizer stays out of browser bundles");
   }
   const css = readFileSync("src/web/style.css", "utf8");
-  assert.match(css, /\.entry, \.game, \.choices \{[^}]*-webkit-touch-callout: none/);
-  assert.match(css, /#name \{[^}]*-webkit-touch-callout: default/);
+  assert.match(css, /\.game, \.choices \{[^}]*-webkit-touch-callout: none/);
+  const entryCss = readFileSync("src/web/entry/entry.css", "utf8");
+  assert.match(entryCss, /\.entry \{[^}]*-webkit-touch-callout: none/);
+  assert.match(entryCss, /\.entry input \{[^}]*-webkit-touch-callout: default/);
   await page.screenshot({ path: join(evidence, "artwork.png"), fullPage: true });
   await Bun.write(join(evidence, "measurements.json"), JSON.stringify(results, null, 2) + "\n");
   console.log(JSON.stringify(results, null, 2));

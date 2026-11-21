@@ -1,5 +1,7 @@
 # Issue 40: first-run steering hint
 
+Issue #58 changes entry to a clean title/name/team screen and a returning-player Play button. The entry copy and automatic-return timings below are historical; see [current entry evidence](start-validation.md). The probe now activates Play before expecting gameplay.
+
 The steering hint is approved and unchanged. Both pacing matrices pass using the owner's second ruling: idle never selects upgrades and stops at its first paused choice, or dies in 18–40 gameplay seconds. Round 2's opening is retained with its 9.3-second first spawn and monotonic 60%-to-normal pursuit by 15 seconds; there is no speed surge. See [current pacing results](pacing-validation.md#current-acceptance-idle-stops-at-the-first-choice). The Chrome evidence below was refreshed against this implementation after merging main's personal-standing and score-review changes.
 
 The overlay uses the exact touch/desktop messages, sits inside the arena surface above the robot, and neither captures input nor pauses gameplay. Separate localStorage persistence consumes eligibility at local start, including offline starts and existing identities with no hint flag. A retained controller suppresses repeats on restart and across effect reattachment. Failed storage logs once and suppresses repeats within the page.

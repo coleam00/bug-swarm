@@ -39,12 +39,7 @@ export class Assets {
     const gradient = edge.createRadialGradient(300, 300, 130, 300, 300, 415);
     gradient.addColorStop(0, "#030a1200"); gradient.addColorStop(0.7, "#030a1230"); gradient.addColorStop(1, "#030a12df");
     edge.fillStyle = gradient; edge.fillRect(0, 0, 600, 600);
-    const glow = (colour: string): HTMLCanvasElement => {
-      const canvas = surface(64, 64), ctx = canvas.getContext("2d")!;
-      const light = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-      light.addColorStop(0, colour + "cc"); light.addColorStop(0.25, colour + "70"); light.addColorStop(1, colour + "00");
-      ctx.fillStyle = light; ctx.fillRect(0, 0, 64, 64); return canvas;
-    };
+    const glow = (colour: string) => createGlow(colour, density, factory);
     this.core = glow("#5bffe0"); this.shot = glow("#ffd36c"); this.spark = glow("#ff9a70");
     this.drone = glow("#9bafff"); this.halo = glow("#7affe0");
     const fontSize = Math.max(22, 18 / scale);
@@ -65,4 +60,14 @@ export class Assets {
     // Release the browser backing stores on replacement/unmount.
     this.floor.width = this.vignette.width = this.core.width = this.shot.width = this.spark.width = this.label.width = this.drone.width = this.halo.width = 0;
   }
+}
+
+/** A single cached glow, also used by the entry scene. Caller releases its backing store. */
+export function createGlow(colour: string, density = 1, factory: CanvasFactory = makeCanvas): HTMLCanvasElement {
+  const canvas = factory();
+  canvas.width = canvas.height = Math.ceil(64 * density);
+  const ctx = canvas.getContext("2d")!; ctx.scale(density, density);
+  const light = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  light.addColorStop(0, colour + "cc"); light.addColorStop(0.25, colour + "70"); light.addColorStop(1, colour + "00");
+  ctx.fillStyle = light; ctx.fillRect(0, 0, 64, 64); return canvas;
 }

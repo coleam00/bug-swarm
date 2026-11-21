@@ -86,6 +86,7 @@ async function setup(width: number, height: number, touch: boolean, insets = non
   const cdp = await context.newCDPSession(page);
   await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets });
   await page.goto(`https://swarm.test${pathname}`);
+  if (pathname === "/") await page.getByRole("button", { name: "Play", exact: true }).click();
   await page.locator(pathname === "/" ? ".game[data-phase=playing]" : ".stream-board").waitFor();
   return { page, context, cdp, starts: () => starts, mode: (next: string) => { mode = next; },
     close: async () => { held.splice(0).forEach(resolve => resolve()); await context.close(); } };
