@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { Browser } from "./browser";
+import { Browser, until } from "./browser";
 import { Player } from "./player";
 import { OwnedServer } from "./server";
 import { comparePage, compareBoard, compareResult, requireAgreement, same } from "./agreement";
@@ -9,7 +9,7 @@ import { runBots } from "../bots";
 import type { ArenaFrame } from "../../src/web/arena/observation";
 import type { ServerObservation, ScenarioReport } from "./types";
 import type { Leader, Standing, Best } from "../../src/shared/api";
-import type { CombatEvent } from "../../src/shared/arena/types";
+import { requireMeasurements } from "./report";
 import { TEAMS } from "../../src/shared/teams";
 
 export class Context {
@@ -17,7 +17,7 @@ export class Context {
   readonly server: OwnedServer;
   readonly report: ScenarioReport;
   latest?: ServerObservation;
-  readonly events = new Map<string, CombatEvent>();
+  readonly validatedRuns = new Set<string>();
   private previous = new Map<Player, ArenaFrame>();
   private botAbort?: AbortController;
   private botTask?: Promise<unknown>;
@@ -30,7 +30,7 @@ export class Context {
     mkdirSync(root, { recursive: true });
     this.server = new OwnedServer(root, assets, 86);
     this.report = { name, status: "running", seed: 86, elapsedMs: 0, checks: [], screenshots: [], pages: {}, cleanupErrors: [] };
-    this.deadline = Math.min(suiteDeadline, this.start + (name === "combat" ? 145000 : 85000));
+    this.deadline = Math.min(suiteDeadline, this.start + (name === "combat" ? 180000 : 85000));
   }
   check(name: string, condition: unknown, detail?: unknown) {
     this.report.checks.push({ name, pass: !!condition, ...(detail !== undefined ? { detail } : {}) });
@@ -43,10 +43,16 @@ export class Context {
       const page = await this.browser.page(this.server.origin, touch ? portrait ? 390 : 844 : 1280, touch ? portrait ? 844 : 390 : 720, touch);
       const p = new Player(this.browser, page, `Pilot${String.fromCharCode(65 + i)}`, TEAMS[i % TEAMS.length]!);
       this.players.push(p); this.report.pages[p.name] = { samples: 0, fps: [], frameMs: [] };
+    }
+    // Browser/page startup must not leave the first human taking damage while
+    // the rest of the cohort still boots. No arena socket opens at this stage.
+    for (const p of this.players) await until(() => this.browser.evaluate(p.page.session, "!!document.querySelector('#name')"));
+    for (const p of this.players) {
       await p.join();
       await p.key("KeyF", true); await p.key("KeyF", false);
       const start = performance.now();
-      await this.wait("admission observed on every page", () => this.players.every(v => this.players.every(q => (this.name === "together" ? v.observation?.frame?.paint.players : v.observation?.frame?.snapshot.players)?.some(p => p.name === q.name))), 1000, false);
+      const admitted = this.players.slice(0, this.players.indexOf(p) + 1);
+      await this.wait("admission observed on every page", () => admitted.every(v => admitted.every(q => (this.name === "together" ? v.observation?.frame?.paint.players : v.observation?.frame?.snapshot.players)?.some(p => p.name === q.name))), 1000, false);
       this.check(`${p.name} admitted on every page within one second`, performance.now() - start <= 1000);
     }
     await this.run(600);
@@ -67,14 +73,13 @@ export class Context {
     if (this.botError) throw this.botError;
     const pages = await Promise.all(this.players.map(p => p.read()));
     const server = this.latest = await this.server.observe();
-    for (const s of server.snapshots) for (const e of s.events) this.events.set(`${server.generation}/${s.arenaId}/${e.id}`, e);
-    while (this.events.size > 3000) this.events.delete(this.events.keys().next().value!);
     this.report.tick = server.stats.tick; this.report.warmup = server.warmup;
     for (let i = 0; i < pages.length; i++) {
       const page = pages[i]!, player = this.players[i]!, stats = this.report.pages[player.name]!;
       if (agreement) {
         const f = comparePage(page, server, this.previous.get(player)); this.previous.set(player, f);
-        stats.samples++; if (page.fps) stats.fps.push(page.fps); if (page.frameMs) stats.frameMs.push(page.frameMs);
+        stats.samples++;
+        if (Number.isFinite(page.fps) && page.fps > 0 && Number.isFinite(page.frameMs) && page.frameMs >= 0) { stats.fps.push(page.fps); stats.frameMs.push(page.frameMs); }
       }
     }
     this.samples.push({ at: performance.now() - this.start, generation: server.generation, pages: pages.map(p => ({ now: p.now, frame: p.frame })), server: { snapshots: server.snapshots.slice(-5), lives: server.lives.slice(-12) } });
@@ -130,6 +135,7 @@ export class Context {
     } while (performance.now() < end);
     if (mismatch) throw mismatch;
     this.check(`${p.name} score/best/standing agree with saved server run`, true, { run: life!.record.runId });
+    this.validatedRuns.add(life!.record.runId);
   }
   async api<T>(path: string): Promise<T> { const r = await fetch(this.server.origin + path, { signal: AbortSignal.timeout(5000) }); if (!r.ok) throw Error(`HTTP ${r.status}: ${path}`); return r.json() as Promise<T>; }
   async board() {
@@ -158,8 +164,8 @@ export class Context {
     if (browserErrors.length) this.report.checks.push({ name: "No browser errors", pass: false, detail: browserErrors });
     if (this.report.cleanupErrors.length || browserErrors.length) this.report.status = "fail";
     if (this.report.status === "running") {
-      if (Object.values(this.report.pages).some(p => p.samples < 5)) { this.report.status = "fail"; this.report.error = "Insufficient agreement samples"; }
-      else { this.report.checks.push({ name: "Continuously advancing rendered state agrees with authoritative history", pass: true }); this.report.status = "pass"; }
+      try { requireMeasurements(this.report); this.report.checks.push({ name: "Continuously advancing rendered state and complete performance evidence", pass: true }); this.report.status = "pass"; }
+      catch (error) { this.report.status = "fail"; this.report.error = String(error); this.report.checks.push({ name: "Complete performance evidence", pass: false, detail: String(error) }); }
     }
     this.report.elapsedMs = performance.now() - this.start;
     writeFileSync(join(this.root, "samples.json"), JSON.stringify(this.samples));

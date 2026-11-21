@@ -28,6 +28,7 @@ export class Browser {
   private socket?: WebSocket;
   private process?: Bun.Subprocess;
   readonly errors: { session?: string; error: unknown }[] = [];
+  private pageEnables: { session: string; ms: number }[] = [];
   metadata: unknown;
   async start(root: string) {
     const executable = chromeExecutable();
@@ -36,7 +37,7 @@ export class Browser {
     await until(async () => existsSync(join(root, "p", "DevToolsActivePort")), Boolean, 25000, "Chrome startup");
     const port = readFileSync(join(root, "p", "DevToolsActivePort"), "utf8").split("\n")[0];
     const version = await (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(5000) })).json() as { webSocketDebuggerUrl: string };
-    this.metadata = { executable, flags, version };
+    this.metadata = { executable, flags, version, pageEnables: this.pageEnables };
     const socket = this.socket = new WebSocket(version.webSocketDebuggerUrl);
     socket.onmessage = event => {
       const m = JSON.parse(String(event.data)), p = this.pending.get(m.id);
@@ -46,10 +47,10 @@ export class Browser {
     socket.onclose = () => { for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(Error("Chrome CDP disconnected")); } this.pending.clear(); };
     await new Promise<void>((resolve, reject) => { const timer = setTimeout(() => reject(Error("CDP connection timed out")), 5000); socket.onopen = () => { clearTimeout(timer); resolve(); }; socket.onerror = () => { clearTimeout(timer); reject(Error("CDP connection failed")); }; });
   }
-  call(method: string, params: object = {}, sessionId?: string): Promise<any> {
+  call(method: string, params: object = {}, sessionId?: string, timeoutMs = 5000): Promise<any> {
     const id = ++this.serial;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(Error(`${method} timed out`)); }, 5000);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(Error(`${method} timed out after ${timeoutMs} ms`)); }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try { this.socket!.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); }
       catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e); }
@@ -63,7 +64,12 @@ export class Browser {
     const { browserContextId } = await this.call("Target.createBrowserContext");
     const { targetId } = await this.call("Target.createTarget", { url: "about:blank", browserContextId });
     const { sessionId } = await this.call("Target.attachToTarget", { targetId, flatten: true });
-    await this.call("Page.enable", {}, sessionId); await this.call("Runtime.enable", {}, sessionId);
+    const enabling = performance.now();
+    // A cold Chrome renderer can take longer than a game input command to boot.
+    // Bound startup separately; live command and frame freshness limits stay strict.
+    await this.call("Page.enable", {}, sessionId, 15000);
+    this.pageEnables.push({ session: sessionId, ms: performance.now() - enabling });
+    await this.call("Runtime.enable", {}, sessionId);
     // Each isolated player remains focused even when another target receives input.
     // Otherwise Chrome's single foreground tab blurs peers and the game's real
     // blur handler correctly releases their held keys/buttons.

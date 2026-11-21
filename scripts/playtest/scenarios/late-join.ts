@@ -11,6 +11,13 @@ export default async function lateJoin(c: Context) {
   }
   await c.capture("late-admission");
   const life = c.players[0]!.observation!.frame!.local.life;
-  await c.run(10000, () => { const p = c.players[0]!.observation!.frame!.local; c.check("Newcomer survival sample", p.life === life && p.status === "active"); });
+  const start = c.players[0]!.observation!.frame!.local; let moved = false, fired = false;
+  await c.run(10000, () => {
+    const f = c.players[0]!.observation!.frame!, p = f.local;
+    c.check("Newcomer survival sample", p.life === life && p.status === "active");
+    moved ||= Math.hypot(p.x - start.x, p.y - start.y) > 30;
+    fired ||= f.input.fire && f.snapshot.shots.some(s => s.owner === f.playerId && s.life === life);
+  });
+  c.check("Surviving newcomer actually moves and fires", moved && fired);
   await c.capture("ten-second-survival");
 }

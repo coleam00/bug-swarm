@@ -1,32 +1,50 @@
 # Multiplayer browser playtest validation — item 86
 
-Factory Chrome `157.0.8103.51`, Windows, headless with GPU enabled by default. All servers, databases, homes, Chrome profiles and artifacts were isolated inside this checkout. No browser player sent protocol messages or modified game state; desktop actors used WASD, mouse aiming and Space bursts, and phone actors used concurrent two-point touch.
+Factory Chrome `157.0.8103.51`, Windows, headless with GPU enabled by default. Servers, databases, homes, Chrome profiles and artifacts are isolated inside the checkout. Players use keyboard/mouse or simultaneous two-point touch; they do not send protocol messages or modify game state.
 
-`bun run playtest` passed in **196.57 seconds**, including build, Chrome startup and cleanup. Reports and screenshots: `.evidence/86/playtest/9759ecce/`.
+## Returned-check validation
 
-| Scenario | Result | Seconds | Live server tick p95 (ms) |
+The corrected combat scenario credits **60 seconds with both actors active and receiving fresh browser input**. Every five credited seconds requires repeated aim dispatches, observed fire and authoritative shots from each actor. Downed time, saved-result validation and UI respawn earn no time. Ended browser lives are independently checked against SQLite and rendered results before respawning. The report retains the twelve activity windows. A fixture replacing 50 seconds with idle/dead players fails.
+
+Revive now prepares all browser pages before admitting humans, keeps guards near the casualty, waits for the rescuer's gun to cool before approaching and continues normal defensive bursts during contact. Three independent runs of the final plan passed without retries. Every page painted the downed body, positive meter and active body, retaining the same life/run/score. The duplicated exact-reward calculation was removed; deterministic simulation tests protect that rule.
+
+These are focused invocations, each using `bun run playtest -- --scenario <name> --out .evidence/86/returned/<run>`. The factory runs the whole suite; it was not rerun as one command during this correction.
+
+| Scenario | Passing run | Scenario seconds | Live tick p95 (ms) |
 | --- | --- | ---: | ---: |
-| together | pass | 19.12 | 1.531 |
-| combat | pass | 89.19 | 1.680 |
-| revive | pass | 34.98 | 0.962 |
-| late-join | pass | 15.44 | 2.560 |
-| phone-desktop | pass | 23.15 | 1.062 |
-| restart | pass | 12.77 | 0.927 |
-| boss | explicit skip: no registered boss | 0.00 | — |
+| together | `together-2` | 17.43 | 2.151 |
+| combat | `combat-3` | 106.27 | 2.000 |
+| revive | `revive-8`, `revive-9`, `revive-10` | 31.58 / 32.29 / 31.57 | 1.350 / 1.272 / 1.228 |
+| late-join | `late-join-1` | 18.39 | 3.453 |
+| phone-desktop | `phone-desktop-2` | 24.39 | 0.940 |
+| restart | `restart-1` | 21.79 | 1.354 |
 
-Combat includes an A-only kill visibly painted by B, then a full 60-second fight, positive scores for both combat players, natural life expiry, independently verified SQLite results, exact best/standing/next-gap text, matching `/board` rows and fresh-input respawn. Life-over remains standing-only. Revive uses ordinary damage and keyboard approach, records all three screens at downed/meter/active checkpoints and verifies the rescuer's exact 50-point reward after subtracting combat points. Late-join advances 6,000 ordinary bot-only ticks before admitting humans, verifies admission-time spawn clearance and centering, and observes ten uninterrupted real seconds of survival. Restart verifies final frozen runs, one finish each, automatic rejoin and working input. The existing UI truthfully displays `Score saved: <score>. Rejoining...` during graceful restart; the harness also accepts `Reconnecting...`.
+Together includes ten bots. Late-join includes eight bots, 6,000 ordinary warm-up ticks, admission clearance/centering and ten seconds of uninterrupted survival with observed movement and firing. Phone-desktop covers 1280×720 desktop, 844×390 touch and 390×844 touch concurrently. Restart checks saved lives, automatic rejoin and working input. Boss detection/explicit absence skip is unchanged. Life-over stays standing-only; top-10 agreement remains on `/board`.
 
-The focused `bun run playtest -- --scenario phone-desktop --bots 16` passed in **24.22 seconds** with **20 participants** on every page. It additionally requires both phone twin sticks simultaneously alongside desktop firing, changed aim, shots painted by peers, authoritative touch attribution and screenshots with the F timing readout. Evidence: `.evidence/86/playtest/a5f28427/` (including `twin-sticks-PilotC.png` and `twin-sticks-PilotD.png`).
+Negative probes retained under `.evidence/86/returned/` demonstrate that:
 
-| Page | Viewport | Mean FPS | Mean frame cost (ms) | Frame-cost p95 (ms) |
-| --- | --- | ---: | ---: | ---: |
-| PilotA | desktop 1280×720 | 59.92 | 0.501 | 0.642 |
-| PilotB | desktop 1280×720 | 59.87 | 0.530 | 0.677 |
-| PilotC | touch 844×390 | 60.03 | 0.486 | 0.688 |
-| PilotD | touch 390×844 | 60.02 | 0.535 | 0.667 |
+- Stopping robot painting after five seconds fails continuous agreement (`probes-3/probe-missing-robots/run/`), while fixtures allow off-screen and out players to be unpainted.
+- Removing FPS/frame-time accumulation fails report completeness (`.evidence/86/fps-mut/`). Every participating page now requires finite paired measurements before a pass.
+- Constructing the observation hook unconditionally fails the actual built/served production-client test (`probe-production-hook/`). The same test joins through browser input and requires a completed observation in the explicitly instrumented client.
+- Deleting the snapshot-age condition fails the repaired fixture, whose interpolation and positions are otherwise valid (`probe-snapshot-age/`).
 
-Live server tick p95 was **2.401 ms**. These are total instrumented frame/tick costs with a full player population, rather than a separately measured overhead delta or a maximum-entity renderer benchmark. Accelerated setup is excluded from live tick timing. The ordinary production build contains none of `__arenaDebug`, `reviveRing`, `receivedAt` or `observedAt`; its build manifest has no playtest marker. Observation allocation/recording runs only in the explicitly instrumented build.
+The opt-in configuration test passed ten repetitions with one bounded child per test and a deadline longer than that child's timeout. Cold `Page.enable` startup has its own 15-second bound and recorded duration; ordinary commands and frame/snapshot freshness limits remain unchanged. Screenshots inspected include the latest combat, revive meter and portrait twin sticks. Failed development attempts are retained alongside passing reports.
 
-Harness tests cover interpolation and tolerance boundaries, membership, painted colours/minimap/HUD, score/life/status mismatches, missing effects and their deadline, frozen/stale frames, restart generations, incomplete history, results and ordered boards. Startup/path tests cover instrumentation guards, ephemeral real-server sockets, junction escapes, fresh output folders, missing-Chrome failure reports, and bot-only warm-up equivalence including respawns. `bun run check` passed **479 tests**; `bun run build` and the normal-bundle exclusion check passed. Focused reports `.evidence/86/playtest/712790c1/` (restart) and `.evidence/86/playtest/9b6b6b6a/` (phone/desktop) also pass with the final generation-history reset and independent interpolation-timing checks.
+## Performance and limits
 
-Reviewed screenshots include the shared kill on B, saved life-over standing, downed/revive progression, both phone orientations/twin sticks, board pages and every reconnecting screen. Raw failed development attempts remain under `.evidence/86/playtest/` for diagnosis; the two run IDs above identify the passing acceptance evidence.
+Paired measurements from the passing four-browser phone run:
+
+| Page | Mean FPS | Mean frame cost (ms) | Frame-cost p95 (ms) |
+| --- | ---: | ---: | ---: |
+| PilotA | 59.97 | 0.255 | 0.343 |
+| PilotB | 60.05 | 0.251 | 0.325 |
+| PilotC | 60.01 | 0.237 | 0.339 |
+| PilotD | 60.02 | 0.243 | 0.352 |
+
+The optional `phone-desktop --bots 16` stress invocation (`phone-desktop-1`) **failed**, correctly retaining an invalid reconstructed-snapshot error from bot-02. Before that failure, 108 samples per page measured mean FPS 59.86–60.03, mean frame cost 0.659–0.838 ms and frame-cost p95 0.933–1.135 ms with 20 participants; live tick p95 was 2.755 ms. These diagnostic measurements are not a passing stress result. They measure total instrumented costs, not a separate overhead delta or maximum-entity benchmark.
+
+A separate failed rescue development run captured an authoritative player heat of 18.7 while the protocol caps heat at 18 (`rejected-snapshot.json`, reproduced by `replay-snapshots.ts`). The existing combat simulation can overshoot the cap when held fire resumes after partial cooling. Gameplay/codec code is unchanged by this correction; snapshot and freshness assertions remain strict. The stress run's rejected frame was not captured, so its cause is not established.
+
+Harness fixtures cover viewport membership, interpolation/tolerance boundaries, status/life/score, effects, freshness, restart generations, incomplete history, saved results and ordered boards. Startup/path/warm-up tests remain in place. Normal production assets exclude observation code; actual production-client exclusion is exercised by `bun run check` in addition to bundle inspection.
+
+`bun run check` passed **487 tests** across 66 files (138.53 seconds), including type checking. `bun run build` passed; emitted JavaScript contains none of `__arenaDebug`, `reviveRing`, `receivedAt` or `observedAt`, and the normal build manifest has no playtest marker. Logs are in `.evidence/86/returned/check/` and `.evidence/86/returned/build/`.

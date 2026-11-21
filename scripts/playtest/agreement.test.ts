@@ -15,7 +15,7 @@ function fixture() {
   }
   const s = snapshots[4]!, local = s.players[0]!, remote = { ...s.players[1]!, x: (snapshots[2]!.players[1]!.x + snapshots[3]!.players[1]!.x) / 2 };
   const page: PageObservation = { now: 1000, text: "", fps: 60, frameMs: 1, result: null, frame: {
-    at: 1000, epoch: 1000, receivedAt: 975, frame: 10, generation: 1, playerId: local.id, local, snapshot: s, width: 1280, height: 720, camera: { x: 0, y: 0 }, scale: 1,
+    at: 1000, epoch: 1000, receivedAt: 975, frame: 10, generation: 1, playerId: local.id, local, snapshot: s, width: 1280, height: 720, camera: { x: local.x - 640, y: local.y - 360 }, scale: 1,
     players: [local, remote], interpolation: { a: 3, b: 4, fraction: .5, transitions: [["local", 1], ["remote", 1]] },
     paint: { players: [local, remote].map(p => ({ ...p, colour: TEAM_COLOURS[p.team], reviveRing: false })), bugs: [], effects: [], shots: [], minimap: [local, remote].map(p => ({ id: p.id, colour: TEAM_COLOURS[p.team] })), hud: { score: local.score, hits: local.hits, population: 2, wave: s.wave } }, input: { left: false, right: false, fire: false },
   } };
@@ -31,6 +31,32 @@ test("remote tolerance is two world units; stopped local tolerance is two", () =
   const { page, server } = fixture(); page.frame!.players[1]!.x += 2; page.frame!.paint.players[1]!.x += 2;
   expect(() => comparePage(page, server, undefined, true)).not.toThrow();
   page.frame!.players[1]!.x += .001; expect(() => comparePage(page, server)).toThrow("Remote position");
+  const stopped = fixture(); stopped.page.frame!.local.x += 2; stopped.page.frame!.paint.players[0]!.x += 2;
+  expect(() => comparePage(stopped.page, stopped.server, undefined, true)).not.toThrow();
+  stopped.page.frame!.local.x += .001;
+  expect(() => comparePage(stopped.page, stopped.server, undefined, true)).toThrow("Local prediction position");
+});
+test("every visible active/downed robot is required; off-screen and out players may be unpainted", () => {
+  for (const status of ["active", "downed"] as const) {
+    const { page, server } = fixture();
+    for (const s of server.snapshots) s.players[1]!.status = status;
+    page.frame!.players[1]!.status = status;
+    if (status === "downed") page.frame!.players[1]!.x = server.snapshots.at(-1)!.players[1]!.x;
+    page.frame!.paint.players = page.frame!.paint.players.slice(0, 1);
+    expect(() => comparePage(page, server)).toThrow("Missing painted robot remote");
+  }
+  const offscreen = fixture();
+  for (const s of offscreen.server.snapshots) s.players[1]!.x += 1050;
+  offscreen.page.frame!.players[1]!.x += 1050; offscreen.page.frame!.snapshot.players[1]!.x += 1050;
+  offscreen.page.frame!.paint.players.pop();
+  expect(() => comparePage(offscreen.page, offscreen.server)).not.toThrow();
+  offscreen.page.frame!.paint.players = [];
+  expect(() => comparePage(offscreen.page, offscreen.server)).toThrow("Missing painted robot local");
+  const out = fixture();
+  for (const s of out.server.snapshots) Object.assign(s.players[1]!, { status: "out", hits: 0 });
+  Object.assign(out.page.frame!.players[1]!, out.server.snapshots.at(-1)!.players[1]!);
+  out.page.frame!.paint.players.pop(); out.page.frame!.paint.minimap.pop();
+  expect(() => comparePage(out.page, out.server)).not.toThrow();
 });
 for (const [label, mutate] of Object.entries({
   membership: (p: PageObservation) => p.frame!.players.pop(),
@@ -44,10 +70,20 @@ for (const [label, mutate] of Object.entries({
   score: (p: PageObservation) => { p.frame!.players[1]!.score++; },
   status: (p: PageObservation) => { p.frame!.players[1]!.status = "downed"; },
   stale: (p: PageObservation) => { p.now += 501; },
-  snapshot: (p: PageObservation) => { p.frame!.receivedAt -= 501; },
   generation: (p: PageObservation) => { p.frame!.generation++; },
   missing: (p: PageObservation) => { p.frame = null; },
 })) test(`agreement rejects ${label}`, () => { const { page, server } = fixture(); mutate(page); expect(() => comparePage(page, server)).toThrow(); });
+test("snapshot age alone rejects otherwise consistent interpolation", () => {
+  const { page, server } = fixture(), f = page.frame!;
+  // An old snapshot clamps interpolation to its latest endpoint. No position,
+  // fraction, frame age or server-history condition fails in this fixture.
+  f.receivedAt = f.at - 501; f.interpolation = { a: 5, b: 5, fraction: 0, transitions: [] };
+  f.players = structuredClone(f.snapshot.players);
+  f.paint.players = f.players.map(p => ({ ...p, colour: TEAM_COLOURS[p.team], reviveRing: false }));
+  expect(() => comparePage(page, server)).toThrow("Stale rendered frame or snapshot");
+  f.receivedAt = f.at - 500;
+  expect(() => comparePage(page, server)).not.toThrow();
+});
 test("freshness boundary passes, frozen frames and missing history fail", () => {
   const { page, server } = fixture(); page.now += 500; expect(() => comparePage(page, server)).not.toThrow();
   expect(() => comparePage(page, server, page.frame!)).toThrow("Frozen");

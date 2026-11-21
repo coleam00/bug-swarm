@@ -3,8 +3,29 @@ import type { PageObservation } from "./types";
 import type { Input } from "../../src/shared/arena/types";
 import { createPolicy, policyInput } from "../../src/shared/arena/policies";
 import { TEAMS, type Team } from "../../src/shared/teams";
+import type { ArenaFrame } from "../../src/web/arena/observation";
 
-export type PlayerPlan = "wait" | "fight" | "still" | "follow" | "hunt" | { x: number; y: number; radius?: number; fire?: boolean; guard?: boolean };
+export type PlayerPlan = "wait" | "fight" | "combat" | "still" | "follow" | "hunt" | { x: number; y: number; radius?: number; fire?: boolean; guard?: boolean };
+export interface AppliedInput { at: number; serial: number; life: number; input: Input }
+export function guardInput(f: ArenaFrame, target: { x: number; y: number }, state: ReturnType<typeof createPolicy>): Input {
+  const waiting = f.players.find(p => p.name === "PilotA")!;
+  // Defend against incoming bugs that favour this guard, without clearing the
+  // victim's attackers. Fire at normal range, rather than waiting for contact.
+  const bugs = f.paint.bugs.filter(b => waiting.status === "downed" ||
+    Math.hypot(b.x - f.local.x, b.y - f.local.y) < Math.hypot(b.x - waiting.x, b.y - waiting.y));
+  const input = policyInput("aimer", { players: [], bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, state);
+  const dx = target.x - f.local.x, dy = target.y - f.local.y, distance = Math.hypot(dx, dy);
+  const danger = bugs.some(b => Math.hypot(b.x - f.local.x, b.y - f.local.y) < 200);
+  // Defend a nearby patch instead of letting the aimer wander out of the
+  // casualty's camera. Both helpers must actually see the downed body/meter.
+  if (!danger || distance > 80) input.move = distance > 18 ? { x: dx / distance, y: dy / distance } : { x: 0, y: 0 };
+  const ax = f.local.x - waiting.x, ay = f.local.y - waiting.y, gap = Math.hypot(ax, ay);
+  // Stay outside rescue range until the explicit approach plan, even while
+  // dodging. This guard never supplies accidental revive contact.
+  if (gap < 150) input.move = { x: ax / (gap || 1), y: ay / (gap || 1) };
+  else if (Math.hypot(ax + input.move.x * 20, ay + input.move.y * 20) < 150) input.move = { x: -ay / gap, y: ax / gap };
+  return input;
+}
 /** Decisions read only this page. Actions use CDP input, including entry/respawn. */
 export class Player {
   plan: PlayerPlan = "wait";
@@ -14,6 +35,8 @@ export class Player {
   private touches: { id: number; x: number; y: number }[] = [];
   private lastTouchLife = "";
   actions: object[] = [];
+  lastInput?: AppliedInput;
+  private inputSerial = 0;
   constructor(readonly browser: Browser, readonly page: Awaited<ReturnType<Browser["page"]>>, readonly name: string, readonly team: Team) {}
   async join() {
     await until(() => this.browser.evaluate(this.page.session, "!!document.querySelector('#name')"));
@@ -29,7 +52,7 @@ export class Player {
     this.log({ click: selector });
   }
   async read() {
-    const value = await this.browser.evaluate<PageObservation>(this.page.session, `(()=>{const f=window.__arenaDebug, c=document.querySelector('canvas'),r=document.querySelector('.arena-life'),number=s=>Number(s?.replaceAll(/[^0-9]/g,''));return {now:performance.now(),frame:f,text:document.body.innerText,fps:Number(c?.dataset.fps||0),frameMs:Number(c?.dataset.frameMs||0),result:r?{score:number(r.querySelector('.life-score')?.textContent),best:number(Array.from(r.querySelectorAll('p')).find(p=>p.textContent.startsWith('Best:'))?.textContent),standing:Array.from(r.querySelectorAll('.personal-standing p')).map(p=>p.textContent).join('\\n'),save:r.innerText}:null}})()`);
+    const value = await this.browser.evaluate<PageObservation>(this.page.session, `(()=>{const f=window.__arenaDebug, c=document.querySelector('canvas'),r=document.querySelector('.arena-life'),number=s=>Number(s?.replaceAll(/[^0-9]/g,''));return {now:performance.now(),frame:f,text:document.body.innerText,fps:Number(c?.dataset.fps),frameMs:Number(c?.dataset.frameMs),result:r?{score:number(r.querySelector('.life-score')?.textContent),best:number(Array.from(r.querySelectorAll('p')).find(p=>p.textContent.startsWith('Best:'))?.textContent),standing:Array.from(r.querySelectorAll('.personal-standing p')).map(p=>p.textContent).join('\\n'),save:r.innerText}:null}})()`);
     this.observation = value; return value;
   }
   private log(action: object) { this.actions.push({ at: performance.now(), ...action }); if (this.actions.length > 3000) this.actions.shift(); }
@@ -44,6 +67,7 @@ export class Player {
     this.touches = points; this.log({ touch: points });
   }
   async clear() {
+    this.lastInput = undefined;
     for (const key of [...this.keys]) await this.key(key, false);
     if (this.touches.length) await this.touch([]);
   }
@@ -53,12 +77,19 @@ export class Player {
     const life = `${f.generation}/${f.local.life}/${f.local.status}`;
     if (life !== this.lastTouchLife) { await this.clear(); this.lastTouchLife = life; }
     if (f.local.status !== "active" || this.plan === "wait" || this.plan === "still") { await this.clear(); return; }
-    let input = policyInput("aimer", { players: f.players, bugs: f.paint.bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+    const players = typeof this.plan === "object" && this.plan.fire ? [] : f.players;
+    let input = policyInput("aimer", { players, bugs: f.paint.bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+    if (this.plan === "combat") {
+      // Exercise real aim/fire throughout the encounter, including scanning an
+      // empty viewport after respawn. Cool between ordinary 750 ms bursts.
+      input.fire = Math.floor(f.at / 750) % 2 === 0 && f.local.heat < 12;
+      if (!f.paint.bugs.length) input.aim = f.at / 1000;
+    }
     let target: { x: number; y: number; radius?: number; fire?: boolean; guard?: boolean } | undefined;
     if (typeof this.plan === "object") target = this.plan;
     if (this.plan === "follow") { const p = f.players.find(p => p.id !== f.playerId && p.name.startsWith("PilotA")); if (p) target = { ...p, radius: 50 }; }
     if (this.plan === "hunt") { const b = f.paint.bugs.slice().sort((a,b) => Math.hypot(a.x-f.local.x,a.y-f.local.y)-Math.hypot(b.x-f.local.x,b.y-f.local.y))[0]; if (b) target = { ...b, radius: 0 }; else input.fire = false; }
-    if (target) { const dx = target.x - f.local.x, dy = target.y - f.local.y, d = Math.hypot(dx, dy); input = { ...input, move: d > (target.radius ?? 18) ? { x: dx / d, y: dy / d } : { x: 0, y: 0 }, fire: target.guard ? input.fire && f.paint.bugs.some(b => Math.hypot(b.x - f.local.x, b.y - f.local.y) < 120) : target.fire ?? false }; }
+    if (target) { const dx = target.x - f.local.x, dy = target.y - f.local.y, d = Math.hypot(dx, dy); input = target.guard ? guardInput(f, target, this.policy) : { ...input, move: d > (target.radius ?? 18) ? { x: dx / d, y: dy / d } : { x: 0, y: 0 }, fire: !!target.fire && input.fire }; }
     await this.input(input);
   }
   async input(input: Input) {
@@ -75,7 +106,8 @@ export class Player {
       // Space is the game's desktop fire control. Unlike mouse capture it is
       // independent for each target when several pages aim concurrently.
       await this.key("Space", input.fire);
-      this.log({ move: input.move, aim: input.aim, fire: input.fire });
     }
+    this.lastInput = { at: performance.now(), serial: ++this.inputSerial, life: f.local.life, input: structuredClone(input) };
+    this.log({ ...this.lastInput });
   }
 }

@@ -2,7 +2,7 @@ import type { ArenaFrame } from "../../src/web/arena/observation";
 import type { ServerObservation, PageObservation } from "./types";
 import { TEAM_COLOURS } from "../../src/shared/teams";
 import type { Snapshot } from "../../src/shared/arena/protocol";
-import { STEP_MS, INTERPOLATION_MS } from "../../src/shared/arena/constants";
+import { STEP_MS, INTERPOLATION_MS, PLAYER_RADIUS } from "../../src/shared/arena/constants";
 export function requireAgreement(condition: unknown, message: string): asserts condition { if (!condition) throw Error(message); }
 export function same(actual: unknown, expected: unknown, label: string) {
   requireAgreement(JSON.stringify(actual) === JSON.stringify(expected), `${label}: expected ${JSON.stringify(expected)}, observed ${JSON.stringify(actual)}`);
@@ -31,9 +31,14 @@ export function comparePage(page: PageObservation, server: ServerObservation, pr
     const q = s.players.find(q => q.id === p.id)!;
     for (const k of ["name", "team", "life", "status", "score", "kills", "hits", "reviveMs", "reviving"] as const) same(p[k], q[k], `${p.id}/${k}`);
     const painted = f.paint.players.find(v => v.id === p.id);
+    const position = p.id === f.playerId ? f.local : p;
+    // Require visible robot bodies independently of the renderer's padded cull.
+    // The local camera must always keep its own active/downed robot visible.
+    const inView = p.id === f.playerId || position.x >= f.camera.x - PLAYER_RADIUS && position.x <= f.camera.x + f.width / f.scale + PLAYER_RADIUS &&
+      position.y >= f.camera.y - PLAYER_RADIUS && position.y <= f.camera.y + f.height / f.scale + PLAYER_RADIUS;
+    if (q.status !== "out" && inView) requireAgreement(painted, `Missing painted robot ${p.id} inside viewport`);
     if (painted) {
       same(painted.colour, TEAM_COLOURS[q.team], "Painted team colour"); same(painted.status, q.status, "Painted life state"); same(painted.life, q.life, "Painted life"); same(painted.name, q.name, "Painted name");
-      const position = p.id === f.playerId ? f.local : p;
       requireAgreement(Math.hypot(painted.x - position.x, painted.y - position.y) <= 2, "Painted robot position");
     }
     if (p.id === f.playerId) continue;
