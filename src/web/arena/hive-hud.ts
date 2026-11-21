@@ -1,9 +1,12 @@
 import type { Bug, CombatEvent, HiveReward } from "../../shared/arena/types";
-import { helpArrow } from "./help-arrow";
+import { HIVE_WARNING } from "./hive-warning";
+import type { MarkerObstacle } from "./edge-markers";
 import { MAX_PLAYERS } from "../../shared/arena/constants";
 
 export class HiveHud {
+  private warningWidth = 0; private countdownWidth = 0;
   private bannerAt = -Infinity;
+  private celebration: MarkerObstacle = { x: 0, y: 0, width: 0, height: 54 };
   private awards = Array.from({ length: MAX_PLAYERS }, () => ({ playerId: "", life: 0, x: 0, y: 0, amount: 0, at: -Infinity }));
   reset() { this.bannerAt = -Infinity; for (const a of this.awards) a.at = -Infinity; }
   event(event: CombatEvent, now: number) {
@@ -47,35 +50,39 @@ export class HiveHud {
     }
     return { x: (width - panelWidth) / 2, y: bottom };
   }
-  draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, visible: Bug | undefined, now: number, arrowTop: number,
-    observe?: (view: { id: number; hp: number; maxHp: number; arrow: boolean }) => void) {
-    let arrowDrawn = false;
+  celebrationBounds(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, now: number, top: number): MarkerObstacle | undefined {
+    if (now < this.bannerAt || now - this.bannerAt >= 2000) return;
+    c.save(); c.font = "bold 32px system-ui";
+    const w = Math.min(width - 16, c.measureText("Hive down!").width + 32);
+    const position = this.bannerPosition(width, height, camera, scale, now, w, c.measureText("+350").width / 2 + 5, top);
+    Object.assign(this.celebration, position, { width: w }); c.restore();
+    return this.celebration;
+  }
+  draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, now: number, warning: number | null, celebration?: MarkerObstacle) {
     c.save();
+    if (boss || warning !== null) {
+      c.fillStyle = "#060b12ee"; c.fillRect(8, 46, width - 16, 40);
+    }
     if (boss) {
       const w = width - 32;
-      c.fillStyle = "#060b12ee"; c.fillRect(8, 46, width - 16, 40);
       c.fillStyle = "#364326"; c.fillRect(16, 69, w, 10);
       c.fillStyle = "#d9f278"; c.fillRect(16, 69, w * boss.hp / boss.maxHp!, 10);
       c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillStyle = "#efffc2";
-      c.fillText(`${boss.phase === "arrival" ? "Hive incoming" : "HIVE"}  ${boss.hp} / ${boss.maxHp}`, width / 2, 63);
+      if (warning === null) c.fillText(`HIVE  ${boss.hp} / ${boss.maxHp}`, width / 2, 63);
     }
-    if (visible) {
-      const arrow = helpArrow((visible.x - camera.x) * scale, (visible.y - camera.y) * scale, width, height, arrowTop);
-      if (arrow) {
-        arrowDrawn = true;
-        c.save(); c.translate(arrow.x, arrow.y); c.rotate(arrow.angle); c.fillStyle = "#d9f278";
-        c.beginPath(); c.moveTo(15, 0); c.lineTo(-10, -10); c.lineTo(-10, 10); c.lineTo(15, 0); c.fill(); c.restore();
-        c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillStyle = "#efffc2"; c.fillText("Hive", arrow.x, arrow.y + 28);
-      }
+    if (warning !== null) {
+      c.font = "bold 16px system-ui"; c.textAlign = "left"; c.fillStyle = "#efffc2";
+      if (!this.warningWidth) { this.warningWidth = c.measureText(HIVE_WARNING).width; this.countdownWidth = c.measureText("10s").width; }
+      const x = (width - this.warningWidth - 12 - this.countdownWidth) / 2;
+      c.fillText(HIVE_WARNING, x, boss ? 63 : 72);
+      c.fillText(`${warning}s`, x + this.warningWidth + 12, boss ? 63 : 72);
     }
-    if (now >= this.bannerAt && now - this.bannerAt < 2000) {
+    if (celebration) {
       c.font = "bold 32px system-ui"; c.textAlign = "center";
-      const w = Math.min(width - 16, c.measureText("Hive down!").width + 32);
-      const { x, y } = this.bannerPosition(width, height, camera, scale, now, w, c.measureText("+350").width / 2 + 5, boss ? 94 : 46);
-      c.fillStyle = "#060b12dd"; c.fillRect(x, y, w, 54);
+      const { x, y, width: w, height: h } = celebration;
+      c.fillStyle = "#060b12dd"; c.fillRect(x, y, w, h);
       c.fillStyle = "#edff9c"; c.fillText("Hive down!", x + w / 2, y + 38);
     }
     c.restore();
-    if (boss) observe?.({ id: boss.id, hp: boss.hp, maxHp: boss.maxHp!, arrow: arrowDrawn });
   }
 }

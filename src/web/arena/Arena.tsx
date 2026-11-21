@@ -11,6 +11,7 @@ import { api } from "../api";
 import { PersonalStanding, TeamRace } from "../results/Results";
 import { exactScore } from "../format";
 import type { HintView } from "./hint";
+import { HIVE_WARNING } from "./hive-warning";
 import "./arena.css";
 function saved() { try { return loadIdentity(localStorage); } catch { return null; } }
 export function Arena() {
@@ -32,6 +33,7 @@ export function Arena() {
   return <StartScreen savedIdentity={identity} onStart={join} draft={name} onDraft={setName} serverError={error} clearError={() => setError("")} />;
 }
 function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identity; touch: boolean; onAccepted: () => void; onError: (message: string, team?: Team, code?: string) => void }) {
+  const [warning, setWarning] = useState<number | null>(null);
   const [hint, setHint] = useState<HintView>(null);
   const [life, setLife] = useState<ResultsView | null>(null);
   const replay = useRef<(touch: boolean) => void>(() => {});
@@ -44,14 +46,15 @@ function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identit
       (result, respawn) => {
         if (!result || result.life !== results.view?.result.life) press.current = null;
         replay.current = respawn; results.show(result);
-      }, setHint);
+      }, setHint, setWarning);
     const clear = () => { press.current = null; };
     window.addEventListener("blur", clear); document.addEventListener("visibilitychange", clear);
     return () => { unmount(); results.dispose(); window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", clear); };
   }, [identity.playerId]);
   return <main className="arena-game"><canvas ref={canvas} aria-label="Shared arena" tabIndex={0} />{status && <p role="status" className="arena-status">{status}</p>}
     {hint && <p className={`arena-hint${hint.fading ? " fading" : ""}`} aria-hidden="true">{hint.touch ? <>Left thumb moves<br />Right thumb aims and fires</> : <>WASD to move · Mouse to aim<br />Click to fire</>}</p>}
-    {life && <div className="arena-life" role="dialog" aria-label="Life over"
+    {life && warning !== null && <p className="arena-hive-warning" role="status">{HIVE_WARNING} <span>{warning}s</span></p>}
+    {life && <div className={`arena-life${warning !== null ? " has-hive-warning" : ""}`} role="dialog" aria-label="Life over"
       onPointerDown={event => { press.current = event.button === 0 ? { id: event.pointerId, x: event.clientX, y: event.clientY, life } : null; }}
       onPointerMove={event => { const start = press.current; if (start?.id === event.pointerId && Math.hypot(event.clientX - start.x, event.clientY - start.y) >= 10) press.current = null; }}
       onPointerCancel={() => { press.current = null; }}

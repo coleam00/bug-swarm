@@ -10,7 +10,7 @@ test("engine routes controls, predicts/reconciles and renders interpolated movem
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
 let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal, lifePanel, resize;
-const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set(), effects = [];
+const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set(), effects = [], warnings = [];
 performance.now = () => clock;
 globalThis.setInterval = (fn, ms) => { assert.equal(ms, 50); const id = ++next; timers.set(id, fn); return id; };
 globalThis.clearInterval = id => timers.delete(id);
@@ -39,10 +39,10 @@ const frame = at => { clock = at; const [id, fn] = frames.entries().next().value
 const replayKeys = ["Enter", "KeyW", "Space"];
 for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   let base = clock;
-  const cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result);
+  const cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result, () => {}, seconds => warnings.push(seconds));
   assert.equal(timers.size, 1); assert.equal(frames.size, 1); assert.equal(observers, 1);
   receive({ v: 1, type: "welcome" });
-  assert.equal(admissions, cycle * 3 + 1);
+  assert.equal(admissions, cycle * 7 + 1);
   // Shutdown may arrive before prediction has received even its first snapshot.
   receive({ v: 1, type: "life_over", reason: "restart", life: 1, playerId: identity.playerId, score: 0, save: "pending" });
   const beforeInitialSnapshot = inputs.length; clock += 3500; send();
@@ -163,7 +163,22 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   clock += 3001; timers.values().next().value(); assert.equal(reconnects, cycle + 1);
   receive({ v: 1, type: "error", code: "name-hidden", message: "Unavailable" });
   assert.deepEqual(refusal, ["Unavailable", undefined, "name-hidden"]);
-  cleanup(); assert.equal(timers.size, 0); assert.equal(frames.size, 0); assert.equal(observers, 0); assert.equal(disposed, cycle + 1);
+  receive({ v: 1, type: "welcome" });
+  const warningSnapshot = (tick, bugs = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 4, players: [own], bugs, shots: [], globs: [], pickups: [], events: [] });
+  const beforeWarning = warnings.length;
+  warningSnapshot(2200); assert.equal(warnings.length, beforeWarning);
+  warningSnapshot(2201); assert.equal(warnings.at(-1), 10, "First mid-warning snapshot publishes immediately");
+  warningSnapshot(2202); frame(clock + 10); assert.equal(warnings.length, beforeWarning + 1, "Frames and unchanged displayed seconds publish nothing");
+  own.status = "downed"; warningSnapshot(2220); assert.equal(warnings.at(-1), 9);
+  own.status = "out"; warningSnapshot(2400); assert.equal(warnings.at(-1), 0);
+  warningSnapshot(2401, [{ id: 999, kind: "hive", x: 1500, y: 1500, vx: 0, vy: 0, hp: 100, phase: "arrival", phaseUntil: 122050 }]); assert.equal(warnings.at(-1), 2);
+  warningSnapshot(2402, [{ id: 999, kind: "hive", x: 1500, y: 1500, vx: 0, vy: 0, hp: 100, phase: "active" }]); assert.equal(warnings.at(-1), null);
+  receive({ v: 1, type: "welcome" }); warningSnapshot(2300); assert.equal(warnings.at(-1), 5);
+  disconnected(); assert.equal(warnings.at(-1), null);
+  receive({ v: 1, type: "welcome" }); warningSnapshot(2300); assert.equal(warnings.at(-1), 5);
+  receive({ v: 1, type: "server_restart" }); assert.equal(warnings.at(-1), null);
+  receive({ v: 1, type: "welcome" }); warningSnapshot(2300);
+  cleanup(); assert.equal(warnings.at(-1), null); assert.equal(timers.size, 0); assert.equal(frames.size, 0); assert.equal(observers, 0); assert.equal(disposed, cycle + 1);
   // The next mount must start clean even after a key event while detached.
   key("KeyD");
 }
