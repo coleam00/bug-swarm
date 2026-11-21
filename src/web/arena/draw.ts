@@ -4,7 +4,7 @@ import type { Player, CombatPlayer, Bug, Shot, Glob, CombatEvent, BugKind } from
 import { createGlobDraw, GLOB_EXTENT } from "./globs";
 import { BUG_DRAW, createBugDraws, type BugDraw } from "./bugs/registry";
 import type { ArenaInput } from "./input";
-import { EdgeMarkers } from "./edge-markers";
+import { EdgeMarkers, type MarkerObstacle } from "./edge-markers";
 import { hiveWarning } from "./hive-warning";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
@@ -19,6 +19,7 @@ export class ArenaRenderer {
   private globDraw = createGlobDraw();
   private hiveHud = new HiveHud();
   private edgeMarkers: EdgeMarkers;
+  private downedPanel: MarkerObstacle = { x: 8, y: 0, width: 0, height: 0 };
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ id: 0, tick: 0, x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
   reset() { this.edgeMarkers.reset(); this.hiveHud.reset(); this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
@@ -89,7 +90,20 @@ export class ArenaRenderer {
       if (x >= 0 && x <= width && y >= 0 && y <= height) this.trace!.hiveRewards!.push({ ...reward });
     } : undefined);
     c.restore();
-    this.edgeMarkers.begin(width, height, map.y + map.height + 24);
+    const downed = local && (local as CombatPlayer).status === "downed";
+    const message = "Downed. A teammate can revive you.";
+    let wide = false;
+    if (downed) {
+      c.save(); c.font = "bold 16px system-ui";
+      const messageWidth = c.measureText(message).width; wide = messageWidth <= width - 32;
+      const panelWidth = height < 360 ? Math.min(width - 16, (wide ? messageWidth : c.measureText("Downed. A teammate").width) + 32) : width - 16;
+      c.restore();
+      const panelHeight = wide ? 52 : 74, robotY = (local.y - camera.y) * scale, preferredY = map.y + map.height + 8;
+      const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
+      Object.assign(this.downedPanel, { x: (width - panelWidth) / 2, y: panelY, width: panelWidth, height: panelHeight });
+    }
+    const celebration = this.hiveHud.celebrationBounds(c, width, height, camera, scale, now, boss || warning !== null ? 94 : 46);
+    this.edgeMarkers.begin(width, height, boss || visibleBoss || warning !== null ? 94 : 50, map, downed ? this.downedPanel : undefined, celebration);
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
       this.edgeMarkers.add(p.id, false, (p.x - camera.x) * scale, (p.y - camera.y) * scale);
     }
@@ -114,7 +128,7 @@ export class ArenaRenderer {
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
       if (observing && this.trace) this.trace.hud = { score: p.score, hits: p.hits, population, level };
     }
-    this.hiveHud.draw(c, width, height, camera, scale, boss, now, warning);
+    this.hiveHud.draw(c, width, height, camera, scale, boss, now, warning, celebration);
     if (observing && this.trace && boss) {
       let arrow = false;
       for (let i = 0; i < this.edgeMarkers.count; i++) if (this.edgeMarkers.markers[i]!.hive) arrow = true;
@@ -129,11 +143,8 @@ export class ArenaRenderer {
       const p = local as CombatPlayer;
       if (p.status === "downed") {
         c.font = "bold 16px system-ui";
-        const message = "Downed. A teammate can revive you.", wide = c.measureText(message).width <= width - 32;
-        const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale, preferredY = map.y + map.height + 8;
-        // Keep the entire name/rings/Help clear, including at the top wall.
-        const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
-        c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
+        const panelY = this.downedPanel.y;
+        c.fillStyle = "#060b12ee"; c.fillRect(this.downedPanel.x, panelY, this.downedPanel.width, this.downedPanel.height);
         c.textAlign = "center"; c.fillStyle = "#ffe09a";
         if (wide) c.fillText(message, width / 2, panelY + 20);
         else { c.fillText("Downed. A teammate", width / 2, panelY + 20); c.fillText("can revive you.", width / 2, panelY + 42); }

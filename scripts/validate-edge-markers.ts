@@ -142,7 +142,7 @@ try {
     const p=await page(1280,720,`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&edges`);
     await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
     await key(p.session,'KeyF',true);await key(p.session,'KeyF',false);
-    for(const [width,height] of [[1280,720],[390,844],[844,390]]){
+    for(const [width,height] of [[1280,720],[390,844],[844,390],[568,320],[844,300],[667,280],[568,280]]){
       await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width!==1280},p.session);
       await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
       await pause(1500); // Exclude viewport transition frames from the steady-state samples.
@@ -153,9 +153,21 @@ try {
     }
     await call('Page.navigate',{url:`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&edges&quiet`},p.session);
     await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
-    for(const [width,height] of [[1280,720],[390,844],[844,390]]){
+    for(const [width,height] of [[1280,720],[390,844],[844,390],[568,320],[844,300],[667,280],[568,280]]){
       await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width!==1280},p.session);
       await pause(200);await shot(p.session,`${width}x${height}-controlled-readable-arrows`);
+    }
+    await call('Page.navigate',{url:`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&quiet&panel-review`},p.session);
+    await call('Emulation.setDeviceMetricsOverride',{width:844,height:390,deviceScaleFactor:1,mobile:true},p.session);
+    await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
+    assert.equal((await evaluate(p.session,'window.evidence.errors')).length,0);
+    await shot(p.session,'844x390-controlled-downed-panel-help');
+    await call('Page.navigate',{url:`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&edges&quiet&local-down`},p.session);
+    await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
+    for(const [width,height] of [[568,320],[844,300],[667,280],[568,280]]){
+      await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true},p.session);
+      await pause(200);assert.equal((await evaluate(p.session,'window.evidence.errors')).length,0);
+      await shot(p.session,`${width}x${height}-controlled-downed-crowded-arrows`);
     }
     await dispose(p);
   }finally{await vite.close();}

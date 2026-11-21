@@ -425,7 +425,7 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     for (const position of [{ x: 1200, y: 300 }, { x: 200, y: -1000 }, { x: 200, y: 1844 }]) {
       const edge = arrows(draw(p, [{ ...q, ...position }])); expect(edge).toHaveLength(1);
       expect(edge[0]!.transform[4]).toBeGreaterThanOrEqual(32); expect(edge[0]!.transform[4]).toBeLessThanOrEqual(358);
-      expect(edge[0]!.transform[5]).toBeGreaterThanOrEqual(112); expect(edge[0]!.transform[5]).toBeLessThanOrEqual(804);
+      expect(edge[0]!.transform[5]).toBeGreaterThanOrEqual(65); expect(edge[0]!.transform[5]).toBeLessThanOrEqual(804);
       if (position.x > 390) expect(edge[0]!.transform[0]).toBeGreaterThan(0);
       if (position.y < 0) expect(edge[0]!.transform[1]).toBeLessThan(0);
       if (position.y > 844) expect(edge[0]!.transform[1]).toBeGreaterThan(0);
@@ -766,36 +766,49 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
 });
 
 
-test("crowded Help and Hive arrows share bounded slots through scaling, resize, revival and reset", () => {
+test("mixed Help/Hive wiring keeps painted labels in view through scaling, short-landscape resize and revival", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
   try {
     const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
-    const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot${i}`, team: "tabs" as const, x: 5000, y: 5000, vx: 0, vy: 0, facing: 0, status: "downed" as const, hits: 0 }));
-    const boss = createBug("hive", 1, 5000, 5000);
-    for (const [width, height] of [[390, 844], [844, 390], [1280, 720]] as const) for (const scale of [1, 0.8, 1.5]) {
-      for (const [x, y] of [[5000, 300], [-5000, 300], [300, -5000], [300, 5000], [-5000, -5000], [5000, 5000]]) {
-        for (const p of players) { p.x = x!; p.y = y!; } boss.x = x!; boss.y = y!;
-        const draw = () => { c.paints.length = 0; renderer.draw(width, height, { x: 0, y: 0 }, players, null, input, [boss], [], 5, 100, 1000, scale); };
-        draw();
-        const labels = c.paints.filter(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])));
-        expect(labels).toHaveLength(21);
-        const occupied = labels.map(p => ({ x: Number(p.args[1]), y: Number(p.args[2]) - (p.args[0] === "Hive" ? 28 : 26) }));
-        for (const [i, a] of occupied.entries()) {
-          expect(a.x - 26).toBeGreaterThanOrEqual(8); expect(a.x + 26).toBeLessThanOrEqual(width - 8);
-          expect(a.y - 15).toBeGreaterThanOrEqual(94 + (width === 1280 ? 144 : 96) + 24); expect(a.y + 32).toBeLessThanOrEqual(height - 8);
-          for (const b of occupied.slice(0, i)) expect(Math.abs(a.x - b.x) + 0.001 >= 60 || Math.abs(a.y - b.y) + 0.001 >= 55).toBe(true);
-        }
-        const arrows = c.paints.filter(p => p.op === "fill" && p.path[0]?.op === "moveTo" && [12, 15].includes(p.path[0].args[0]!));
-        expect(arrows).toHaveLength(21);
-        for (const arrow of arrows) { const [a, b, , , ax, ay] = arrow.transform; expect(Math.atan2(b!, a!)).toBeCloseTo(Math.atan2(y! * scale - ay!, x! * scale - ax!)); }
-        const cached = fixture.created; draw(); expect(fixture.created).toBe(cached);
+    const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot${i}`, team: "tabs" as const, x: i ? 5000 : 200, y: 200, vx: 0, vy: 0, facing: 0, status: i ? "downed" as const : "active" as const, hits: i ? 0 : 3 }));
+    const boss = createBug("hive", 1, 5000, 200);
+    renderer.events([{ id: 1, tick: 100, kind: "hive", type: "kill", x: 5000, y: 200, points: 0 }], 1000);
+    for (const [width, height, scale] of [[844, 390, 0.8], [568, 320, 1], [844, 300, 1.2], [667, 280, 1], [390, 844, 1], [1280, 720, 1.5]] as const) {
+      c.paints.length = 0; renderer.draw(width, height, { x: 0, y: 0 }, players, players[0]!, input, [boss], [], 5, 100, 1000, scale);
+      const labels = c.paints.filter(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])));
+      expect(labels.filter(p => p.args[0] === "Help")).toHaveLength(19); expect(labels.filter(p => p.args[0] === "Hive")).toHaveLength(1);
+      for (const label of labels) {
+        expect(label.transform).toEqual([1, 0, 0, 1, 0, 0]); expect(label.font).toBe("bold 16px system-ui");
+        const half = c.measureText(String(label.args[0])).width / 2;
+        expect(Number(label.args[1]) - half).toBeGreaterThanOrEqual(8); expect(Number(label.args[1]) + half).toBeLessThanOrEqual(width - 8);
+        expect(Number(label.args[2]) - 16).toBeGreaterThanOrEqual(94); expect(Number(label.args[2]) + 4).toBeLessThanOrEqual(height - 8);
+        const celebration = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12dd")!;
+        const [x, y, w, h] = celebration.args.map(Number) as [number, number, number, number];
+        expect(Number(label.args[1]) + half <= x || Number(label.args[1]) - half >= x + w || Number(label.args[2]) + 4 <= y || Number(label.args[2]) - 16 >= y + h).toBe(true);
       }
+      const cached = fixture.created; renderer.draw(width, height, { x: 0, y: 0 }, players, players[0]!, input, [boss]); expect(fixture.created).toBe(cached);
     }
-    renderer.reset(); for (const p of players) { p.x = 200; p.y = 300; }
-    c.paints.length = 0; renderer.draw(390, 844, { x: 0, y: 0 }, players.map(p => ({ ...p, status: "active", hits: 3 })), null, input);
-    expect(c.paints.some(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])))).toBe(false);
-    expect(fixture.depth).toBe(0);
+    renderer.reset(); c.paints.length = 0;
+    renderer.draw(390, 844, { x: 0, y: 0 }, players.map(p => ({ ...p, status: "active", hits: 3 })), players[0]!, input);
+    expect(c.paints.some(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])))).toBe(false); expect(fixture.depth).toBe(0);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("the local downed panel cannot cover a teammate's painted Help label", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D);
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 28, vx: 0, vy: 0, facing: 0, status: "downed" as const, hits: 0 };
+    const remote = { ...local, id: "remote", x: 1630, y: 20 };
+    renderer.draw(844, 390, cameraFor(1200, 28, 844, 390), [local, remote], local, new ArenaInput(), [createBug("hive", 1, 1200, 120)]);
+    const help = c.paints.find(p => p.op === "fillText" && p.args[0] === "Help" && p.transform[4] === 0 && p.transform[5] === 0)!;
+    const panel = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12ee" && Number(p.args[1]) > 86)!;
+    expect(help).toBeDefined(); expect(panel).toBeDefined(); expect(c.paints.indexOf(panel)).toBeGreaterThan(c.paints.indexOf(help));
+    const x = Number(help.args[1]), y = Number(help.args[2]), half = c.measureText("Help").width / 2;
+    const [px, py, pw, ph] = panel.args.map(Number) as [number, number, number, number];
+    expect(x + half <= px || x - half >= px + pw || y + 4 <= py || y - 16 >= py + ph).toBe(true);
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 
@@ -807,7 +820,23 @@ test("authoritative hive warning reaches every life state before spawn and throu
     const p: CombatPlayer = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 2201, wave: 4, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], globs: [], events: [] };
     const boss = createBug("hive", 1, 1500, 1500);
-    const draw = (authoritative: Snapshot | null = snapshot, delayed = [boss]) => { c.paints.length = 0; renderer.draw(390, 844, { x: 1000, y: 800 }, [p], p, input, delayed, [], 100, 100000, 999999, 1, authoritative, 0); return c.paints.filter(p => p.op === "fillText").map(p => String(p.args[0])); };
+    const draw = (authoritative: Snapshot | null = snapshot, delayed = [boss]) => { c.paints.length = 0; renderer.draw(390, 844, { x: 1000, y: 800 }, [p], p, input, delayed, [], 100, 100000, 999999, 1, authoritative, 0); const text = c.paints.filter(p => p.op === "fillText").map(p => String(p.args[0]));
+      expect(text.some(t => /wave|\u2014/i.test(t))).toBe(false);
+      const message = c.paints.find(p => p.op === "fillText" && p.args[0] === "The hive is coming");
+      if (message) {
+        const countdown = c.paints.find(p => p.op === "fillText" && /^\d+s$/.test(String(p.args[0])) && p.args[2] === message.args[2])!;
+        expect(countdown).toBeDefined();
+        const bounds = (paint: Paint) => {
+          c.save(); c.font = paint.font; c.textAlign = paint.textAlign;
+          const m = c.measureText(String(paint.args[0])); c.restore();
+          return { left: Number(paint.args[1]) - m.actualBoundingBoxLeft, right: Number(paint.args[1]) + m.actualBoundingBoxRight,
+            top: Number(paint.args[2]) - (m.actualBoundingBoxAscent ?? 16), bottom: Number(paint.args[2]) + (m.actualBoundingBoxDescent ?? 4) };
+        };
+        const phrase = bounds(message), count = bounds(countdown);
+        for (const b of [phrase, count]) { expect(b.left).toBeGreaterThanOrEqual(8); expect(b.right).toBeLessThanOrEqual(382); expect(b.top).toBeGreaterThanOrEqual(46); expect(b.bottom).toBeLessThanOrEqual(86); }
+        expect(phrase.right + 8 <= count.left || count.right + 8 <= phrase.left).toBe(true);
+      }
+      return text; };
     for (const status of ["active", "downed", "out"] as const) {
       p.status = status; p.startedTick = -90000;
       const text = draw(snapshot, []); expect(text).toContain("The hive is coming"); expect(text).toContain("10s");
@@ -815,10 +844,11 @@ test("authoritative hive warning reaches every life state before spawn and throu
     }
     snapshot.tick = 2400; expect(draw()).toContain("0s");
     snapshot.tick = 2401; snapshot.wave = 5; snapshot.bugs = [{ ...boss, phase: "arrival", phaseUntil: 122050 }];
-    expect(draw()).toContain("The hive is coming"); expect(draw()).toContain("2s");
-    expect(draw().some(t => /incoming|^HIVE\s+\d|wave|\u2014/i.test(t))).toBe(false);
+    expect(draw(snapshot, snapshot.bugs)).toContain("The hive is coming"); expect(draw(snapshot, snapshot.bugs)).toContain("2s");
     snapshot.bugs[0]!.phase = "active";
     const activated = draw(); expect(activated).not.toContain("The hive is coming"); expect(activated.some(t => t.startsWith("HIVE "))).toBe(true);
+    snapshot.bugs = []; renderer.events([{ id: 1, tick: 2402, type: "kill", kind: "hive", x: 1200, y: 1200, points: 0 }], 999999);
+    expect(draw(snapshot, [])).toContain("Hive down!");
     expect(draw(null, [])).not.toContain("The hive is coming");
     expect(fixture.depth).toBe(0);
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }

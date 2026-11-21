@@ -8,17 +8,19 @@ interface Marker {
   edge: number; tangent: number;
   x: number; y: number; angle: number;
 }
-interface Slot { x: number; y: number; column: number; row: number; used: boolean }
+export interface MarkerObstacle { x: number; y: number; width: number; height: number }
+interface Slot { x: number; y: number; column: number; used: boolean }
 
 /** A shared CSS-pixel grid keeps complete arrows and labels apart, including corners.
- * Only viewport changes rebuild slots; frame collection and insertion sort reuse storage. */
+ * Only viewport or overlay changes rebuild slots; frame collection and insertion sort reuse storage. */
 export class EdgeMarkers {
   readonly markers: Marker[] = Array.from({ length: CAPACITY }, () => ({
     id: "", hive: false, targetX: 0, targetY: 0,
     edge: 0, tangent: 0, x: 0, y: 0, angle: 0,
   }));
-  private readonly slots: Slot[] = Array.from({ length: CAPACITY * CAPACITY }, () => ({ x: 0, y: 0, column: 0, row: 0, used: false }));
-  private slotCount = 0; private columns = 0; private rows = 0;
+  private readonly slots: Slot[] = Array.from({ length: CAPACITY * CAPACITY }, () => ({ x: 0, y: 0, column: 0, used: false }));
+  private slotCount = 0; private columns = 0;
+  private reservationKey = ""; private panel?: MarkerObstacle; private map?: MarkerObstacle; private panelY = 0; private celebration?: MarkerObstacle;
   private width = -1; private height = -1; private top = -1;
   readonly halfWidth: number;
   readonly bottom: number;
@@ -31,23 +33,38 @@ export class EdgeMarkers {
     this.bottom = 28 + Math.ceil(Math.max(help.actualBoundingBoxDescent ?? 4, hive.actualBoundingBoxDescent ?? 4));
     c.restore();
   }
-  reset() { this.count = 0; this.width = -1; this.slotCount = 0; }
-  begin(width: number, height: number, top: number) {
-    this.count = 0;
-    if (this.width !== width || this.height !== height || this.top !== top) {
-      this.width = width; this.height = height; this.top = top;
-      const cellWidth = this.halfWidth * 2, cellHeight = 15 + this.bottom;
-      this.columns = Math.max(0, Math.min(CAPACITY, Math.floor((width - INSET * 2 + GAP) / (cellWidth + GAP))));
-      this.rows = Math.max(0, Math.min(CAPACITY, Math.floor((height - INSET - top + GAP) / (cellHeight + GAP))));
-      this.slotCount = this.columns * this.rows;
-      for (let row = 0; row < this.rows; row++) for (let column = 0; column < this.columns; column++) {
-        const slot = this.slots[row * this.columns + column]!;
-        slot.column = column; slot.row = row;
-        slot.x = INSET + this.halfWidth + (this.columns < 2 ? 0 : column * (width - INSET * 2 - cellWidth) / (this.columns - 1));
-        slot.y = top + 15 + (this.rows < 2 ? 0 : row * (height - INSET - top - cellHeight) / (this.rows - 1));
+  reset() { this.count = 0; this.width = -1; this.reservationKey = ""; this.slotCount = 0; }
+  begin(width: number, height: number, top: number, map?: MarkerObstacle, panel?: MarkerObstacle, celebration?: MarkerObstacle) {
+    this.count = 0; this.width = width; this.height = height; this.top = top;
+    this.map = map; this.panel = panel; this.celebration = celebration;
+    const key = `${width}/${height}/${top}/${map?.x}/${map?.y}/${map?.width}/${map?.height}/${panel?.x}/${panel?.y}/${panel?.width}/${panel?.height}/${celebration?.x}/${celebration?.y}/${celebration?.width}/${celebration?.height}`;
+    if (key !== this.reservationKey) {
+      this.reservationKey = key;
+      this.panelY = panel?.y ?? 0; this.grid();
+    } else if (panel) panel.y = this.panelY;
+    for (let i = 0; i < this.slotCount; i++) this.slots[i]!.used = false;
+  }
+  private grid() {
+    this.slotCount = 0;
+    const cellWidth = this.halfWidth * 2, cellHeight = 15 + this.bottom;
+    const step = Math.max(cellHeight + GAP, (this.height - INSET - this.top - cellHeight) / (CAPACITY - 1));
+    this.columns = Math.max(0, Math.min(CAPACITY, Math.floor((this.width - INSET * 2 + GAP) / (cellWidth + GAP))));
+    for (let column = 0; column < this.columns; column++) {
+      const x = INSET + this.halfWidth + (this.columns < 2 ? 0 : column * (this.width - INSET * 2 - cellWidth) / (this.columns - 1));
+      let y = this.top;
+      for (let row = 0; row < CAPACITY && y + cellHeight <= this.height - INSET; row++) {
+        // Pack each column through its free vertical bands, rather than discarding
+        // the entire width above the minimap or losing rows to a uniform grid.
+        for (let pass = 0; pass < 4; pass++) for (const obstacle of [this.map, this.panel, this.celebration]) {
+          if (obstacle && x + this.halfWidth + GAP > obstacle.x && x - this.halfWidth - GAP < obstacle.x + obstacle.width &&
+            y + cellHeight + GAP > obstacle.y && y - GAP < obstacle.y + obstacle.height) y = obstacle.y + obstacle.height + GAP;
+        }
+        if (y + cellHeight > this.height - INSET) break;
+        const slot = this.slots[this.slotCount++]!;
+        slot.x = x; slot.y = y + 15; slot.column = column; slot.used = false;
+        y += step;
       }
     }
-    for (let i = 0; i < this.slotCount; i++) this.slots[i]!.used = false;
   }
   add(id: string, hive: boolean, x: number, y: number) {
     const arrow = helpArrow(x, y, this.width, this.height, this.top);
@@ -59,6 +76,12 @@ export class EdgeMarkers {
     marker.edge = edge; marker.tangent = edge % 2 ? arrow.y : arrow.x;
   }
   place() {
+    if (this.slotCount < this.count && this.panel) {
+      // Crowded short views can need the full bands above a downed message.
+      // Keep the message visible and move it to the bottom only when needed.
+      this.panel.y = Math.max(this.top, this.height - INSET - this.panel.height);
+      this.panelY = this.panel.y; this.grid();
+    }
     for (let i = 1; i < this.count; i++) {
       const marker = this.markers[i]!; let j = i - 1;
       while (j >= 0) {
@@ -73,11 +96,13 @@ export class EdgeMarkers {
       let best: Slot | undefined, bestLane = Infinity, bestDistance = Infinity;
       for (let j = 0; j < this.slotCount; j++) {
         const slot = this.slots[j]!; if (slot.used) continue;
-        const lane = marker.edge === 0 ? slot.row : marker.edge === 1 ? this.columns - 1 - slot.column : marker.edge === 2 ? this.rows - 1 - slot.row : slot.column;
+        const lane = marker.edge === 0 ? slot.y : marker.edge === 1 ? this.columns - 1 - slot.column : marker.edge === 2 ? -slot.y : slot.column;
         const distance = Math.abs((marker.edge % 2 ? slot.y : slot.x) - marker.tangent);
         if (lane < bestLane || lane === bestLane && distance < bestDistance) { best = slot; bestLane = lane; bestDistance = distance; }
       }
-      if (!best) throw new Error("Viewport has insufficient edge marker slots");
+      // During degenerate window resizes there may be less space than the glyphs
+      // themselves require. Still paint every marker and keep the frame alive.
+      best ??= this.slots[0]!;
       best.used = true; marker.x = best.x; marker.y = best.y;
       marker.angle = Math.atan2(marker.targetY - marker.y, marker.targetX - marker.x);
     }
