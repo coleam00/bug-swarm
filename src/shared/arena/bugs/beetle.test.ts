@@ -68,11 +68,14 @@ test("armour uses off-centre entry, moving centres and the stopped segment at a 
   a.shots.push({ id: 1, owner: p.id, life: 1, x: 1160, y: 1224, vx: 900, vy: 0, born: 0 });
   fireAndAdvance(a, new Map(), 0); expect(b.hp).toBe(4);
 });
-test("a blocked first victim consumes the shot before a vulnerable bug behind it", () => {
+test("a blocked first victim consumes the shot before a vulnerable bug or glob behind it", () => {
   const { a, p, b } = fixture(); b.facing = Math.PI;
   const behind = createBug("crawler", 901, 1230, 1200); a.bugs.push(behind);
+  p.x = 1100; p.y = 1200;
+  a.globs.push({ id: 902, x: 1225, y: 1200, vx: -320, vy: 0, born: 0 });
   a.shots.push({ id: 1, owner: p.id, life: 1, x: 1170, y: 1200, vx: 900, vy: 0, born: 0 });
   fireAndAdvance(a, new Map(), 0); expect(b.hp).toBe(5); expect(behind.hp).toBe(1); expect(a.events).toHaveLength(1);
+  expect(a.globs).toHaveLength(1); expect(p.score).toBe(0);
 });
 test("coincident impacts use inverse shot direction, clamp shell sparks and reset only the shooter", () => {
   for (const [x, vx, blocked] of [[1200, -900, true], [1200, 900, false], [2400, -900, true]] as const) {

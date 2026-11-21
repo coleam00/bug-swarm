@@ -5,14 +5,14 @@ import { join } from "node:path";
 import { createServer } from "../server";
 import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
 import { runBots, BotFailure } from "../../../scripts/bots";
-import { createBug } from "../../shared/arena/bugs/registry";
 import { ServerDecoder } from "../../shared/arena/snapshot-codec";
-function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID(), binary = false) {
+import { createBug } from "../../shared/arena/bugs/registry";
+function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID(), compact = false) {
   const socket = new WebSocket(url), messages: ServerMessage[] = [];
+  const decoder = new ServerDecoder(); socket.binaryType = "arraybuffer";
   const observers = new Set<() => void>();
-  socket.binaryType = "arraybuffer"; const decoder = new ServerDecoder();
-  socket.onopen = () => socket.send(JSON.stringify({ v: 1, type: "hello", playerId: id, name, team: index % 2 ? "tabs" : "spaces", touch: false, buildId: "integration", ...(binary ? { snapshotEncoding: "delta-v1" } : {}) }));
-  socket.onmessage = event => { const m = binary ? decoder.read(event.data) : parseServer(event.data); if (m) messages.push(m); for (const notify of observers) notify(); };
+  socket.onopen = () => socket.send(JSON.stringify({ v: 1, type: "hello", playerId: id, name, team: index % 2 ? "tabs" : "spaces", touch: false, buildId: "integration", ...(compact ? { snapshotEncoding: "delta-v1" } : {}) }));
+  socket.onmessage = event => { const m = decoder.read(event.data); if (m) messages.push(m); for (const notify of observers) notify(); };
   function wait<T extends ServerMessage>(predicate: (message: ServerMessage) => message is T): Promise<T>;
   function wait(predicate: (message: ServerMessage) => boolean): Promise<ServerMessage>;
   function wait(predicate: (message: ServerMessage) => boolean): Promise<ServerMessage> {
@@ -40,6 +40,27 @@ test("real JSON and binary clients receive beetle state and shell bounces", asyn
       m.bugs.some(b => b.id === 999 && b.kind === "beetle") && m.events.some(e => e.kind === "beetle" && e.type === "bounce"))));
     expect(binary!.tick).toBe(json!.tick);
     expect(binary!.events).toEqual(json!.events);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
+test.each([false, true])("two real clients receive the same swell, glob, interception and five points (compact=%s)", async compact => {
+  const scratch = mkdtempSync(join(tmpdir(), "spitter-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1, "bot-1", crypto.randomUUID(), compact), b = client(url, 2, "bot-2", crypto.randomUUID(), compact);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(q, { x: 1800, y: 1800 });
+    const bug = createBug("spitter", room.state.nextId++, 800, 1200, room.state.tick * 50); room.state.bugs = [bug];
+    Object.assign(bug, { phase: "swell", phaseUntil: (room.state.tick + 4) * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "spitter" && b.phase === "swell"));
+    const snapshots: Snapshot[] = [];
+    for (const c of [a, b]) snapshots.push(await c.wait((m): m is Snapshot => m.type === "snapshot" && m.globs.length === 1));
+    expect(snapshots[0]!.globs).toEqual(snapshots[1]!.globs);
+    const g = room.state.globs[0]!;
+    room.state.shots.push({ id: room.state.nextId++, x: g.x + 20, y: g.y, vx: -900, vy: 0, owner: p.id, life: p.life, born: room.state.tick * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.globs.length && m.events.some(e => e.type === "glob-pop") && m.players.some(p => p.id === a.id && p.score === 5 && p.kills === 0));
+    expect(p.streak).toBe(1);
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
 }, 10000);
 test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {

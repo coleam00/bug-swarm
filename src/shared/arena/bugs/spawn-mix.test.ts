@@ -6,14 +6,14 @@ import { createBug } from "./registry";
 
 test("beetles unlock at five with a constant tenth share, preserve dashers and fall back at ten live", () => {
   for (const wave of [4, 5, 8, 900]) {
-    const beetle = wave >= 5 ? 0.1 : 0, crawler = 1 - dasherShare(wave) - beetle;
-    const counts = { crawler: 0, dasher: 0, beetle: 0 };
+    const beetle = wave >= 5 ? 0.1 : 0, crawler = 1 - dasherShare(wave) - beetle - (wave >= 4 ? 1 / 8 : 0);
+    const counts = { crawler: 0, dasher: 0, spitter: 0, beetle: 0 };
     for (let i = 0; i < 3000; i++) counts[spawnKind(wave, () => (i + 0.5) / 3000)]++;
     expect(counts.beetle).toBe(beetle * 3000); expect(counts.dasher).toBeCloseTo(dasherShare(wave) * 3000, 0);
     expect(spawnKind(wave, () => crawler - 1e-8)).toBe("crawler");
     expect(spawnKind(wave, () => crawler + 1e-8)).toBe("dasher");
     if (beetle) {
-      expect(spawnKind(wave, () => 0.9 - 1e-8)).toBe("dasher");
+      expect(spawnKind(wave, () => 0.9 - 1e-8)).toBe("spitter");
       expect(spawnKind(wave, () => 0.9 + 1e-8)).toBe("beetle");
     }
   }
@@ -28,10 +28,27 @@ test("wave shares unlock at three, rise to one quarter at eight, and solo kind c
   expect(dasherShare(3)).toBe(1 / 6); expect(dasherShare(8)).toBe(1 / 4); expect(dasherShare(900)).toBe(1 / 4);
   expect(dasherShare(5)).toBeGreaterThan(dasherShare(3));
   for (const wave of [3, 5, 8]) {
-    const threshold = 1 - dasherShare(wave) - (wave >= 5 ? 0.1 : 0);
+    const threshold = 1 - dasherShare(wave) - (wave >= 4 ? 1 / 8 : 0) - (wave >= 5 ? 0.1 : 0);
     expect(spawnKind(wave, () => threshold - 0.0001)).toBe("crawler");
     expect(spawnKind(wave, () => threshold + 0.0001)).toBe("dasher");
   }
+});
+
+test("spitters unlock at four, keep exactly one eighth share, and transfer capped share to crawlers", () => {
+  for (const wave of [3, 4, 8, 1000]) {
+    const counts = { crawler: 0, dasher: 0, spitter: 0, beetle: 0 };
+    for (let i = 0; i < 2400; i++) counts[spawnKind(wave, () => (i + 0.5) / 2400)]++;
+    expect(counts.spitter).toBe(wave < 4 ? 0 : 300); expect(counts.dasher / 2400).toBeCloseTo(dasherShare(wave));
+    const capped = Array.from({ length: 12 }, (_, id) => createBug("spitter", id, 0, 0));
+    const cappedCounts = { crawler: 0, dasher: 0, spitter: 0, beetle: 0 };
+    for (let i = 0; i < 2400; i++) cappedCounts[spawnKind(wave, () => (i + 0.5) / 2400, capped)]++;
+    expect(cappedCounts.spitter).toBe(0); expect(cappedCounts.dasher).toBe(counts.dasher);
+    expect(cappedCounts.beetle).toBe(counts.beetle); expect(cappedCounts.crawler).toBe(counts.crawler + counts.spitter);
+  }
+  const a = createArena(78), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!; a.wave = 4; a.tick = 2000;
+  for (let i = 0; i < 12; i++) a.bugs.push(createBug("spitter", a.nextId++, 100, 100, a.tick * 50));
+  for (let i = 0; i < 138; i++) expect(spawnBug(a, p)).toBe(true);
+  expect(a.bugs.filter(b => b.kind === "spitter")).toHaveLength(12); expect(a.bugs).toHaveLength(150); expect(spawnBug(a, p)).toBe(false);
 });
 test("seeded production spawning initializes registered kinds without changing placement", () => {
   const run = (wave: number) => {

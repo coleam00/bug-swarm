@@ -1,11 +1,12 @@
+import { GLOB_LIFETIME_MS, GLOB_RADIUS } from "../constants";
 import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANCE, DASHER_DODGE_FORCE, PLAYER_RADIUS, HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
 import { shellBlocks } from "../bugs/beetle";
-import type { Bug, Input, Player, Life } from "../types";
+import type { Bug, Glob, Input, Player, Life } from "../types";
 export type Policy = "mover" | "aimer";
-export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[] }
-export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number; flankId?: number; flankSide?: number }
+export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[]; globs: readonly Glob[]; tick: number }
+export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number; flankId?: number; flankSide?: number; globDodgeId?: number; globDodgeX?: number; globDodgeY?: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
   const a = vx * vx + vy * vy - SHOT_SPEED * SHOT_SPEED, b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
@@ -104,6 +105,34 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
         x += state.dodgeX! * DASHER_DODGE_FORCE; y += state.dodgeY! * DASHER_DODGE_FORCE;
       }
     }
+  }
+  if (policy === "aimer") {
+    let threat: Glob | undefined, first = Infinity;
+    const movement = clampMove(x, y), clearance = PLAYER_RADIUS + GLOB_RADIUS + 12;
+    for (const g of observation.globs) {
+      const horizon = Math.min(1, (g.born + GLOB_LIFETIME_MS - observation.tick * STEP_MS) / 1000);
+      if (horizon <= 0) continue;
+      // Check both holding position and the intended path: do not step into a glob.
+      for (const moving of [false, true]) {
+        const dx = g.x - p.x, dy = g.y - p.y, vx = g.vx - (moving ? movement.x * PLAYER_SPEED : 0), vy = g.vy - (moving ? movement.y * PLAYER_SPEED : 0);
+        const dot = dx * vx + dy * vy, speed2 = vx * vx + vy * vy;
+        if (dot >= 0 || !speed2) continue;
+        const t = Math.min(horizon, -dot / speed2);
+        if (Math.hypot(dx + vx * t, dy + vy * t) > clearance) continue;
+        if (t < first || t === first && g.id < threat!.id) { threat = g; first = t; }
+      }
+    }
+    if (threat) {
+      if (state.globDodgeId !== threat.id) {
+        const speed = Math.hypot(threat.vx, threat.vy); let dx = -threat.vy / speed, dy = threat.vx / speed;
+        const room = (sign: number) => Math.min(
+          dx * sign > 0 ? (WORLD_WIDTH - PLAYER_RADIUS - p.x) / Math.abs(dx) : dx ? (p.x - PLAYER_RADIUS) / Math.abs(dx) : Infinity,
+          dy * sign > 0 ? (WORLD_HEIGHT - PLAYER_RADIUS - p.y) / Math.abs(dy) : dy ? (p.y - PLAYER_RADIUS) / Math.abs(dy) : Infinity);
+        if (room(-1) > room(1)) { dx = -dx; dy = -dy; }
+        state.globDodgeId = threat.id; state.globDodgeX = dx; state.globDodgeY = dy;
+      }
+      dodging = true; x += state.globDodgeX! * 2.5; y += state.globDodgeY! * 2.5;
+    } else state.globDodgeId = undefined;
   }
   if (policy === "aimer" && distance > 200 && !dodging) {
     let target: Observation["players"][number] | undefined, closest = 450;

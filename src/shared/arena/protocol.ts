@@ -1,7 +1,8 @@
+import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS } from "./constants";
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
 import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS } from "./constants";
-import type { Input, CombatPlayer, Bug, Shot, CombatEvent, LifeResult } from "./types";
+import type { Input, CombatPlayer, Bug, Shot, Glob, CombatEvent, LifeResult } from "./types";
 import { BUGS, isBugKind } from "./bugs/registry";
 export const VERSION = 1;
 export const HIDDEN_IDENTITY_MESSAGE = "That name isn't allowed.";
@@ -14,7 +15,7 @@ export interface LifeOver extends LifeResult { v: 1; type: "life_over"; save: Sa
 export interface ServerRestart { v: 1; type: "server_restart"; result?: LifeOver }
 export interface Welcome { v: 1; type: "welcome"; playerId: string; arenaId: string; buildId: string; snapshotEncoding?: "delta-v1";
   world: { width: number; height: number }; constants: { stepMs: number; playerSpeed: number; playerRadius: number; maxPlayers: number } }
-export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; bugs: Bug[]; shots: Shot[]; events: CombatEvent[];
+export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[];
   players: (CombatPlayer & { ackSeq: number; result?: LifeOver })[] }
 export interface ArenaError { v: 1; type: "error"; code: string; message: string; team?: Team }
 export type ClientMessage = Hello | InputMessage | Respawn;
@@ -73,18 +74,31 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
     ids.add(p.id);
   }
   const entityIds = new Set<number>();
-  for (const [entities, cap, speed] of [[v.bugs, MAX_BUGS, Infinity], [v.shots, MAX_SHOTS, SHOT_SPEED]] as const) {
+  for (const [entities, cap, speed] of [[v.bugs, MAX_BUGS, Infinity], [v.shots, MAX_SHOTS, SHOT_SPEED], [v.globs, MAX_GLOBS, GLOB_SPEED]] as const) {
     if (!Array.isArray(entities) || entities.length > cap) return null;
     for (const e of entities) {
       if (!object(e) || !integer(e.id) || entityIds.has(e.id) || ![e.x, e.y, e.vx, e.vy].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT || Math.hypot(e.vx, e.vy) > speed + 0.1) return null;
-      if (entities === v.bugs ? (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * 50)) : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life || !finite(e.born) || e.born < 0 || e.born > v.tick * 50) return null;
+      if (entities === v.bugs) {
+        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
+      } else {
+        if (!finite(e.born) || e.born < 0 || e.born > v.tick * STEP_MS) return null;
+        // The wire may reference the owner by its index in this full snapshot.
+        // Expand before validating or exposing a Shot to any consumer.
+        if (entities === v.shots && integer(e.owner)) {
+          if (e.owner >= v.players.length) return null;
+          e.owner = v.players[e.owner].id;
+        }
+        if (entities === v.globs ? e.born + GLOB_LIFETIME_MS <= v.tick * STEP_MS || Math.abs(Math.hypot(e.vx, e.vy) - GLOB_SPEED) > 0.1 : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life) return null;
+      }
       entityIds.add(e.id);
     }
   }
+  if (v.bugs.filter((b: Bug) => b.kind === "spitter").length > MAX_SPITTERS) return null;
   if (!Array.isArray(v.events) || v.events.length > MAX_EVENTS) return null;
   const events = new Set<number>();
   for (const e of v.events) {
-    if (!object(e) || !integer(e.id) || events.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT || !isBugKind(e.kind) || (e.type === "bounce" ? e.points !== 0 || !BUGS[e.kind].blocksShot : e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
+    if (!object(e) || !integer(e.id) || events.has(e.id) || entityIds.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT) return null;
+    if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "bounce" ? e.points !== 0 || !BUGS[e.kind].blocksShot : e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
     events.add(e.id);
   }
   return v as Snapshot;
@@ -92,5 +106,6 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
 function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type === "life_over" && isId(v.playerId) && integer(v.life) && v.life > 0 && integer(v.score) && integer(v.kills) && finite(v.seconds) && v.seconds >= 0 && typeof v.touch === "boolean" && ["pending", "saved", "failed"].includes(v.save) && (v.reason === undefined || ["death", "disconnect", "restart"].includes(v.reason)); }
 /** Quantize the wire only. The authoritative simulation keeps full precision. */
 export function serializeSnapshot(snapshot: Snapshot): string {
-  return JSON.stringify(snapshot, (_key, value) => typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+  const owners = new Map(snapshot.players.map((p, i) => [p.id, i]));
+  return JSON.stringify(snapshot, (key, value) => key === "owner" ? owners.get(value) ?? value : typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
 }

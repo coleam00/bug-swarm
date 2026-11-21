@@ -67,7 +67,10 @@ successive cracks, pale sparks without score labels, delayed onset/removal,
 deduplication and reset. Policy tests include solo and teammate flank kills and
 retain the dasher-dodge and rescue regressions.
 
-## Results on the factory machine (2026-11-21)
+## Original feature results on the factory machine (2026-11-21)
+
+These measurements precede the merge of main's spitter/glob feature. The merged
+branch validation is recorded below; the original raw evidence is retained.
 
 The original delivery's `bun run check` passed: 434 tests, 28,952 assertions,
 no failures, and TypeScript passed. Focused combat/steering/spawn/policy, JSON/binary integration and renderer
@@ -183,3 +186,28 @@ All 52 focused tests passed, followed by `bun run check`: **434 tests, 28,996
 assertions**, TypeScript clean, exit zero. Logs, mutation results and the exit
 code are in `.evidence/83/visibility/`. This remains a test-only repair; the
 original issue-83 skill, Chrome and load evidence above is unchanged.
+
+
+## Main integration follow-up
+
+Merged main commit `61ab6b7` (spitters and acid globs) into this PR. Both kinds
+remain registered. The mix keeps the dasher share, the available spitter's 1/8
+share/cap of twelve, and the beetle's constant 10% share/cap of ten. Capped
+spitters transfer their weight to crawlers; capped beetle choices fall back to
+crawlers without another random draw. Attack initialization still receives the
+current simulation time, and beetles still turn only once per fixed step.
+
+Transport, snapshots, interpolation, rendering and policy fixtures now carry
+globs as well as beetle bounces. Glob-pop keeps its green +5 feedback; a shell
+bounce stays pale, zero-point and label-free. The existing effective-opacity
+review fix is preserved. The consumed-shot regression also verifies that a
+blocked shell cannot pop a glob behind the beetle. The benchmark includes ten
+visible beetles, twelve spitters and the bounded glob collection; controlled
+beetle scenes clear preexisting globs along with bugs and shots.
+
+All 98 focused tests passed. The merged `bun run check` then passed with **466
+tests, 29,489 assertions**, TypeScript clean, exit zero, including the unchanged
+20-seed score gate and the ordinary newcomer regressions. Merge validation logs
+and scratch data are under `.evidence/83/merge-return/`. The separate full skill,
+Chrome and load measurements above describe the original pre-spitter feature;
+they were not rerun as part of this merge-conflict repair.

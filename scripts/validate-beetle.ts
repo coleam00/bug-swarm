@@ -101,7 +101,7 @@ try {
   for (const player of room.state.players.values()) Object.assign(player, { x: 2100, y: 2100, immuneUntil: room.state.tick * 50 + 60000 });
   for (const player of [p,q]) Object.assign(player, { status: 'active', hits: 3, downedUntil: 0, reviveMs: 0, heat: 0, overheatUntil: 0 });
   Object.assign(p, { x: 1200, y: 1200, streak: 4 }); Object.assign(q, { x: 1900, y: 1200 });
-  room.state.bugs = []; room.state.shots = [];
+  room.state.bugs = []; room.state.shots = []; room.state.globs = [];
   const b = createBug('beetle', room.state.nextId++, 1320, 1200); b.facing = Math.PI; room.state.bugs = [b];
   await pause(200);
   const aimAt = async (bug: any) => {
