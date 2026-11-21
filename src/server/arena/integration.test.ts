@@ -3,11 +3,10 @@ import { mkdtempSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../server";
-import { hideName } from "../db";
 import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
 import { runBots } from "../../../scripts/bots";
-function client(url: string, index: number, name = `bot-${index}`) {
-  const id = crypto.randomUUID(), socket = new WebSocket(url), messages: ServerMessage[] = [];
+function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID()) {
+  const socket = new WebSocket(url), messages: ServerMessage[] = [];
   const observers = new Set<() => void>();
   socket.onopen = () => socket.send(JSON.stringify({ v: 1, type: "hello", playerId: id, name, team: index % 2 ? "tabs" : "spaces", touch: false, buildId: "integration" }));
   socket.onmessage = event => { const m = parseServer(event.data); if (m) messages.push(m); for (const notify of observers) notify(); };
@@ -33,8 +32,15 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
     await a.wait(m => m.type === "snapshot" && m.shots.some(s => s.owner === a.id));
     await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.score === 11));
+    const origin = `http://127.0.0.1:${app.server.port}`;
+    const read = async (path: string) => (await fetch(origin + path)).json();
+    expect(await read("/api/leaderboard")).toEqual([]); expect(await read("/api/teams")).toEqual({ tabs: 0, spaces: 0 });
     p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 1000, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
     expect(await a.wait(m => m.type === "life_over" && m.save === "saved")).toMatchObject({ score: 11, kills: 1, life: 1 });
+    expect(await read("/api/leaderboard")).toContainEqual({ playerId: a.id, name: "bot-1", score: 11 });
+    expect(await read("/api/teams")).toEqual({ tabs: 11, spaces: 0 });
+    expect(await read(`/api/players/${a.id}/best`)).toEqual({ best: 11 });
+    expect(await read(`/api/players/${a.id}/standing`)).toEqual({ rank: 1, total: 1, next: null });
     await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && !p.hits && p.result?.score === 11));
     for (let i = 0; i < 2; i++) a.socket.send(JSON.stringify({ v: 1, type: "respawn", life: 1, touch: true }));
     await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.hits === 3));
@@ -70,8 +76,24 @@ test("real server: clients see each other move, 21st player is isolated, refused
     expect((await fetch(`http://127.0.0.1:${app.server.port}/ws`)).status).toBe(426);
     const refused = client(url, 22, "<script>"); clients.push(refused);
     expect(await refused.wait(m => m.type === "error")).toMatchObject({ code: "name-refused" });
-    hideName(app.db, "bot-1", Date.now());
-    expect(await a.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden", message: HIDDEN_IDENTITY_MESSAGE });
+    const closed = new Promise<void>(resolve => a.socket.addEventListener("close", () => resolve(), { once: true }));
+    const started = performance.now(), home = join(scratch, "home");
+    const hide = Bun.spawn([process.execPath, "scripts/hide.ts", " BOT-1 "], {
+      env: { ...process.env, DATA_DIR: join(scratch, "data"), HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home }, stdout: "pipe", stderr: "pipe",
+    });
+    expect(await hide.exited, await new Response(hide.stderr).text()).toBe(0);
+    expect(await a.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden", message: "That name isn't allowed." });
+    await closed; expect(performance.now() - started).toBeLessThanOrEqual(5000);
+    const deadline = performance.now() + 1000;
+    while (app.arenas.active.has(a.id) && performance.now() < deadline) await Bun.sleep(5);
+    expect(app.arenas.active.has(a.id)).toBe(false);
+    await b.wait(m => m.type === "snapshot" && m.players.length === 19 && !m.players.some(p => p.id === a.id));
+    for (const id of [a.id, crypto.randomUUID()]) {
+      const rejoin = client(url, 23, "  BOT-1 ", id); clients.push(rejoin);
+      expect(await rejoin.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden", message: HIDDEN_IDENTITY_MESSAGE });
+    }
+    expect(await (await fetch(`http://127.0.0.1:${app.server.port}/api/leaderboard`)).json()).toEqual([]);
+    expect((await (await fetch(`http://127.0.0.1:${app.server.port}/api/arena/stats`)).json()).totalPlayers).toBe(20);
     app.arenas.writer.flush();
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE mode = 'arena'").get() as any).n).toBe(21);
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE ended_at_ms IS NOT NULL").get() as any).n).toBe(1);

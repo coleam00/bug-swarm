@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { finishRun, hideName, openDb, recordEvent, startRun } from "../src/server/db";
 import { parseWindow, report } from "./stats";
+import { finishArenaLife } from "../src/server/arena/lives";
 
 test("bet counts accepted finishes, hidden players, grouped median, rounding and finish-time bounds", () => {
   const db = openDb(":memory:");
@@ -69,3 +70,22 @@ test("stats CLI has exact stdout, fails cleanly and doesn't create a missing dat
     expect(output.exitCode).toBe(0); expect(output.stdout.toString()).toBe("players: 1\nfinished_runs: 1\nmedian_runs_per_player: 1.0\ntouch_share: 100%\n");
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }, 15_000);
+
+test("mixed modes count each finish once, retain held/hidden history and use arena touch and finish times", () => {
+  const db = openDb(":memory:");
+  try {
+    const a = crypto.randomUUID(), b = crypto.randomUUID();
+    const one = startRun(db, a, "Alpha", 0, "tabs"), two = startRun(db, b, "Beta", 0, "spaces");
+    if ("error" in one || "error" in two) throw Error("fixture");
+    finishRun(db, one.runId, { playerId: a, score: 4000, seconds: 100, squashes: 390, touch: false }, 1000);
+    finishRun(db, two.runId, { playerId: b, score: 1, seconds: 1, squashes: 0, touch: false }, 4000);
+    for (const ended of [2000, 3000]) {
+      const record = { runId: crypto.randomUUID(), playerId: a, team: "tabs" as const, started: 0, ended,
+        result: { playerId: a, life: 1, score: 9001, kills: 0, seconds: 1, touch: true } };
+      finishArenaLife(db, record); finishArenaLife(db, record);
+    }
+    hideName(db, "Alpha", 5000);
+    expect(report(db)).toBe("players: 2\nfinished_runs: 4\nmedian_runs_per_player: 2.0\ntouch_share: 50%");
+    expect(report(db, 2000, 3000)).toBe("players: 1\nfinished_runs: 1\nmedian_runs_per_player: 1.0\ntouch_share: 100%");
+  } finally { db.close(); }
+});

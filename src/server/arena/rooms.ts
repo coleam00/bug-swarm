@@ -82,7 +82,7 @@ export class RoomManager {
     if (name.error) { this.refuse(c, "name-refused", name.error); return; }
     const id = message.playerId.toLowerCase();
     if (this.active.has(id)) { this.refuse(c, "already-connected", "This player is already in an arena."); return; }
-    if (this.hidden().has(nameKey(name.name!))) { this.refuse(c, "name-hidden", "That name is unavailable. Pick another."); return; }
+    if (this.hidden().has(nameKey(name.name!))) { this.refuse(c, "name-hidden", HIDDEN_IDENTITY_MESSAGE); return; }
     const result = registerArenaPlayer(this.db, id, name.name!, message.team);
     if ("error" in result) {
       this.refuse(c, result.error, result.error === "name-conflict" ? "This player's name is fixed. Use your saved name." : "Your saved team has been restored.", "team" in result ? result.team : undefined); return;

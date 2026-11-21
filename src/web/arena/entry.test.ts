@@ -15,11 +15,18 @@ let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
 mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
   mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
+globalThis.window = new EventTarget(); globalThis.document = new EventTarget();
+const { api } = await import(${moduleUrl("../game/api.ts")});
+let serverBest = 9876;
+const requests = { best: [], standing: [] };
+api.best = async playerId => { requests.best.push(playerId); assert.equal(playerId, joined.identity.playerId); return { best: serverBest }; };
+api.standing = async playerId => { requests.standing.push(playerId); assert.equal(playerId, joined.identity.playerId); return { rank: 2, total: 12, next: { rank: 1, pointsToBeat: 765 } }; };
+api.teams = async () => ({ tabs: 54321, spaces: 87654 });
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
 const { Arena } = await import(${moduleUrl("Arena.tsx")});
 const { HIDDEN_IDENTITY_MESSAGE } = await import(${moduleUrl("../../shared/arena/protocol.ts")});
-const unavailable = "That name is unavailable. Pick another.";
+const unavailable = "That name isn't allowed.";
 const alertText = () => tree.root.findByProps({ role: "alert" }).children.join("");
 let tree;
 for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "spaces"]) {
@@ -69,11 +76,72 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   }
   act(() => onStatus("")); assert.equal(tree.root.findAllByProps({ role: "status" }).length, 0);
   if (kind === "new" && team === "tabs") {
-    const respawns = []; let prevented = false;
-    act(() => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));
-    act(() => tree.root.findByProps({ role: "dialog" }).props.onPointerDown({ pointerType: "touch", preventDefault() { prevented = true; } }));
-    assert.deepEqual(respawns, [true], "A touch on the actual life-over overlay must request a touch-attributed respawn");
-    assert.equal(prevented, true);
+    const respawns = [];
+    const show = (life, save) => onLife({ life, score: 4321, save }, touch => respawns.push(touch));
+    await act(async () => show(1, "saved"));
+    const text = node => typeof node === "string" ? node : node.children.map(text).join("");
+    const numbers = node => (text(node).match(/[0-9][0-9,]*/g) ?? []).map(value => Number(value.replaceAll(",", "")));
+    const overlay = () => tree.root.findByProps({ role: "dialog" });
+    const summary = () => overlay().findByProps({ className: "arena-life-content" }).children[0];
+    const best = () => summary().findAllByType("p")[1];
+    assert.deepEqual(numbers(overlay().findByProps({ className: "life-score" })), [4321], "Life score comes from this life");
+    assert.deepEqual(numbers(best()), [9876], "Best comes from the server rather than the life score");
+    const standing = overlay().findByProps({ className: "personal-standing" }).findAllByType("p");
+    assert.deepEqual(numbers(standing[0]), [2, 12], "Rank and population come from the server");
+    assert.deepEqual(numbers(standing.at(-1)), [765, 1], "Next-rank gap and target come from the server, including inside the top ten");
+    const teams = overlay().findByProps({ className: "team-labels" }).findAllByType("span");
+    assert.deepEqual(teams.map(numbers), [[54321], [87654]], "Both team totals come from the server");
+    assert.deepEqual(requests, { best: [joined.identity.playerId], standing: [joined.identity.playerId] });
+    const down = { pointerType: "touch", button: 0, pointerId: 1, clientX: 20, clientY: 20 };
+    act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerDown(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerCancel()); act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, []);
+    act(() => overlay().props.onPointerDown(down));
+    act(() => overlay().props.onPointerMove({ ...down, clientY: 50 }));
+    act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, [], "Scrolling back must not replay");
+    act(() => overlay().props.onPointerDown(down)); act(() => overlay().props.onPointerUp(down));
+    assert.deepEqual(respawns, [true], "A fresh tap must retain touch attribution");
+    act(() => tree.root.findByType("button").props.onClick({ detail: 1 })); assert.deepEqual(respawns, [true]);
+    act(() => tree.root.findByType("button").props.onClick({ detail: 0 })); assert.deepEqual(respawns, [true, false], "Accessible activation works");
+    // A save acknowledgement can arrive while a replay tap is held down.
+    let savedFeedback;
+    for (const [index, save] of ["saved", "failed"].entries()) {
+      const life = index + 2, count = respawns.length;
+      serverBest = null;
+      await act(async () => show(life, "pending"));
+      const pendingFeedback = text(summary().findByProps({ role: "status" }));
+      assert.ok(pendingFeedback.trim(), "Pending saves expose status feedback");
+      const loadingBest = text(best());
+      act(() => overlay().props.onPointerDown(down));
+      await act(async () => show(life, save));
+      const terminalFeedback = text(summary().findByProps({ role: "status" }));
+      assert.ok(terminalFeedback.trim(), "Acknowledgements expose status feedback");
+      assert.notEqual(terminalFeedback, pendingFeedback, "Saved and failed results must leave pending feedback");
+      if (save === "saved") savedFeedback = terminalFeedback;
+      else assert.notEqual(terminalFeedback, savedFeedback, "Save failure feedback must differ from success");
+      assert.notEqual(text(best()), loadingBest, "Best read leaves loading even when no best exists");
+      assert.deepEqual(numbers(best()), [], "A null best must not fabricate a score");
+      act(() => overlay().props.onPointerUp(down));
+      assert.equal(respawns.length, count + 1, save + " acknowledgement must preserve the in-progress tap");
+      assert.equal(respawns.at(-1), true, "Acknowledgements preserve touch attribution");
+      act(() => overlay().props.onPointerUp(down));
+      assert.equal(respawns.length, count + 1, "Each tap requests just one respawn");
+    }
+    serverBest = 9876;
+    // Replacing or removing the overlay really does invalidate the gesture.
+    for (const replace of [() => show(5, "pending"), () => { onLife(null, () => {}); show(4, "pending"); }]) {
+      act(() => show(4, "pending"));
+      act(() => overlay().props.onPointerDown(down));
+      const count = respawns.length;
+      act(replace); act(() => overlay().props.onPointerUp(down));
+      assert.equal(respawns.length, count, "A replacement overlay must not inherit an old tap, even with a reused life number");
+    }
+    for (const cancel of [() => window.dispatchEvent(new Event("blur")), () => document.dispatchEvent(new Event("visibilitychange"))]) {
+      act(() => overlay().props.onPointerDown(down));
+      const count = respawns.length;
+      act(cancel); act(() => overlay().props.onPointerUp(down));
+      assert.equal(respawns.length, count, "Losing foreground cancels the tap");
+    }
     act(() => onLife(null, () => {})); assert.equal(tree.root.findAllByProps({ role: "dialog" }).length, 0);
   }
   const restoredTeam = team === "tabs" ? "spaces" : "tabs";
