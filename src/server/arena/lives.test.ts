@@ -140,3 +140,22 @@ test("death, stale inputs, duplicate respawns, touch, disconnect and repeated sh
     expect(endLife(room.state, id)).toBeNull();
   } finally { await manager.stop(); db.close(); }
 });
+
+test("the score in pending and saved life_over is the literal score persisted by the real writer", async () => {
+  const db = openDb(":memory:"), manager = new RoomManager(db, "test", { seed: () => 1 });
+  const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(s)), close() {}, getBufferedAmount: () => 0 });
+  const id = crypto.randomUUID();
+  try {
+    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name: "Pilot", team: "tabs", touch: false, buildId: "test" }));
+    const p = c.room!.state.players.get(id)!;
+    p.score = 37; p.points = 370; p.kills = 3; p.hits = 1; p.immuneUntil = 0; p.spawnProtectedUntil = 0;
+    c.room!.state.bugs.push({ id: 99, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
+    manager.tick(c.room!);
+    const pending = messages.find(m => m.type === "life_over" && m.save === "pending");
+    expect(pending?.score).toBe(37);
+    manager.writer.flush();
+    const saved = messages.find(m => m.type === "life_over" && m.save === "saved");
+    const row = db.query("SELECT score FROM runs WHERE id = ?").get(c.record!.runId) as { score: number };
+    expect(saved?.score).toBe(37); expect(row.score).toBe(37);
+  } finally { await manager.stop(); db.close(); }
+});

@@ -22,7 +22,7 @@ export class Interpolation {
     return latest.snapshot.players.map(current => {
       const p = a.snapshot.players.find(p => p.id === current.id), q = b.snapshot.players.find(p => p.id === current.id);
       if (!p || !q || p.life !== q.life || current.life !== p.life || !current.hits) return current;
-      return { ...p, x: p.x + (q.x - p.x) * fraction, y: p.y + (q.y - p.y) * fraction,
+      return { ...current, x: p.x + (q.x - p.x) * fraction, y: p.y + (q.y - p.y) * fraction,
         facing: p.facing + Math.atan2(Math.sin(q.facing - p.facing), Math.cos(q.facing - p.facing)) * fraction };
     });
   }

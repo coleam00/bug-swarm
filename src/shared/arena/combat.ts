@@ -22,6 +22,7 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
     p.heat = Math.max(0, p.heat - HEAT_COOLING * (lockedUntil - time) / 1000);
     p.nextShotAt = Math.max(lockedUntil, p.nextShotAt);
     while (p.nextShotAt < end - 1e-8) {
+      p.spawnProtectedUntil = 0;
       const at = p.nextShotAt, dx = Math.cos(p.facing), dy = Math.sin(p.facing);
       state.shots.push({ id: state.nextId++, owner: p.id, life: p.life, x: p.x - p.vx * (end - at) / 1000 + dx * MUZZLE_OFFSET, y: p.y - p.vy * (end - at) / 1000 + dy * MUZZLE_OFFSET, vx: dx * SHOT_SPEED, vy: dy * SHOT_SPEED, born: at });
       p.heat += HEAT_GAIN; p.nextShotAt += 1000 / SHOT_RATE;

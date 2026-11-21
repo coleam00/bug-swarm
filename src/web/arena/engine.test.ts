@@ -9,21 +9,21 @@ test("engine routes controls, predicts/reconciles and renders interpolated movem
   const probe = `
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
-let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal, lifePanel;
+let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal, lifePanel, resize;
 const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set(), effects = [];
 performance.now = () => clock;
 globalThis.setInterval = (fn, ms) => { assert.equal(ms, 50); const id = ++next; timers.set(id, fn); return id; };
 globalThis.clearInterval = id => timers.delete(id);
 globalThis.requestAnimationFrame = fn => { const id = ++next; frames.set(id, fn); return id; };
 globalThis.cancelAnimationFrame = id => frames.delete(id);
-globalThis.ResizeObserver = class { constructor(fn) { this.fn = fn; } observe() { observers++; } disconnect() { observers--; } };
+globalThis.ResizeObserver = class { constructor(fn) { resize = fn; } observe() { observers++; } disconnect() { observers--; } };
 globalThis.window = Object.assign(new EventTarget(), { devicePixelRatio: 1 });
 globalThis.document = new EventTarget();
 const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight: 844, dataset: {}, getContext: () => ({ setTransform() {} }),
   getBoundingClientRect: () => ({ left: 20, top: 30 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
-mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local) {
-  draws.push(structuredClone({ width, height, camera, players, local }));
+mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local, input, bugs, shots, wave, tick, now, scale) {
+  draws.push(structuredClone({ width, height, camera, players, local, shots, wave, tick, scale }));
 } } }));
 mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, touch, got, status, gone) => {
   receive = got; disconnected = gone;
@@ -50,10 +50,13 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   receive({ v: 1, type: "welcome" }); base = clock;
   const own = { life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
-  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, bugs: [], shots: [], events,
+  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: tick + 4, bugs: [],
+    shots: [{ id: 800, owner: own.id, life: 1, born: 0, x: 1200 + tick * 45, y: 1200, vx: 900, vy: 0 }], events,
     players: [{ ...own, x: ownX, ackSeq }, { ...remote, x: remoteX }] });
   snapshot(1, 1200, 1000, 0);
   let draw = frame(base); assert.equal(draw.local.x, 1200); assert.deepEqual(draw.camera, { x: 1005, y: 778 });
+  assert.equal(draw.wave, 5, "Nonzero wave must reach the renderer");
+  assert.equal(draw.tick, 1, "Authoritative tick must reach the renderer");
   assert.equal(draw.players.find(p => p.id === remote.id).x, 1000);
   mouse("pointermove", 295, 322); send();
   assert.ok(Math.abs(inputs.at(-1).aim + Math.PI / 4) < 1e-8, "Mouse aim must include camera and canvas offsets");
@@ -66,9 +69,13 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   assert.equal(draw.camera.x, 1014); key("ArrowRight", "keyup");
   clock = base + 100; snapshot(3, 1203, 1020, inputs.at(-1).seq);
   draw = frame(base + 150);
+  assert.equal(draw.wave, 7, "Changing wave must reach the renderer exactly");
+  assert.equal(draw.tick, 3, "Changing authoritative ticks must reach the renderer exactly");
+  assert.equal(draw.shots[0].x, 1290, "Travelling shots must reach the renderer after the delay");
   assert.ok(Math.abs(draw.local.x - 1203) < 1, "Acknowledgement must retire prediction and reconcile to authority");
   assert.equal(draw.camera.x, draw.local.x - 195); assert.equal(draw.camera.y, draw.local.y - 422);
   assert.equal(draw.players.find(p => p.id === remote.id).x, 1010, "Remote motion must interpolate 100ms behind");
+  draw = frame(base + 175); assert.equal(draw.shots[0].x, 1312.5, "Renderer receives advancing interpolated shots");
   for (const [code, x, y] of [["KeyW",0,-1],["KeyA",-1,0],["KeyS",0,1],["KeyD",1,0],
     ["ArrowUp",0,-1],["ArrowLeft",-1,0],["ArrowDown",0,1],["ArrowRight",1,0]]) {
     key(code); send(); assert.deepEqual(inputs.at(-1).move, { x, y }); key(code, "keyup");
@@ -114,6 +121,13 @@ for (let cycle = 0; cycle < replayKeys.length; cycle++) {
   key("Space", "keydown", true); key(respawnKey, "keydown", true);
   send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
   key("Space", "keyup"); key(respawnKey, "keyup");
+  canvas.clientWidth = 1920; canvas.clientHeight = 1080; window.devicePixelRatio = 3; resize();
+  draw = frame(clock + 50); assert.equal(draw.scale, 1920 / 900);
+  assert.equal(canvas.width, 3840); assert.equal(canvas.height, 2160, "DPR remains bounded separately from world scale");
+  assert.equal(draw.camera.x, draw.local.x - 450); assert.equal(draw.camera.y, draw.local.y - 253.125);
+  mouse("pointermove", 1060, 440); send();
+  assert.ok(Math.abs(inputs.at(-1).aim + Math.PI / 4) < 1e-8, "Scaled mouse aim must divide CSS coordinates before adding the world camera");
+  canvas.clientWidth = 390; canvas.clientHeight = 844; window.devicePixelRatio = 1; resize();
   key("KeyD");
   receive({ v: 1, type: "life_over", reason: "death", life: 1, playerId: own.id, score: 42, save: "pending" });
   const beforeOldResult = inputs.length; send(); assert.equal(inputs.length, beforeOldResult + 1, "An old ordinary death result must not pause the replacement life");

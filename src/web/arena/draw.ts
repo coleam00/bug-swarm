@@ -1,7 +1,11 @@
 import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
-import type { Player, CombatPlayer, Bug, Shot, KillEvent } from "../../shared/arena/types";
+import type { Player, CombatPlayer, Bug, Shot, KillEvent, LifeResult } from "../../shared/arena/types";
 import type { ArenaInput } from "./input";
+export function lifeClock(p: CombatPlayer & { result?: LifeResult }, tick: number): string {
+  const seconds = Math.floor(p.result?.seconds ?? Math.max(0, tick - p.startedTick) * STEP_MS / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 export class ArenaRenderer {
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0;
@@ -22,15 +26,15 @@ export class ArenaRenderer {
       g.fillStyle = gradient; g.fillRect(0, 0, 100, 100); this.glows.set(team, glow);
     }
   }
-  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0) {
+  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1) {
     this.time = tick * STEP_MS;
-    const c = this.ctx;
+    const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
-    c.save(); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     for (const id of this.labels.keys()) if (!players.some(p => p.id === id)) this.labels.delete(id);
     for (const b of bugs) {
-      if (b.x < camera.x - 30 || b.x > camera.x + width + 30 || b.y < camera.y - 30 || b.y > camera.y + height + 30) continue;
+      if (b.x < camera.x - 30 || b.x > camera.x + worldWidth + 30 || b.y < camera.y - 30 || b.y > camera.y + worldHeight + 30) continue;
       c.save(); c.translate(b.x, b.y); c.rotate(Math.atan2(b.vy, b.vx));
       c.strokeStyle = "#e39281"; c.lineWidth = 2; c.beginPath();
       for (let i = -1; i <= 1; i++) { const leg = Math.sin(now / 80 + b.id + i) * 4; c.moveTo(i * 7, -6); c.lineTo(i * 9 + leg, -19); c.moveTo(i * 7, 6); c.lineTo(i * 9 - leg, 19); } c.stroke();
@@ -39,13 +43,13 @@ export class ArenaRenderer {
     }
     c.lineCap = "round";
     for (const s of shots) {
-      if (s.x < camera.x - 40 || s.x > camera.x + width + 40 || s.y < camera.y - 40 || s.y > camera.y + height + 40) continue;
+      if (s.x < camera.x - 40 || s.x > camera.x + worldWidth + 40 || s.y < camera.y - 40 || s.y > camera.y + worldHeight + 40) continue;
       const length = Math.hypot(s.vx, s.vy), dx = s.vx / length * 22, dy = s.vy / length * 22;
       c.strokeStyle = "#ffc26055"; c.lineWidth = 9; c.beginPath(); c.moveTo(s.x - dx, s.y - dy); c.lineTo(s.x, s.y); c.stroke();
       c.strokeStyle = "#fff6c8"; c.lineWidth = 3; c.stroke();
     }
-    for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, width, height);
-    if (local) this.robot(local, true, camera, width, height);
+    for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
+    if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
       const age = now - e.at; if (age < 0 || age > 700) continue;
       c.globalAlpha = 1 - age / 700; c.strokeStyle = "#ffce79"; c.lineWidth = 2;
@@ -62,7 +66,7 @@ export class ArenaRenderer {
       const p = local as CombatPlayer;
       c.fillStyle = "#060b12cc"; c.fillRect(10, 10, Math.min(width - 20, 330), 68);
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = "bold 20px system-ui"; c.fillText(`Wave ${wave}   ${p.score.toLocaleString()} pts`, 22, 36);
-      c.font = "bold 16px system-ui"; c.fillStyle = "#7be7ca"; c.fillText(`×${Math.min(3, 1 + p.streak / 10).toFixed(1)}   ${p.hits} hits left`, 22, 62);
+      c.font = "bold 16px system-ui"; c.fillStyle = "#7be7ca"; c.fillText(`×${Math.min(3, 1 + p.streak / 10).toFixed(1)}   ${p.hits} hits left   ${lifeClock(p, tick)}`, 22, 62);
     }
   }
   private robot(p: Player, local: boolean, camera: { x: number; y: number }, width: number, height: number) {
@@ -71,6 +75,13 @@ export class ArenaRenderer {
     const c = this.ctx, colour = TEAM_COLOURS[p.team], r = PLAYER_RADIUS;
     if (combat.immuneUntil > this.time && Math.floor(this.time / 100) % 2) c.globalAlpha = 0.4;
     c.drawImage(this.glows.get(p.team)!, p.x - 50, p.y - 50);
+    if (combat.spawnProtectedUntil > this.time) {
+      c.strokeStyle = "#b8efff"; c.lineWidth = 2; c.beginPath();
+      const angle = this.time / 160;
+      c.arc(p.x, p.y, r + 15 + Math.sin(this.time / 100) * 2, angle, angle + Math.PI * 1.4); c.stroke();
+      c.strokeStyle = "#7fdcff66"; c.lineWidth = 5; c.beginPath();
+      c.arc(p.x, p.y, r + 18, -angle, -angle + Math.PI); c.stroke();
+    }
     if (local) { c.strokeStyle = "#fff0bd"; c.lineWidth = 2.5; c.beginPath(); c.arc(p.x, p.y, r + 8, 0, Math.PI * 2); c.stroke(); }
     c.save(); c.translate(p.x, p.y); c.rotate(p.facing);
     c.fillStyle = colour; c.fillRect(8, -4, 17, 8);

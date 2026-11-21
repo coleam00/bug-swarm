@@ -29,13 +29,16 @@ test("directional protocol accepts validated envelopes and full-room snapshots o
 test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/results", () => {
   const arena = createArena(2);
   for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: "WideWWWWWWWWWWWW", team: "tabs" });
-  const players = [...arena.players.values()].map(p => ({ ...p, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
+  const players = [...arena.players.values()].map(p => ({ ...p, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, spawnProtectedUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
   const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: crypto.randomUUID(), tick: 9999999, wave: 9999, players,
     bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: "crawler", x: 1234.56789, y: 1234.56789, vx: -98.994949, vy: 98.994949 })),
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
     events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 30 })) };
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
   const corrupt = JSON.parse(raw); corrupt.players[0].result = null; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
+  for (const value of [undefined, -1, "2000", null]) {
+    const corrupt = JSON.parse(raw); corrupt.players[0].spawnProtectedUntil = value; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
+  }
   snapshot.bugs[0]!.vx = 1e6; expect(parseServer(serializeSnapshot(snapshot))).toBeNull(); snapshot.bugs[0]!.vx = 0;
   snapshot.shots[0]!.owner = crypto.randomUUID(); expect(parseServer(serializeSnapshot(snapshot))).toBeNull();
 });
