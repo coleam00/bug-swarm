@@ -4,6 +4,7 @@ import { createArena, joinPlayer, stepArena, endLife, respawnPlayer } from "./si
 import { lifeDefaults } from "./types";
 import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS } from "./constants";
 import type { Snapshot } from "./protocol";
+import { createBug } from "./bugs/registry";
 function fixture() {
   const state = createArena(77), id = crypto.randomUUID();
   joinPlayer(state, { id, name: "Pilot", team: "tabs" });
@@ -14,7 +15,7 @@ function fixture() {
 test("compact snapshots preserve independent history, births/removals, life transitions and safe integers", () => {
   const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder(), p = f.state.players.get(f.id)!;
   p.score = Number.MAX_SAFE_INTEGER; p.kills = 2 ** 35; p.x = 1200.066; p.overheatUntil = Number.MAX_SAFE_INTEGER;
-  f.state.bugs.push({ id: Number.MAX_SAFE_INTEGER, kind: "crawler", x: 400.024, y: 400, vx: 140, vy: 0 });
+  f.state.bugs.push({ ...createBug("crawler", Number.MAX_SAFE_INTEGER, 400.024, 400), vx: 140 });
   const first = decoder.read(encoder.encode(f.value()).keyframe) as Snapshot;
   expect(first.players[0]!.score).toBe(Number.MAX_SAFE_INTEGER); expect(first.players[0]!.kills).toBe(2 ** 35);
   expect(Math.abs(first.players[0]!.x - p.x)).toBeLessThanOrEqual(1 / 16);
@@ -52,17 +53,22 @@ test("missing/damaged bases do not mutate state; keyframes and reconnect reset r
   expect(() => decoder.read(trailing)).toThrow("Trailing");
   expect(() => decoder.read(new Uint8Array(65537))).toThrow();
   const corrupt = third.keyframe.slice(); corrupt[1] = 2; expect(() => decoder.read(corrupt)).toThrow();
+  const reference = third.keyframe.slice(); reference[3] = 65;
+  expect(() => decoder.read(reference)).toThrow("Invalid string reference");
 });
 test("maximum supported collections, extension payloads and large ticks round trip", () => {
   const f = fixture(); f.state.players.clear(); f.state.tick = 2 ** 36;
   for (let i = 0; i < MAX_PLAYERS; i++) { const id = crypto.randomUUID(); f.state.players.set(id, { id, name: "Pilot" + i, team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: Math.PI, ...lifeDefaults() }); }
-  f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ id, kind: "crawler", x: 500, y: 500, vx: 140, vy: 0, tell: { time: 1.123456 } } as const));
+  f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ ...createBug("dasher", id, 500, 500), phase: "windup", phaseUntil: f.state.tick * 50 + 700, tell: { time: 1.123456 } }));
   f.state.shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: [...f.state.players.keys()][i % MAX_PLAYERS]!, life: 1, x: 600, y: 600, vx: 900, vy: 0, born: 0 }));
-  f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id, tick: f.state.tick, x: 700, y: 700, points: 10 }));
+  f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
+    ...(id % 2 ? { type: "hit" as const, points: 0 as const } : { type: "kill" as const, points: 27.5 }) }));
   const encoder = new SnapshotEncoder(), frame = encoder.encode(f.value()).keyframe, decoded = new ServerDecoder().read(frame) as Snapshot;
   expect(decoded.tick).toBe(2 ** 36); expect(decoded.players).toHaveLength(MAX_PLAYERS);
   expect(decoded.bugs).toHaveLength(MAX_BUGS); expect(decoded.shots).toHaveLength(MAX_SHOTS); expect(decoded.events).toHaveLength(MAX_EVENTS);
   expect((decoded.bugs[0] as any).tell).toEqual({ time: 1.123 });
+  expect(decoded.events[0]!.points).toBe(27.5); expect(decoded.bugs[0]!.phase).toBe("windup");
+  expect(decoded.events[1]!).toMatchObject({ type: "hit", points: 0, kind: "dasher" });
   expect(frame.length).toBeLessThan(65536);
 });
 test("seeded full room combat survives hundreds of deltas without losing events or acknowledgements", () => {
@@ -78,8 +84,34 @@ test("seeded full room combat survives hundreds of deltas without losing events 
 });
 test("entity reordering falls back to a keyframe and retains policy observation order", () => {
   const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
-  f.state.bugs = [1, 2].map(id => ({ id, kind: "crawler", x: 500, y: 500, vx: 0, vy: 0 }));
+  f.state.bugs = [1, 2].map(id => createBug("crawler", id, 500, 500));
   decoder.read(encoder.encode(f.value()).keyframe); f.state.tick++; f.state.bugs.reverse();
   const frame = encoder.encode(f.value()); expect(frame.periodic).toBe(true);
   expect((decoder.read(frame.delta) as Snapshot).bugs.map(b => b.id)).toEqual([2, 1]);
+});
+test("dasher committed motion remains valid at every heading and across phase transitions", () => {
+  const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
+  f.state.tick = 1;
+  for (let angle = -Math.PI; angle <= Math.PI; angle += .013) {
+    const bug = { ...createBug("dasher", 1, 1000, 1200), phase: "dash", phaseUntil: 450, facing: angle, vx: Math.cos(angle) * 490, vy: Math.sin(angle) * 490 };
+    f.state.bugs = [bug];
+    const decoded = decoder.read(encoder.encode(f.value()).keyframe) as Snapshot;
+    expect(Math.abs(decoded.bugs[0]!.facing - angle)).toBeLessThanOrEqual(1 / 4096);
+    expect(Math.abs(decoded.bugs[0]!.vx - bug.vx)).toBeLessThanOrEqual(1 / 32);
+  }
+  f.state.tick = 0; f.state.bugs = [{ ...createBug("dasher", 2, 1000, 1200), phase: "windup", phaseUntil: 700 }];
+  const phases = new Set<string>(); decoder.reset();
+  for (let i = 0; i < 65; i++) {
+    if (i === 30) f.state.players.get(f.id)!.x = 2100;
+    stepArena(f.state, new Map()); const value = decoder.read(encoder.encode(f.value()).delta) as Snapshot;
+    phases.add(value.bugs.find(b => b.id === 2)!.phase!);
+  }
+  expect([...phases]).toEqual(expect.arrayContaining(["windup", "dash", "recovery", "approach"]));
+});
+test("optional kind fields can be removed without losing the rest of the snapshot", () => {
+  const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
+  f.state.bugs = [createBug("dasher", 1, 500, 500)]; decoder.read(encoder.encode(f.value()).keyframe);
+  f.state.tick++; f.state.bugs = [createBug("crawler", 1, 500, 500)];
+  const value = decoder.read(encoder.encode(f.value()).delta) as Snapshot;
+  expect(value.bugs[0]!.phaseUntil).toBeUndefined(); expect(value.bugs[0]!.phase).toBeUndefined(); expect(value.bugs[0]!.hp).toBe(1);
 });

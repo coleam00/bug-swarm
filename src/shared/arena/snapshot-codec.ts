@@ -7,9 +7,11 @@ type Field = readonly [string, "n" | "s" | "b", number?];
 const motion: Field[] = [["x","n",8],["y","n",8],["vx","n",16],["vy","n",16]];
 const schemas: Field[][] = [
   [["id","s"],["name","s"],["team","s"],...motion,["facing","n",1024],["status","s"],["downedUntil","n",1000],["reviveMs","n",1000],["reviving","b"],["life","n"],["hits","n"],["heat","n",1000],["overheatUntil","n",1000],["nextShotAt","n",1000],["immuneUntil","n",1000],["spawnProtectedUntil","n",1000],["streak","n"],["points","n"],["score","n"],["kills","n"],["startedTick","n"],["touch","b"],["ackSeq","n"],["result","s"],["__extra","s"]],
-  [["id","n"],["kind","s"],...motion,["__extra","s"]],
+  // Keep the frequently changing fields in the low mask bits. Facing uses
+  // finer precision so quantized motion satisfies the existing kind validators.
+  [["id","n"],...motion,["facing","n",2048],["hp","n"],["kind","s"],["phase","s"],["phaseUntil","n"],["__extra","s"]],
   [["id","n"],["owner","s"],["life","n"],...motion,["born","n",1000],["__extra","s"]],
-  [["id","n"],["tick","n"],["x","n",8],["y","n",8],["points","n"],["__extra","s"]],
+  [["id","n"],["tick","n"],["x","n",8],["y","n",8],["points","n",1000],["kind","s"],["type","s"],["__extra","s"]],
 ];
 const groups = ["players","bugs","shots","events"] as const;
 const caps = [MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS];
@@ -20,7 +22,9 @@ class Writer {
   private buffer = new Uint8Array(SERVER_MESSAGE_BYTES);
   private view = new DataView(this.buffer.buffer);
   length = 0;
-  reset() { this.length = 0; }
+  private strings = new Map<string, number>();
+  reset() { this.length = 0; this.strings.clear(); }
+  seedStrings(values: Cell[][]) { this.strings.clear(); for (const row of values) this.strings.set(row[0] as string, this.strings.size); }
   byte(value: number) { if (this.length >= this.buffer.length) throw Error("Snapshot exceeds wire limit"); this.buffer[this.length++] = value; }
   // Sign-magnitude varints: six low bits plus sign, then seven bits per byte.
   // Arithmetic (not bitwise shifts) preserves all 53 safe integer bits.
@@ -32,17 +36,22 @@ class Writer {
   }
   text(value: string | null) {
     if (value === null) { this.signed(0); return; }
+    const ref = this.strings.get(value); if (ref !== undefined) { this.signed(-ref - 1); return; }
     const bytes = encoder.encode(value); this.signed(bytes.length + 1); for (const b of bytes) this.byte(b);
+    this.strings.set(value, this.strings.size);
   }
-  number(value: number, previous: Cell, scale: number) {
+  number(value: Cell, previous: Cell, scale: number) {
+    if (value === null) { this.signed(-MAX); return; }
+    if (typeof value !== "number") throw Error("Invalid numeric cell");
     const difference = Math.round((value - (typeof previous === "number" ? previous : 0)) * scale);
-    if (Number.isSafeInteger(difference) && difference !== MAX && Math.abs((typeof previous === "number" ? previous : 0) + difference / scale - value) < 1e-7) this.signed(difference);
+    if (Number.isSafeInteger(difference) && Math.abs(difference) !== MAX && Math.abs((typeof previous === "number" ? previous : 0) + difference / scale - value) < 1e-7) this.signed(difference);
     else { this.signed(MAX); if (this.length + 8 > this.buffer.length) throw Error("Snapshot exceeds wire limit"); this.view.setFloat64(this.length, value, true); this.length += 8; }
   }
   finish() { return this.buffer.slice(0, this.length); } // transport owns an immutable copy
 }
 class Reader {
   private index = 0; private view: DataView;
+  private strings: string[] = [];
   constructor(private bytes: Uint8Array) { if (!bytes.length || bytes.length > SERVER_MESSAGE_BYTES) throw Error("Invalid frame size"); this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); }
   byte() { if (this.index >= this.bytes.length) throw Error("Truncated frame"); return this.bytes[this.index++]!; }
   signed() {
@@ -51,9 +60,18 @@ class Reader {
     return first % 128 >= 64 ? -value : value;
   }
   unsigned(cap = MAX) { const n = this.signed(); if (n < 0 || n > cap) throw Error("Invalid count/reference"); return n; }
-  text() { const size = this.unsigned(SERVER_MESSAGE_BYTES + 1); if (!size) return null; if (this.index + size - 1 > this.bytes.length) throw Error("Truncated text"); const text = decoder.decode(this.bytes.subarray(this.index, this.index + size - 1)); this.index += size - 1; return text; }
+  seedStrings(values: Cell[][]) { this.strings = values.map(row => { if (typeof row[0] !== "string") throw Error("Invalid player reference"); return row[0]; }); }
+  text() {
+    const size = this.signed();
+    if (size < 0) { const value = this.strings[-size - 1]; if (value === undefined) throw Error("Invalid string reference"); return value; }
+    if (!size) return null;
+    if (size > SERVER_MESSAGE_BYTES + 1 || this.index + size - 1 > this.bytes.length) throw Error("Truncated text");
+    const text = decoder.decode(this.bytes.subarray(this.index, this.index + size - 1)); this.index += size - 1;
+    if (this.strings.length >= 2048) throw Error("Too many strings"); this.strings.push(text); return text;
+  }
   number(previous: Cell, scale: number) {
     const difference = this.signed();
+    if (difference === -MAX) return null;
     if (difference === MAX) { if (this.index + 8 > this.bytes.length) throw Error("Truncated number"); const n = this.view.getFloat64(this.index, true); this.index += 8; if (!Number.isFinite(n)) throw Error("Invalid number"); return n; }
     const value = (typeof previous === "number" ? previous : 0) + difference / scale;
     return Math.abs(value) <= MAX / scale ? Math.round(value * scale) / scale : value;
@@ -106,11 +124,12 @@ function writeFrame(writer: Writer, current: State, previous?: State) {
       writer.signed(ref); writer.signed(mask);
       for (let f = 0; f < schema.length; f++) if (Math.floor(mask / 2 ** f) % 2) {
         const [, type, scale = 1] = schema[f]!, value = row[f]!;
-        if (type === "n") writer.number(value as number, base[f] ?? null, scale);
+        if (type === "n") writer.number(value, base[f] ?? null, scale);
         else if (type === "s") writer.text(value as string | null);
         else writer.byte(value ? 1 : 0);
       }
     }
+    if (g === 0) writer.seedStrings(rows);
   }
   return writer.finish();
 }
@@ -179,6 +198,7 @@ export class ServerDecoder {
       const rows = old.flatMap((row, i) => removed.has(i) ? [] : [updated.get(i) ?? row]).concat(births);
       if (rows.length > cap || new Set(rows.map(row => row[0])).size !== rows.length) throw Error("Invalid entity population");
       current.groups.push(rows);
+      if (g === 0) r.seedStrings(rows);
     }
     r.done();
     const value = snapshot(current, this.names); this.state = current; this.names = new Set(value.players.map(p => p.name)); return value;
