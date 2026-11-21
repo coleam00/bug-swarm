@@ -43,3 +43,7 @@ The look never costs frames: 60 fps with a full arena (20 players, 150 bugs, the
 
 ## Current release
 See `PRD.md`.
+
+## Acceptance validation
+
+On every pull request, the factory product checker runs `bun run playtest -- --issue <current-item-number>`, inspects its JSON report and screenshots, and reports the result. Every change to arena gameplay, networking or UI also runs its relevant named scenarios and attaches the report to the PR. This real-browser multiplayer check is separate from `bun run check`; a failure is a failed product check. An explicit boss skip is expected while no boss exists.

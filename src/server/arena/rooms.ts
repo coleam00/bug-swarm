@@ -19,7 +19,9 @@ export interface Connection {
 }
 type Sizes = Record<"all" | "keyframe" | "delta" | "json", TickMetrics>;
 export interface Room { id: string; state: ArenaState; members: Set<Connection>; timer: ReturnType<typeof setInterval>; metrics: TickMetrics; lateness: TickMetrics; nextTickAt: number; codec: SnapshotEncoder; sizes: Sizes }
-interface Options {
+export interface RoomOptions {
+  observe?: (snapshot: Snapshot) => void;
+  life?: (record: LifeRecord, arenaId: string, player: import("../../shared/arena/types").CombatPlayer) => void;
   wallNow?: () => number; invalidate?: () => void;
   now?: () => number; seed?: () => number; id?: () => string;
   schedule?: (callback: () => void, ms: number) => ReturnType<typeof setInterval>;
@@ -44,7 +46,7 @@ export class RoomManager {
   private wallNow; readonly writer: LifeWriter;
   // Retain closed-room samples until their window expires, without retaining players/sockets.
   private metrics = new Map<string, { tick: TickMetrics; lateness: TickMetrics; sizes: Sizes; closedAt?: number }>();
-  constructor(private db: Database, readonly buildId: string, options: Options = {}) {
+  constructor(private db: Database, readonly buildId: string, private options: RoomOptions = {}) {
     this.wallNow = options.wallNow ?? Date.now; this.writer = new LifeWriter(db, options.invalidate);
     this.now = options.now ?? (() => performance.now()); this.schedule = options.schedule ?? ((fn: () => void, ms: number) => setInterval(fn, ms)); this.cancel = options.cancel ?? clearInterval;
     this.startedAt = this.now();
@@ -130,6 +132,7 @@ export class RoomManager {
   }
   private broadcast(room: Room) {
     const snapshot = this.snapshot(room), hasCompact = [...room.members].some(c => c.compact);
+    this.options.observe?.(snapshot);
     const encoded = hasCompact ? room.codec.encode(snapshot) : undefined;
     const payload = [...room.members].some(c => !c.compact) ? serializeSnapshot(snapshot) : undefined; const now = this.now();
     for (const c of room.members) {
@@ -146,10 +149,10 @@ export class RoomManager {
       }
     }
   }
-  tick(room: Room) {
+  tick(room: Room, measure = true) {
     if (this.stopped) return;
     const start = this.now(); const inputs = new Map<string, Input>();
-    room.lateness.add(Math.max(0, start - room.nextTickAt)); room.nextTickAt = start + STEP_MS;
+    if (measure) room.lateness.add(Math.max(0, start - room.nextTickAt)); room.nextTickAt = start + STEP_MS;
     for (const c of room.members) {
       if (c.pending) { c.held = c.pending; c.ackSeq = c.pending.seq; c.pending = undefined; }
       if (start - c.freshAt >= INPUT_STALE_MS) c.held = { ...neutralInput(), aim: c.held.aim };
@@ -160,16 +163,18 @@ export class RoomManager {
       c.pending = undefined; c.held = neutralInput();
     }
     for (const result of room.state.ended) { const c = this.active.get(result.playerId); if (c) this.finishLife(c, result); }
-    this.broadcast(room); room.metrics.add(this.now() - start);
+    this.broadcast(room); if (measure) room.metrics.add(this.now() - start);
   }
   private startLife(c: Connection) {
     const p = c.room!.state.players.get(c.id!)!;
     c.record = { runId: crypto.randomUUID(), playerId: c.storedId!, team: p.team, started: this.wallNow() };
+    this.options.life?.(c.record, c.room!.id, p);
     this.writer.enqueue({ ...c.record }, saved => { if (!saved) this.drops.add(this.now(), "saveErrors"); });
   }
   private finishLife(c: Connection, result: LifeResult, reason: EndReason = "death") {
     if (!c.record || c.record.result) return;
     c.record = { ...c.record, result: { ...result }, ended: this.wallNow(), reason };
+    this.options.life?.(c.record, c.room!.id, c.room!.state.players.get(c.id!)!);
     c.result = { v: 1, type: "life_over", ...result, save: "pending", reason };
     // Terminal messages are independent of cosmetic snapshot backpressure.
     if (!c.closed) this.sendTerminal(c, c.result);
