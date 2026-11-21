@@ -12,6 +12,38 @@ import type { Paint } from "../test-support/canvas-fixture.test-support";
 import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
 
+test("hive has cached pulsing art, authoritative health, edge arrow, minimap diamond and delayed awards/banner", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
+    const boss = createBug("hive", 1, 1200, 1200), authoritative = { ...boss, hp: 660 };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], events: [] };
+    for (const [width, height] of [[1280, 720], [390, 844], [844, 390]] as const) {
+      c.paints.length = 0;
+      renderer.draw(width, height, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, 1000, 1, snapshot, 4900);
+      const label = c.paints.find(p => p.op === "fillText" && p.args[0] === "HIVE  660 / 1320"); expect(label).toBeDefined();
+      const bar = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#d9f278")!;
+      expect(bar.args[2]).toBe((width - 32) / 2); expect(bar.transform).toEqual([1, 0, 0, 1, 0, 0]);
+      expect(c.paints.some(p => p.op === "fillText" && p.args[0] === "Hive")).toBe(true);
+      const map = c.paints.find(p => p.op === "strokeRect" && p.strokeStyle === "#66849baa")!; expect(map.args[1]).toBe(94);
+      expect(c.paints.some(p => p.op === "fill" && p.fillStyle === "#eaff8c" && p.path.filter(q => q.op === "lineTo").length === 4)).toBe(true);
+    }
+    boss.x = boss.y = 300;
+    const draw = (now: number) => { c.paints.length = 0; renderer.draw(800, 600, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, now, 1, snapshot, now); return [...c.paints]; };
+    const early = draw(0), cached = fixture.created, late = draw(280); expect(fixture.created).toBe(cached);
+    const glow = (paints: Paint[]) => paints.find(p => p.op === "drawImage" && p.args.length === 5)!;
+    expect(glow(early).args[3]).not.toBe(glow(late).args[3]);
+    renderer.events([{ id: 2, type: "kill", kind: "hive", tick: 100, x: 300, y: 300, points: 0, rewards: [{ playerId: p.id, life: 1, amount: 350, x: p.x, y: p.y }] }], 1000);
+    expect(draw(999).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(false);
+    const killed = draw(1100); expect(killed.filter(p => p.op === "fillText" && p.args[0] === "+350")).toHaveLength(1);
+    expect(killed.some(p => p.op === "fillText" && p.args[0] === "+0")).toBe(false);
+    expect(killed.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+    renderer.reset(); expect(draw(1200).some(p => p.op === "fillText" && ["Hive down!", "+350"].includes(String(p.args[0])))).toBe(false);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
 test("spitter swells on the combat clock; green globs have a larger core, cached glow, trail and distinct +5", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });

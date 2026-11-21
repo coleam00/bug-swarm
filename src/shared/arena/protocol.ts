@@ -1,4 +1,4 @@
-import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS } from "./constants";
+import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS, HIVE_GLOB_SPEED, HIVE_RING_COUNT, HIVE_REWARD_BASE, HIVE_REWARD_POOL } from "./constants";
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
 import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS } from "./constants";
@@ -79,7 +79,7 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
     for (const e of entities) {
       if (!object(e) || !integer(e.id) || entityIds.has(e.id) || ![e.x, e.y, e.vx, e.vy].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT || Math.hypot(e.vx, e.vy) > speed + 0.1) return null;
       if (entities === v.bugs) {
-        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
+        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || e.kind !== "hive" && e.maxHp !== undefined || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
       } else {
         if (!finite(e.born) || e.born < 0 || e.born > v.tick * STEP_MS) return null;
         // The wire may reference the owner by its index in this full snapshot.
@@ -88,17 +88,34 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
           if (e.owner >= v.players.length) return null;
           e.owner = v.players[e.owner].id;
         }
-        if (entities === v.globs ? e.born + GLOB_LIFETIME_MS <= v.tick * STEP_MS || Math.abs(Math.hypot(e.vx, e.vy) - GLOB_SPEED) > 0.1 : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life) return null;
+        if (entities === v.globs ? e.source !== undefined && e.source !== "hive" || e.born + GLOB_LIFETIME_MS <= v.tick * STEP_MS || Math.abs(Math.hypot(e.vx, e.vy) - (e.source === "hive" ? HIVE_GLOB_SPEED : GLOB_SPEED)) > 0.1 : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life) return null;
       }
       entityIds.add(e.id);
     }
   }
   if (v.bugs.filter((b: Bug) => b.kind === "spitter").length > MAX_SPITTERS) return null;
+  if (v.bugs.filter((b: Bug) => b.kind === "hive").length > 1 || v.globs.filter((g: Glob) => g.source === "hive").length > HIVE_RING_COUNT || v.globs.filter((g: Glob) => g.source === undefined).length > MAX_SPITTERS) return null;
   if (!Array.isArray(v.events) || v.events.length > MAX_EVENTS) return null;
   const events = new Set<number>();
-  for (const e of v.events) {
+  let hiveKills = 0;
+  for (let index = 0; index < v.events.length; index++) {
+    let e = v.events[index];
+    // JSON rows: id, tick, x, y, type, kind (null for pop), points, optional rewards.
+    if (Array.isArray(e)) {
+      if (e.length < 7 || e.length > 8) return null;
+      e = v.events[index] = { id: e[0], tick: e[1], x: e[2], y: e[3], type: e[4], ...(e[5] === null ? {} : { kind: e[5] }), points: e[6], ...(e.length === 8 ? { rewards: e[7] } : {}) };
+    }
     if (!object(e) || !integer(e.id) || events.has(e.id) || entityIds.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT) return null;
     if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
+    if (e.type === "kill" && e.kind === "hive") {
+      if (++hiveKills > 1 || !Array.isArray(e.rewards) || e.rewards.length < 1 || e.rewards.length > MAX_PLAYERS) return null;
+      const recipients = new Set<string>(); let total = 0;
+      for (const r of e.rewards) {
+        if (!object(r) || !ids.has(r.playerId) || recipients.has(r.playerId) || !integer(r.life) || r.life < 1 || r.life !== v.players.find((p: RecordValue) => p.id === r.playerId)?.life || !integer(r.amount) || r.amount < HIVE_REWARD_BASE || r.amount > HIVE_REWARD_BASE + HIVE_REWARD_POOL || ![r.x, r.y].every(finite) || r.x < 0 || r.x > WORLD_WIDTH || r.y < 0 || r.y > WORLD_HEIGHT) return null;
+        recipients.add(r.playerId); total += r.amount;
+      }
+      if (total !== HIVE_REWARD_POOL + HIVE_REWARD_BASE * recipients.size) return null;
+    } else if (e.rewards !== undefined) return null;
     events.add(e.id);
   }
   return v as Snapshot;
@@ -107,5 +124,6 @@ function validResult(v: unknown) { return object(v) && v.v === VERSION && v.type
 /** Quantize the wire only. The authoritative simulation keeps full precision. */
 export function serializeSnapshot(snapshot: Snapshot): string {
   const owners = new Map(snapshot.players.map((p, i) => [p.id, i]));
-  return JSON.stringify(snapshot, (key, value) => key === "owner" ? owners.get(value) ?? value : typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
+  const events = snapshot.events.map(e => [e.id, e.tick, e.x, e.y, e.type, e.kind ?? null, e.points, ...("rewards" in e && e.rewards ? [e.rewards] : [])]);
+  return JSON.stringify({ ...snapshot, events }, (key, value) => key === "owner" ? owners.get(value) ?? value : typeof value === "number" && !Number.isInteger(value) ? Math.round(value * 1000) / 1000 : value);
 }

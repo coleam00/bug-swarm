@@ -87,7 +87,7 @@ test("maximum supported collections, extension payloads and large ticks round tr
   for (let i = 0; i < MAX_PLAYERS; i++) { const id = crypto.randomUUID(); f.state.players.set(id, { id, name: "Pilot" + i, team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: Math.PI, ...lifeDefaults() }); }
   f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ ...createBug(id < 12 ? "spitter" : "dasher", id, 500, 500), phase: id < 12 ? "swell" : "windup", phaseUntil: f.state.tick * 50 + (id < 12 ? 500 : 700), tell: { time: 1.123456 } }));
   f.state.shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: [...f.state.players.keys()][i % MAX_PLAYERS]!, life: 1, x: 600, y: 600, vx: 900, vy: 0, born: 0 }));
-  f.state.globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 500 + i, x: 600, y: 600, vx: Math.cos(i) * 320, vy: Math.sin(i) * 320, born: f.state.tick * 50 - 50 }));
+  f.state.globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 500 + i, x: 600, y: 600, vx: Math.cos(i) * (i < 12 ? 320 : 180), vy: Math.sin(i) * (i < 12 ? 320 : 180), ...(i < 12 ? {} : { source: "hive" as const }), born: f.state.tick * 50 - 50 }));
   f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id: 1000 + id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
     ...(id % 2 ? { type: "hit" as const, points: 0 as const } : { type: "kill" as const, points: 27.5 }) }));
   const encoder = new SnapshotEncoder(), frame = encoder.encode(f.value()).keyframe, decoded = new ServerDecoder().read(frame) as Snapshot;

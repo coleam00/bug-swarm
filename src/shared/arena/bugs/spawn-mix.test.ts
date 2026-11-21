@@ -16,20 +16,21 @@ test("wave shares unlock at three, rise to one quarter at eight, and solo kind c
 
 test("spitters unlock at four, keep exactly one eighth share, and transfer capped share to crawlers", () => {
   for (const wave of [3, 4, 8, 1000]) {
-    const counts = { crawler: 0, dasher: 0, spitter: 0 };
+    const counts = { crawler: 0, dasher: 0, spitter: 0, hive: 0 };
     for (let i = 0; i < 2400; i++) counts[spawnKind(wave, () => (i + 0.5) / 2400)]++;
     expect(counts.spitter).toBe(wave < 4 ? 0 : 300); expect(counts.dasher / 2400).toBeCloseTo(dasherShare(wave));
+    expect(counts.hive).toBe(0);
     expect(spawnKind(wave, () => 0.999, false)).toBe("dasher");
   }
   const a = createArena(78), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!; a.wave = 4; a.tick = 2000;
   for (let i = 0; i < 12; i++) a.bugs.push(createBug("spitter", a.nextId++, 100, 100, a.tick * 50));
-  for (let i = 0; i < 138; i++) expect(spawnBug(a, p)).toBe(true);
-  expect(a.bugs.filter(b => b.kind === "spitter")).toHaveLength(12); expect(a.bugs).toHaveLength(150); expect(spawnBug(a, p)).toBe(false);
+  for (let i = 0; i < 137; i++) expect(spawnBug(a, p)).toBe(true);
+  expect(a.bugs.filter(b => b.kind === "spitter")).toHaveLength(12); expect(a.bugs).toHaveLength(149); expect(spawnBug(a, p)).toBe(false);
 });
 test("seeded production spawning initializes registered kinds without changing placement", () => {
   const run = (wave: number) => {
     const a = createArena(71), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!; a.wave = wave;
-    for (let i = 0; i < 150; i++) expect(spawnBug(a, p)).toBe(true);
+    for (let i = 0; i < 149; i++) expect(spawnBug(a, p)).toBe(true);
     return a.bugs;
   };
   expect(run(2).every(b => b.kind === "crawler")).toBe(true);

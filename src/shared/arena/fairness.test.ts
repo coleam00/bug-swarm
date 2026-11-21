@@ -81,9 +81,14 @@ test("integrated requests follow life age independently of wave or arena age, wi
   for (const arenaAge of [0, 480]) {
     const a = createArena(4); a.tick = arenaAge * 20; a.wave = arenaAge / 30;
     const p = joinPlayer(a, identity())!; p.x = p.y = 1200;
+    let ordinaryBirths = 0;
     for (const [seconds, expected, remainder] of [[60, 130, 0.5], [120, 408, 0], [240, 1068, 0], [300, 1428, 0]]) {
-      while (a.tick < (arenaAge + seconds!) * 20) { a.bugs.length = 0; stepArena(a, new Map()); }
-      expect(a.nextId - 1).toBe(expected!); expect(a.spawnCredits.get(p.id)).toBeCloseTo(remainder!);
+      while (a.tick < (arenaAge + seconds!) * 20) {
+        // Isolate ordinary pressure from the separately scheduled encounter.
+        a.bugs.length = 0; a.hive = undefined; stepArena(a, new Map());
+        ordinaryBirths += a.bugs.filter(b => b.kind !== "hive").length;
+      }
+      expect(ordinaryBirths).toBe(expected!); expect(a.spawnCredits.get(p.id)).toBeCloseTo(remainder!);
     }
     expect(a.wave).toBe(arenaAge / 30 + 10);
   }
@@ -102,9 +107,9 @@ test("capacity consumes requests without debt and rotates successful allocation 
   const a = createArena(2);
   for (let i = 0; i < 20; i++) { const p = joinPlayer(a, identity(String(i)))!; p.x = p.y = 1200; }
   for (let round = 0; round < 40; round++) {
-    a.bugs = Array.from({ length: MAX_BUGS - 1 }, (_, i) => bug(10000 + i, 0, 0));
+    a.bugs = Array.from({ length: MAX_BUGS - 2 }, (_, i) => bug(10000 + i, 0, 0));
     for (const p of a.players.values()) a.spawnCredits.set(p.id, 0.999);
-    stepArena(a, new Map()); expect(a.bugs).toHaveLength(MAX_BUGS); expect(a.spawnCursor).toBe(round % 20);
+    stepArena(a, new Map()); expect(a.bugs).toHaveLength(MAX_BUGS - 1); expect(a.spawnCursor).toBe(round % 20);
     for (const credit of a.spawnCredits.values()) expect(credit).toBeLessThan(1);
   }
   a.bugs.length = 0; stepArena(a, new Map()); expect(a.bugs).toHaveLength(0);
@@ -114,7 +119,7 @@ test("bug births favour outer regions within the source annulus, in bounds and o
   const a = createArena(22), p = joinPlayer(a, identity())!, q = joinPlayer(a, identity("q"))!;
   p.x = p.y = 450; q.x = 1600; q.y = 1200;
   for (let i = 0; i < 150; i++) spawnBug(a, p);
-  expect(a.bugs).toHaveLength(150);
+  expect(a.bugs).toHaveLength(149);
   let outer = 0;
   for (const b of a.bugs) {
     const distance = Math.hypot(b.x - p.x, b.y - p.y);

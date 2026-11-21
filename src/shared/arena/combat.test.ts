@@ -139,7 +139,7 @@ test("waves start at first step and every 30s without spawn bursts; personal req
   a.tick = 599; a.spawnCredits.set(p.id, 0); stepArena(a, new Map()); expect(a.wave).toBe(1); expect(a.bugs).toHaveLength(0);
   stepArena(a, new Map()); expect(a.wave).toBe(2); expect(a.bugs).toHaveLength(0);
   a.spawnCredits.set(p.id, 0.99); stepArena(a, new Map()); expect(a.bugs).toHaveLength(1);
-  a.bugs = []; for (let i = 0; i < 151; i++) spawnBug(a, p); expect(a.bugs).toHaveLength(MAX_BUGS);
+  a.bugs = []; for (let i = 0; i < 151; i++) spawnBug(a, p); expect(a.bugs).toHaveLength(MAX_BUGS - 1);
   expect(a.bugs.every(b => Math.hypot(b.x - p.x, b.y - p.y) >= 600 - 1e-8)).toBe(true);
   const safe = safeSpawn(a); expect(Number.isFinite(safe.x)).toBe(true);
   endLife(a, p.id); a.tick = 1200; a.bugs = []; stepArena(a, new Map());

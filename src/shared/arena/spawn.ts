@@ -33,7 +33,8 @@ export function pushBugsFromSpawn(state: ArenaState, point: { x: number; y: numb
   }
 }
 export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
-  if (state.bugs.length >= MAX_BUGS || source.status !== "active") return false;
+  // Reserve the scheduled boss's slot even before it arrives.
+  if (state.bugs.length >= MAX_BUGS - (state.hive ? 0 : 1) || source.status !== "active") return false;
   // Prefer outer candidates within the source annulus, leaving interior openings for drop-ins.
   let bestX = 0, bestY = 0, bestDistance = -1;
   for (let i = 0; i < 224; i++) {

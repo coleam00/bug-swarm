@@ -63,9 +63,25 @@ export const GLOB_SPEED = 320;
 export const GLOB_LIFETIME_MS = 2000;
 export const GLOB_MUZZLE_OFFSET = 28;
 export const GLOB_POINTS = 5;
-// Lifetime < cadence AND first-shot delay: live globs have distinct sources
-// that were alive two seconds ago, even when dead spitters are replaced.
-export const MAX_GLOBS = MAX_SPITTERS;
+// Spitter lifetime < cadence AND first-shot delay: their live globs have
+// distinct sources, including replacements. The hive adds one twelve-glob ring;
+// its six-second initial/repeat delay prevents overlapping hive rings.
+export const HIVE_RING_COUNT = 12;
+export const HIVE_BROOD_COUNT = 3;
+export const MAX_GLOBS = MAX_SPITTERS + HIVE_RING_COUNT;
+export const HIVE_RADIUS = 48;
+export const HIVE_BASE_HEALTH = 120;
+export const HIVE_PLAYER_HEALTH = 60;
+export const HIVE_MAX_HEALTH = HIVE_BASE_HEALTH + HIVE_PLAYER_HEALTH * MAX_PLAYERS;
+export const HIVE_SPEED = 80;
+export const HIVE_GROUP_RADIUS = 300;
+export const HIVE_CLEARANCE = 600;
+export const HIVE_ARRIVAL_MS = 2000;
+export const HIVE_BROOD_MS = 4000;
+export const HIVE_RING_MS = 6000;
+export const HIVE_GLOB_SPEED = 180;
+export const HIVE_REWARD_POOL = 300;
+export const HIVE_REWARD_BASE = 50;
 export const PLAYER_HITS = 3;
 export const IMMUNITY_MS = 1000;
 export const DOWNED_MS = 10000;

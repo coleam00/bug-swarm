@@ -13,7 +13,7 @@ function fixture() {
     cancel: timer => { cancelled++; callbacks.delete(timer); } });
   const join = (id = crypto.randomUUID(), name = "Robot", team = "tabs") => {
     const messages: any[] = []; let buffered = 0, closed = false;
-    const transport: Transport = { send: raw => messages.push(JSON.parse(String(raw))), close: () => { closed = true; }, getBufferedAmount: () => buffered };
+    const transport: Transport = { send: raw => messages.push(parseServer(String(raw))), close: () => { closed = true; }, getBufferedAmount: () => buffered };
     const c = manager.open(transport);
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name, team, touch: false, buildId: "test" }));
     return { c, messages, buffer: (n: number) => { buffered = n; }, closed: () => closed };
