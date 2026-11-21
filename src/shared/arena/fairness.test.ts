@@ -73,7 +73,7 @@ test("only an emitted shot ends spawn protection, before the same step's contact
 });
 
 test("personal rate knots interpolate and clamp", () => {
-  for (const [seconds, rate] of [[-3, 0.1], [0, 0.1], [30, 2.05], [60, 4], [90, 4.5], [120, 5], [180, 5.5], [240, 6], [900, 6]])
+  for (const [seconds, rate] of [[-3, 0.1], [0, 0.1], [30, 2.175], [60, 4.25], [90, 4.625], [120, 5], [180, 5.5], [240, 6], [900, 6]])
     expect(threatRate(seconds!)).toBeCloseTo(rate!);
 });
 
@@ -81,9 +81,9 @@ test("integrated requests follow life age independently of wave or arena age, wi
   for (const arenaAge of [0, 480]) {
     const a = createArena(4); a.tick = arenaAge * 20; a.wave = arenaAge / 30;
     const p = joinPlayer(a, identity())!; p.x = p.y = 1200;
-    for (const [seconds, expected] of [[60, 123], [120, 393], [240, 1053], [300, 1413]]) {
+    for (const [seconds, expected, remainder] of [[60, 130, 0.5], [120, 408, 0], [240, 1068, 0], [300, 1428, 0]]) {
       while (a.tick < (arenaAge + seconds!) * 20) { a.bugs.length = 0; stepArena(a, new Map()); }
-      expect(a.nextId - 1).toBe(expected!); expect(a.spawnCredits.get(p.id)).toBeCloseTo(0);
+      expect(a.nextId - 1).toBe(expected!); expect(a.spawnCredits.get(p.id)).toBeCloseTo(remainder!);
     }
     expect(a.wave).toBe(arenaAge / 30 + 10);
   }

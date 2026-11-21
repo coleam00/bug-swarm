@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { openDb, hideName, startRun } from "../db";
+import { openDb, hideName, startRun, countEvents, getRun, teamTotals } from "../db";
 import { RoomManager, type Transport } from "./rooms";
 import { parseServer } from "../../shared/arena/protocol";
+import { downPlayer } from "../../shared/arena/revive";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
@@ -17,6 +18,52 @@ function fixture() {
   };
   return { db, manager, join, at: (n: number) => { now = n; }, cancelled: () => cancelled, async close() { await manager.stop(); db.close(); } };
 }
+
+test("down/revive retains one run, clears held controls, rejects respawn and persists cross-team reward", async () => {
+  const f = fixture(); try {
+    const victim = f.join(), rescuer = f.join(crypto.randomUUID(), "Rescuer", "spaces"), room = victim.c.room!;
+    const p = room.state.players.get(victim.c.id!)!, q = room.state.players.get(rescuer.c.id!)!;
+    Object.assign(p, { x: 1200, y: 1200, score: 37, points: 370, streak: 7 }); Object.assign(q, { x: 1200, y: 1200 });
+    const run = victim.c.record!.runId;
+    victim.c.held.fire = true; downPlayer(room.state, p); f.manager.tick(room);
+    expect(victim.c.held.fire).toBe(false); expect(victim.c.pending).toBeUndefined();
+    f.manager.message(victim.c, JSON.stringify({ v: 1, type: "respawn", life: 1, touch: false }));
+    f.manager.message(victim.c, JSON.stringify({ v: 1, type: "input", life: 1, seq: 1, touch: false, move: { x: 1, y: 0 }, aim: 0, fire: true }));
+    expect(victim.c.pending).toBeUndefined(); expect(p.life).toBe(1);
+    f.manager.writer.flush(); expect(countEvents(f.db)).toMatchObject({ run_started: 2, run_ended: 0 });
+    for (let i = 0; i < 39; i++) f.manager.tick(room);
+    expect(p.status).toBe("active"); expect(p.score).toBe(37); expect(p.streak).toBe(7); expect(q.score).toBe(50);
+    expect(victim.c.record!.runId).toBe(run); expect(victim.messages.some(m => m.type === "life_over")).toBe(false);
+    f.manager.writer.flush(); expect(countEvents(f.db).run_ended).toBe(0);
+    f.manager.leave(rescuer.c); f.manager.writer.flush();
+    expect(getRun(f.db, rescuer.c.record!.runId)).toMatchObject({ score: 50, team: "spaces", squashes: 0 });
+    expect(teamTotals(f.db)).toEqual({ tabs: 0, spaces: 50 });
+  } finally { await f.close(); }
+});
+
+test.each(["disconnect", "moderation", "stall", "shutdown"])("downed %s finalizes once through the writer", async reason => {
+  const f = fixture(); try {
+    const { c, buffer, closed } = f.join(), room = c.room!, p = room.state.players.get(c.id!)!;
+    p.score = 37; downPlayer(room.state, p);
+    if (reason === "disconnect") f.manager.leave(c);
+    if (reason === "moderation") { hideName(f.db, p.name, 0); f.manager.refreshHidden(); }
+    if (reason === "stall") { buffer(1); f.manager.tick(room); f.at(5000); f.manager.tick(room); }
+    if (reason === "shutdown") await f.manager.stop();
+    // Observe the trigger before cleanup can evict or finish the life for it.
+    expect(c.closed).toBe(true);
+    if (reason !== "disconnect") expect(closed()).toBe(true);
+    expect(f.manager.active.has(p.id)).toBe(false); expect(f.manager.connections.has(c)).toBe(false);
+    expect(room.members.has(c)).toBe(false); expect(room.state.players.has(p.id)).toBe(false);
+    expect(f.manager.rooms.has(room.id)).toBe(false); expect(c.room).toBeUndefined();
+    f.manager.writer.flush();
+    expect(countEvents(f.db)).toMatchObject({ run_started: 1, run_ended: 1 });
+    const saved = getRun(f.db, c.record!.runId);
+    expect(saved).toMatchObject({ score: 37, end_reason: reason === "shutdown" ? "restart" : "disconnect" });
+    f.manager.leave(c); await f.manager.stop();
+    expect(countEvents(f.db)).toMatchObject({ run_started: 1, run_ended: 1 });
+    expect(getRun(f.db, c.record!.runId)).toEqual(saved);
+  } finally { await f.close(); }
+});
 test("rooms pack fullest first, 21st opens a new arena, departures dispose empty timers", async () => {
   const f = fixture(); try {
     const players = Array.from({ length: 21 }, () => f.join()); expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([20, 1]);

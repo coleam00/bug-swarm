@@ -62,7 +62,7 @@ export async function runBots(options: BotOptions, signal?: AbortSignal) {
           timers.push(setInterval(() => {
             if (socket.readyState !== WebSocket.OPEN) return;
             const p = snapshot?.players.find(p => p.id === playerId); if (!p || !snapshot) return;
-            if (!p.hits) { if (respawned !== p.life) { socket.send(JSON.stringify({ v: 1, type: "respawn", life: p.life, touch: false })); sent++; respawned = p.life; } return; }
+            if (p.status === "out") { if (respawned !== p.life) { socket.send(JSON.stringify({ v: 1, type: "respawn", life: p.life, touch: false })); sent++; respawned = p.life; } return; }
             const message: InputMessage = { v: 1, type: "input", seq: ++seq, life: p.life, touch: false, ...policyInput(options.policy ?? "aimer", snapshot, p, policy) };
             socket.send(JSON.stringify(message)); sent++;
           }, STEP_MS));

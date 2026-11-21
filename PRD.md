@@ -28,7 +28,7 @@ Release 1 was a single-player survival game where the robot fired on its own: yo
 ## Invariants
 
 - Opening the link to playing: under 10 seconds on a first visit, under 2 on a return visit.
-- The server simulation is authoritative. Clients send only inputs (move direction, aim direction, fire held, revive intent). Scores, hits and kills are decided by the server.
+- The server simulation is authoritative. Clients send only inputs (move direction, aim direction, fire held). Scores, hits and kills are decided by the server.
 - Each arena holds at most 20 players; a full arena sends new players to another arena. One server process (one Railway instance) handles at least 200 connected players across arenas with a server tick under 10 ms at p95, measured by the bot load test.
 - Clients render at 60 fps with a full arena on a mid-range laptop and phone (desktop Chrome with device emulation counts as evidence).
 - 20 Hz server ticks; clients interpolate other entities and predict their own movement so controls feel immediate on a 100 ms connection.

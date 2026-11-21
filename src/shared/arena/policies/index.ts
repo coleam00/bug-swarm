@@ -1,9 +1,9 @@
-import { HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH } from "../constants";
+import { HEAT_CAPACITY, SHOT_LIFETIME_MS, SHOT_SPEED, WORLD_HEIGHT, WORLD_WIDTH, REVIVE_RADIUS, PLAYER_SPEED, STEP_MS } from "../constants";
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
-import type { Bug, Input, Player } from "../types";
+import type { Bug, Input, Player, Life } from "../types";
 export type Policy = "mover" | "aimer";
-export interface Observation { players: readonly Player[]; bugs: readonly Bug[] }
+export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[] }
 export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
@@ -13,10 +13,23 @@ export function intercept(dx: number, dy: number, vx: number, vy: number): numbe
   const t1 = (-b - Math.sqrt(d)) / (2 * a), t2 = (-b + Math.sqrt(d)) / (2 * a);
   const t = Math.min(t1 > 0 ? t1 : Infinity, t2 > 0 ? t2 : Infinity); return Number.isFinite(t) ? t : null;
 }
-export function policyInput(policy: Policy, observation: Observation, p: Player & { heat?: number }, state: PolicyState): Input {
+export function policyInput(policy: Policy, observation: Observation, p: Player & { heat?: number; status: Life["status"] }, state: PolicyState): Input {
+  if (p.status !== "active") return { move: { x: 0, y: 0 }, aim: p.facing, fire: false };
   let x = 0, y = 0, aim = p.facing, fire = policy === "mover";
   let nearest: Bug | undefined, distance = Infinity;
   for (const b of observation.bugs) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < distance || d === distance && b.id < nearest!.id) { nearest = b; distance = d; } }
+  if (policy === "aimer" && distance > 200) {
+    let target: Observation["players"][number] | undefined, closest = 450;
+    for (const q of observation.players) {
+      if (q.id === p.id || q.status !== "downed") continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < closest || d === closest && (!target || q.id < target.id)) { target = q; closest = d; }
+    }
+    if (target) {
+      const strength = closest > REVIVE_RADIUS ? Math.min(1, (closest - REVIVE_RADIUS + 1) / (PLAYER_SPEED * STEP_MS / 1000)) : 0;
+      return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
+    }
+  }
   if (policy === "mover" || !nearest) {
     if (state.steps++ % 90 === 0 || Math.hypot(state.x - p.x, state.y - p.y) < 80) {
       state.random = nextRandom(state.random); state.x = 150 + state.random / 4294967296 * (WORLD_WIDTH - 300);

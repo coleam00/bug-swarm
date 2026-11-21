@@ -35,6 +35,19 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
     events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 30 })) };
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  // Downed/out owners cancel their shots, while other owners can still fill
+  // their per-player projectile bounds. Check every population split.
+  for (const status of ["downed", "out"] as const) for (let count = 1; count <= MAX_PLAYERS; count++) {
+    const split = structuredClone(snapshot);
+    for (const p of split.players.slice(0, count)) {
+      p.status = status; p.hits = 0;
+      if (status === "downed") { p.downedUntil = split.tick * STEP_MS + 10000; p.reviveMs = 1950; p.reviving = true; }
+      else p.result = { v: 1, type: "life_over", playerId: p.id, life: p.life, score: p.score, kills: p.kills, seconds: 9999999.999, touch: false, save: "pending", reason: "restart" };
+    }
+    split.shots = split.shots.filter(s => split.players.find(p => p.id === s.owner)!.status === "active");
+    const wire = serializeSnapshot(split);
+    expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+  }
   const corrupt = JSON.parse(raw); corrupt.players[0].result = null; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
   for (const value of [undefined, -1, "2000", null]) {
     const corrupt = JSON.parse(raw); corrupt.players[0].spawnProtectedUntil = value; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
@@ -51,6 +64,21 @@ test("UTF-8 cap measures bytes: 1024 accepted, 1025 dropped, malformed and unkno
   expect(parseClient("{", r => reasons.push(r))).toBeNull();
   expect(parseClient(JSON.stringify({ ...input, v: 2 }), r => reasons.push(r))).toBeNull();
   expect(reasons).toEqual(["oversized", "malformed", "unknown"]);
+});
+
+test("snapshot life states require consistent health, deadlines, progress and terminal results", () => {
+  const arena = createArena(1), p = joinPlayer(arena, { id: hello.playerId, name: "Robot", team: "tabs" })!;
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 100, wave: 1, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], events: [] };
+  const downed = { ...snapshot.players[0]!, status: "downed" as const, hits: 0, downedUntil: 15000, reviveMs: 1950, reviving: true };
+  snapshot.players = [downed]; expect(parseServer(serializeSnapshot(snapshot))).not.toBeNull();
+  for (const patch of [{ status: undefined }, { status: "dead" }, { hits: 1 }, { downedUntil: 5000 }, { downedUntil: 15001 }, { downedUntil: null },
+    { reviveMs: -1 }, { reviveMs: 2000 }, { reviveMs: null }, { reviving: 1 }, { reviving: undefined }, { vx: 1 },
+    { status: "active", hits: 1 }, { status: "out" },
+    { result: { v: 1, type: "life_over", playerId: p.id, life: 1, score: 0, kills: 0, seconds: 5, touch: false, save: "pending" } }]) {
+    snapshot.players = [{ ...downed, ...patch } as typeof downed]; expect(parseServer(serializeSnapshot(snapshot))).toBeNull();
+  }
+  snapshot.players = [{ ...downed, status: "out", reviveMs: 0, downedUntil: 0, reviving: false }];
+  expect(parseServer(serializeSnapshot(snapshot))).not.toBeNull();
 });
 test("reject unsafe/nonfinite/schema inputs, binary and future types; name refusals reach hello handler", () => {
   for (const value of [{ ...input, seq: 0 }, { ...input, seq: Number.MAX_SAFE_INTEGER + 1 }, { ...input, aim: null }, { ...input, fire: 1 },

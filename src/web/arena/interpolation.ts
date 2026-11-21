@@ -5,10 +5,16 @@ export class Interpolation {
   private samples: { snapshot: Snapshot; at: number }[] = [];
   private combatTick = -Infinity;
   private lastEvent = 0;
-  clear() { this.samples = []; this.combatTick = -Infinity; this.lastEvent = 0; }
+  private playerTransitions = new Map<string, number>();
+  clear() { this.samples = []; this.combatTick = -Infinity; this.lastEvent = 0; this.playerTransitions.clear(); }
   push(snapshot: Snapshot, at: number) {
     const last = this.samples.at(-1);
     if (last && snapshot.tick < last.snapshot.tick) return;
+    for (const p of snapshot.players) {
+      const previous = last?.snapshot.players.find(q => q.id === p.id);
+      if (!previous || previous.life !== p.life || previous.status !== p.status) this.playerTransitions.set(p.id, snapshot.tick);
+    }
+    for (const id of this.playerTransitions.keys()) if (!snapshot.players.some(p => p.id === id)) this.playerTransitions.delete(id);
     if (last?.snapshot.tick === snapshot.tick) this.samples.pop();
     this.samples.push({ snapshot, at }); if (this.samples.length > MAX_SNAPSHOTS) this.samples.shift();
   }
@@ -21,7 +27,7 @@ export class Interpolation {
     // Latest membership removes departed players immediately. New joins never blend from another entity.
     return latest.snapshot.players.map(current => {
       const p = a.snapshot.players.find(p => p.id === current.id), q = b.snapshot.players.find(p => p.id === current.id);
-      if (!p || !q || p.life !== q.life || current.life !== p.life || !current.hits) return current;
+      if (!p || !q || p.life !== q.life || current.life !== p.life || current.status !== "active" || p.status !== current.status || q.status !== current.status || a.snapshot.tick < this.playerTransitions.get(current.id)!) return current;
       return { ...current, x: p.x + (q.x - p.x) * fraction, y: p.y + (q.y - p.y) * fraction,
         facing: p.facing + Math.atan2(Math.sin(q.facing - p.facing), Math.cos(q.facing - p.facing)) * fraction };
     });

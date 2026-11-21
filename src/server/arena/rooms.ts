@@ -72,7 +72,7 @@ export class RoomManager {
     if (message.type === "input") {
       if (!c.room) { this.dropped.handshake++; return; }
       const p = c.room.state.players.get(c.id!)!;
-      if (!p.hits || message.life !== p.life) return;
+      if (p.status !== "active" || message.life !== p.life) return;
       if (message.seq <= c.lastSeq) { this.dropped.sequence++; return; }
       p.touch ||= message.touch;
       c.lastSeq = message.seq; c.pending = message; c.freshAt = this.now(); return;
@@ -127,6 +127,9 @@ export class RoomManager {
       inputs.set(c.id!, c.held);
     }
     stepArena(room.state, inputs);
+    for (const c of room.members) if (room.state.players.get(c.id!)!.status !== "active") {
+      c.pending = undefined; c.held = neutralInput();
+    }
     for (const result of room.state.ended) { const c = this.active.get(result.playerId); if (c) this.finishLife(c, result); }
     this.broadcast(room); room.metrics.add(this.now() - start);
   }

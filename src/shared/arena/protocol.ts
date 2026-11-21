@@ -1,6 +1,6 @@
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
-import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, CRAWLER_SPEED, HEAT_CAPACITY, PLAYER_SPEED } from "./constants";
+import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, CRAWLER_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS } from "./constants";
 import type { Input, CombatPlayer, Bug, Shot, KillEvent, LifeResult } from "./types";
 export const VERSION = 1;
 export const HIDDEN_IDENTITY_MESSAGE = "That name isn't allowed.";
@@ -58,7 +58,14 @@ export function parseServer(raw: unknown): ServerMessage | null {
       ![p.streak, p.points, p.score, p.kills, p.startedTick].every(integer) ||
       ![p.overheatUntil, p.nextShotAt, p.immuneUntil, p.spawnProtectedUntil, p.streak, p.points, p.score, p.kills, p.startedTick].every(n => finite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER) || typeof p.touch !== "boolean" ||
       Math.hypot(p.vx, p.vy) > PLAYER_SPEED + 0.1 || Math.abs(p.facing) > Math.PI + 0.001 ||
-      (p.result !== undefined && (!validResult(p.result) || p.result.life !== p.life || p.result.playerId !== p.id || p.hits !== 0))) return null;
+      (p.result !== undefined && (!validResult(p.result) || p.result.life !== p.life || p.result.playerId !== p.id || p.status !== "out"))) return null;
+    if (!["active", "downed", "out"].includes(p.status) || typeof p.reviving !== "boolean" ||
+      !finite(p.downedUntil) || p.downedUntil < 0 || p.downedUntil > Number.MAX_SAFE_INTEGER ||
+      !finite(p.reviveMs) || p.reviveMs < 0 || p.reviveMs >= REVIVE_MS ||
+      (p.status === "active" ? p.hits < 1 : p.hits !== 0) ||
+      (p.status === "downed" ? p.downedUntil <= v.tick * STEP_MS || p.downedUntil > v.tick * STEP_MS + DOWNED_MS :
+        p.downedUntil !== 0 || p.reviveMs !== 0 || p.reviving) ||
+      (p.status !== "active" && (p.vx !== 0 || p.vy !== 0))) return null;
     ids.add(p.id);
   }
   const entityIds = new Set<number>();

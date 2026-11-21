@@ -21,7 +21,7 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   }
   return { id, socket, messages, wait };
 }
-test("real combat transport: travelling hit, remote score, terminal save and exactly one fresh respawn", async () => {
+test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-combat-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
   const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
@@ -36,6 +36,18 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     const read = async (path: string) => (await fetch(origin + path)).json();
     expect(await read("/api/leaderboard")).toEqual([]); expect(await read("/api/teams")).toEqual({ tabs: 0, spaces: 0 });
     p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 1000, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
+    await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.status === "downed"));
+    const runId = app.arenas.active.get(a.id)!.record!.runId, rescuer = room.state.players.get(b.id)!;
+    expect(a.messages.some(m => m.type === "life_over")).toBe(false);
+    Object.assign(rescuer, { x: p.x, y: p.y }); room.state.bugs = [];
+    for (let i = 0; i < 40; i++) app.arenas.tick(room);
+    await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.status === "active" && p.hits === 1 && p.score === 11));
+    await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === b.id && p.score === 50));
+    expect(app.arenas.active.get(a.id)!.record!.runId).toBe(runId); expect(p.life).toBe(1); expect(p.streak).toBe(1);
+    p.immuneUntil = 0; room.state.bugs = [{ id: 1001, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 }];
+    app.arenas.tick(room); expect(p.status).toBe("downed");
+    rescuer.x = rescuer.y = 1800;
+    for (let i = 0; i < 200; i++) app.arenas.tick(room);
     expect(await a.wait(m => m.type === "life_over" && m.save === "saved")).toMatchObject({ score: 11, kills: 1, life: 1 });
     expect(await read("/api/leaderboard")).toContainEqual({ playerId: a.id, name: "bot-1", score: 11 });
     expect(await read("/api/teams")).toEqual({ tabs: 11, spaces: 0 });
@@ -46,6 +58,7 @@ test("real combat transport: travelling hit, remote score, terminal save and exa
     await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.hits === 3));
     expect(p.score).toBe(0); expect(p.touch).toBe(true);
     await app.arenas.stop();
+    expect((app.db.query("SELECT score, team FROM runs WHERE player_id = ?").get(b.id) as any)).toEqual({ score: 50, team: "spaces" });
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL").get(a.id) as any).n).toBe(2);
     expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(3);
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }

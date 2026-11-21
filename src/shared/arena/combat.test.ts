@@ -76,17 +76,18 @@ test("held stream reaches 18th shot, locks for 1.5s, cools during lockout and re
   fireAndAdvance(a, new Map(), 4350); expect(p.heat).toBeCloseTo(9.7);
   fireAndAdvance(a, fire, 10000); expect(a.nextId).toBe(id + 2);
 });
-test("crawler targets nearest living player with stable ties; contact persists, immunity gates three-hit death", () => {
+test("crawler targets nearest living player with stable ties; contact persists, immunity gates three-hit downing and timeout", () => {
   const { a, p } = fixture(), q = joinPlayer(a, { id: "b", name: "Other", team: "tabs" })!;
   q.x = 1400; q.y = 1200; const b = bug(4, 1300); crawler.move(b, [q, p]); expect(b.vx).toBe(-CRAWLER_SPEED);
   // Farther "a" must not override nearer "b" simply because its id sorts first.
   p.x = 900; crawler.move(b, [q, p]); expect(b.vx).toBe(CRAWLER_SPEED); expect(b.vy).toBe(0); p.x = 1200;
-  p.hits = 0; crawler.move(b, [p, q]); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3;
+  p.status = "downed"; p.hits = 0; crawler.move(b, [p, q]); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3; p.status = "active";
   a.tick = 21; p.immuneUntil = 0; p.spawnProtectedUntil = 0; a.bugs = [bug(5, 1200), bug(6, 1200)];
   stepArena(a, new Map()); expect(p.hits).toBe(2); expect(a.bugs).toHaveLength(2); expect(p.score).toBe(0);
   for (let i = 0; i < 19; i++) stepArena(a, new Map()); expect(p.hits).toBe(2);
   stepArena(a, new Map()); expect(p.hits).toBe(1);
-  for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(p.hits).toBe(0); expect(a.ended).toHaveLength(1);
+  for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(p.hits).toBe(0); expect(p).toMatchObject({ status: "downed" }); expect(a.ended).toHaveLength(0);
+  for (let i = 0; i < 200; i++) stepArena(a, new Map()); expect(a.ended).toHaveLength(1);
   expect(a.ended[0]!.seconds).toBe((a.tick - p.startedTick) * STEP_MS / 1000);
   expect(endLife(a, p.id)).toBeNull(); expect(respawnPlayer(a, p.id, 9)).toBeNull();
   const death = { x: p.x, y: p.y }, old = p.life;
@@ -107,11 +108,11 @@ test("waves start at first step and every 30s without spawn bursts; personal req
   endLife(a, p.id); a.tick = 1200; a.bugs = []; stepArena(a, new Map());
   expect(a.wave).toBe(3); expect(a.bugs).toHaveLength(0); expect(a.spawnCredits.has(p.id)).toBe(false);
 });
-test("kills precede contact; terminal scores freeze and cancel shots while dead inputs do nothing", () => {
+test("kills precede contact; downing preserves earned score and cancels shots while inactive inputs do nothing", () => {
   const { a, p } = fixture(); a.tick = 21; p.immuneUntil = 0; p.hits = 1;
   a.bugs = [bug(1, 1225), bug(2, 1200)];
   stepArena(a, new Map([[p.id, { ...neutralInput(), fire: true }]]));
-  expect(p.score).toBe(11); expect(p.hits).toBe(0); expect(a.shots).toHaveLength(0); expect(a.ended[0]!.score).toBe(11);
+  expect(p.score).toBe(11); expect(p.hits).toBe(0); expect(a.shots).toHaveLength(0); expect(p).toMatchObject({ status: "downed" }); expect(p.streak).toBe(1); expect(a.ended).toHaveLength(0);
   const x = p.x; stepArena(a, new Map([[p.id, { move: { x: 1, y: 0 }, aim: 2, fire: true }]]));
   expect(p.x).toBe(x); expect(p.score).toBe(11); expect(a.ended).toHaveLength(0); expect(a.shots).toHaveLength(0);
 });
@@ -119,7 +120,7 @@ test("separate life credits do not pool fractional requests; exhausted spawn pla
   const a = createArena(3);
   for (let i = 0; i < 4; i++) joinPlayer(a, { id: String(i), name: `bot-${i}`, team: "tabs" });
   a.tick = 1; for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(a.bugs).toHaveLength(0);
-  for (const credit of a.spawnCredits.values()) expect(credit).toBeCloseTo(0.13575);
+  for (const credit of a.spawnCredits.values()) expect(credit).toBeCloseTo(0.1380416667);
   const full = createArena(1);
   for (let i = 0; i < 20; i++) { const p = joinPlayer(full, { id: String(i), name: `bot-${i}`, team: "tabs" })!; p.x = 240 + i % 5 * 480; p.y = 300 + Math.floor(i / 5) * 600; }
   expect(spawnBug(full, full.players.get("0")!)).toBe(false); expect(full.bugs).toHaveLength(0);

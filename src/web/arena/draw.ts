@@ -1,13 +1,14 @@
-import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS } from "../../shared/arena/constants";
+import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS, DOWNED_MS, REVIVE_MS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
 import type { Player, CombatPlayer, Bug, Shot, KillEvent } from "../../shared/arena/types";
 import type { ArenaInput } from "./input";
+import { helpArrow } from "./help-arrow";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, at: -Infinity }));
-  private burstIndex = 0; private lastEvent = 0; private time = 0;
+  private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
   reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
   events(events: KillEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
   private floor: CanvasPattern | null;
@@ -27,7 +28,9 @@ export class ArenaRenderer {
   }
   draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null) {
     this.time = tick * STEP_MS;
+    this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
+    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT);
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -47,6 +50,10 @@ export class ArenaRenderer {
       c.strokeStyle = "#ffc26055"; c.lineWidth = 9; c.beginPath(); c.moveTo(s.x - dx, s.y - dy); c.lineTo(s.x, s.y); c.stroke();
       c.strokeStyle = "#fff6c8"; c.lineWidth = 3; c.stroke();
     }
+    // Robots and their names remain readable where the corner map overlaps
+    // world feedback at a boundary; the map still overlays the swarm/floor.
+    c.restore(); drawMinimap(c, map, WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs);
+    c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y);
     for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
@@ -56,6 +63,15 @@ export class ArenaRenderer {
       c.fillStyle = "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); c.globalAlpha = 1;
     }
     c.restore();
+    for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
+      const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height, map.y + map.height + 24);
+      if (!arrow) continue;
+      c.save(); c.globalAlpha = 0.75 + Math.sin(now / 180) * 0.25;
+      c.fillStyle = "#ffe09a"; c.translate(arrow.x, arrow.y); c.rotate(arrow.angle);
+      c.beginPath(); c.moveTo(12, 0); c.lineTo(-8, -8); c.lineTo(-8, 8); c.lineTo(12, 0); c.fill(); c.restore();
+      c.textAlign = "center"; c.font = "bold 16px system-ui"; c.fillStyle = "#ffe09a";
+      c.fillText("Help", arrow.x, arrow.y + 26);
+    }
     if (local && "life" in local) {
       const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
       const population = snapshot?.players.length ?? players.length;
@@ -70,20 +86,34 @@ export class ArenaRenderer {
       c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
     }
-    drawMinimap(c, minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT), WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs);
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
       c.strokeStyle = "#ffffff55"; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, 60, 0, Math.PI * 2); c.stroke();
       c.fillStyle = "#ffffff66"; c.beginPath(); c.arc(s.x + s.dx * scale, s.y + s.dy * scale, 22, 0, Math.PI * 2); c.fill();
     }
-
+    if (local && "life" in local) {
+      const p = local as CombatPlayer;
+      if (p.status === "downed") {
+        c.font = "bold 16px system-ui";
+        const message = "Downed — a teammate can revive you", wide = c.measureText(message).width <= width - 32;
+        const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale, preferredY = map.y + map.height + 8;
+        // Keep the entire name/rings/Help clear, including at the top wall.
+        const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
+        c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
+        c.textAlign = "center"; c.fillStyle = "#ffe09a";
+        if (wide) c.fillText(message, width / 2, panelY + 20);
+        else { c.fillText("Downed — a teammate", width / 2, panelY + 20); c.fillText("can revive you", width / 2, panelY + 42); }
+        c.fillText(`${Math.ceil(Math.max(0, p.downedUntil - this.time) / 1000)}s`, width / 2, panelY + (wide ? 42 : 64));
+      }
+    }
   }
 
   private robot(p: Player, local: boolean, camera: { x: number; y: number }, width: number, height: number) {
-    const combat = p as CombatPlayer; if (combat.hits === 0) return;
+    const combat = p as CombatPlayer; if (combat.status === "out") return;
     if (p.x < camera.x - 70 || p.x > camera.x + width + 70 || p.y < camera.y - 70 || p.y > camera.y + height + 70) return;
     const c = this.ctx, colour = TEAM_COLOURS[p.team], r = PLAYER_RADIUS;
-    if (combat.immuneUntil > this.time && Math.floor(this.time / 100) % 2) c.globalAlpha = 0.4;
+    const downed = combat.status === "downed";
+    if (downed || combat.immuneUntil > this.time && Math.floor(this.time / 100) % 2) c.globalAlpha = 0.4;
     c.drawImage(this.glows.get(p.team)!, p.x - 50, p.y - 50);
     if (combat.spawnProtectedUntil > this.time) {
       c.strokeStyle = "#b8efff"; c.lineWidth = 2; c.beginPath();
@@ -94,6 +124,7 @@ export class ArenaRenderer {
     }
     if (local) { c.strokeStyle = "#fff0bd"; c.lineWidth = 2.5; c.beginPath(); c.arc(p.x, p.y, r + 8, 0, Math.PI * 2); c.stroke(); }
     c.save(); c.translate(p.x, p.y); c.rotate(p.facing);
+    if (downed) { c.rotate(Math.PI / 3); c.scale(1, 0.45); }
     c.fillStyle = colour; c.fillRect(8, -4, 17, 8);
     c.fillStyle = "#142536"; c.strokeStyle = colour; c.lineWidth = 2;
     c.beginPath(); c.roundRect(-r, -r, r * 2, r * 2, 7); c.fill(); c.stroke();
@@ -111,8 +142,17 @@ export class ArenaRenderer {
       l.strokeStyle = "#060b12"; l.lineWidth = 4; l.strokeText(p.name, label.width / 2, 20); l.fillStyle = colour; l.fillText(p.name, label.width / 2, 20);
       this.labels.set(p.id, label);
     }
-    c.drawImage(label, p.x - label.width / 2, p.y - 54);
     c.globalAlpha = 1;
+    c.drawImage(label, p.x - label.width / 2, p.y - 54);
+    if (downed) {
+      c.strokeStyle = "#ffe09a"; c.lineWidth = 3; c.beginPath();
+      c.arc(p.x, p.y, r + 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, combat.downedUntil - this.time) / DOWNED_MS); c.stroke();
+      c.strokeStyle = combat.reviving ? "#7be7ca" : "#7be7ca88"; c.lineWidth = combat.reviving ? 5 : 3; c.beginPath();
+      c.arc(p.x, p.y, r + 19, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * combat.reviveMs / REVIVE_MS); c.stroke();
+      c.globalAlpha = 0.75 + Math.sin(this.animationTime / 180) * 0.25;
+      c.textAlign = "center"; c.font = "bold 18px system-ui"; c.fillStyle = "#ffe09a"; c.fillText("Help", p.x, p.y + 60); c.globalAlpha = 1;
+      return;
+    }
     if (combat.heat !== undefined) {
       const lock = combat.overheatUntil > this.time, warning = combat.heat / HEAT_CAPACITY >= HEAT_WARNING;
       c.fillStyle = "#030810"; c.fillRect(p.x - 20, p.y + 25, 40, 6);

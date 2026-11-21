@@ -11,8 +11,8 @@ export function circleEntry(x: number, y: number, dx: number, dy: number, radius
 export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, Input>, time: number) {
   const end = time + STEP_MS;
   for (const p of state.players.values()) {
-    if (!p.hits) continue;
-    const firing = inputs.get(p.id)?.fire ?? false;
+    if (p.status === "out") continue;
+    const firing = p.status === "active" && (inputs.get(p.id)?.fire ?? false);
     if (!firing) {
       p.heat = Math.max(0, p.heat - HEAT_COOLING * STEP_MS / 1000);
       // Release may discard overdue fire, but cannot shorten a shot's cooldown.
@@ -31,7 +31,7 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
   }
   let count = 0;
   for (const s of state.shots) {
-    const owner = state.players.get(s.owner); if (!owner?.hits || owner.life !== s.life) continue;
+    const owner = state.players.get(s.owner); if (owner?.status !== "active" || owner.life !== s.life) continue;
     const from = Math.max(time, s.born), to = Math.min(end, s.born + SHOT_LIFETIME_MS), dt = Math.max(0, to - from) / 1000;
     let boundary = dt;
     if (s.vx > 0) boundary = Math.min(boundary, (WORLD_WIDTH - s.x) / s.vx); else if (s.vx < 0) boundary = Math.min(boundary, -s.x / s.vx);
