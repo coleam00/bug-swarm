@@ -1,6 +1,7 @@
 import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS, DOWNED_MS, REVIVE_MS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
-import type { Player, CombatPlayer, Bug, Shot, CombatEvent, BugKind } from "../../shared/arena/types";
+import type { Player, CombatPlayer, Bug, Shot, Glob, CombatEvent, BugKind } from "../../shared/arena/types";
+import { createGlobDraw, GLOB_EXTENT } from "./globs";
 import { BUG_DRAW, createBugDraws, type BugDraw } from "./bugs/registry";
 import type { ArenaInput } from "./input";
 import { helpArrow } from "./help-arrow";
@@ -9,6 +10,7 @@ import { drawMinimap, minimapBounds } from "./minimap";
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bugDraw: Record<BugKind, BugDraw>;
+  private globDraw = createGlobDraw();
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
   reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
@@ -29,7 +31,7 @@ export class ArenaRenderer {
       g.fillStyle = gradient; g.fillRect(0, 0, 100, 100); this.glows.set(team, glow);
     }
   }
-  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS) {
+  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS, globs: Glob[] = []) {
     this.time = tick * STEP_MS;
     this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
@@ -44,6 +46,10 @@ export class ArenaRenderer {
       this.bugDraw[b.kind](c, b, combatTime);
     }
     c.lineCap = "round";
+    for (const g of globs) {
+      if (g.x < camera.x - GLOB_EXTENT || g.x > camera.x + worldWidth + GLOB_EXTENT || g.y < camera.y - GLOB_EXTENT || g.y > camera.y + worldHeight + GLOB_EXTENT) continue;
+      this.globDraw(c, g);
+    }
     for (const s of shots) {
       if (s.x < camera.x - 40 || s.x > camera.x + worldWidth + 40 || s.y < camera.y - 40 || s.y > camera.y + worldHeight + 40) continue;
       const length = Math.hypot(s.vx, s.vy), dx = s.vx / length * 22, dy = s.vy / length * 22;
@@ -58,9 +64,9 @@ export class ArenaRenderer {
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
       const age = now - e.at, duration = e.type === "hit" ? 180 : 700; if (age < 0 || age > duration) continue;
-      c.globalAlpha = 1 - age / duration; c.strokeStyle = "#ffce79"; c.lineWidth = 2;
+      c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = 2;
       c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = 8 + age / 22; c.moveTo(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r); c.lineTo(e.x + Math.cos(a) * (r + 7), e.y + Math.sin(a) * (r + 7)); } c.stroke();
-      if (e.type === "kill") { c.fillStyle = "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
+      if (e.type !== "hit") { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
     }
     c.restore();
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {

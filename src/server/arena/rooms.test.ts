@@ -3,6 +3,7 @@ import { openDb, hideName, startRun, countEvents, getRun, teamTotals } from "../
 import { RoomManager, type Transport } from "./rooms";
 import { parseServer } from "../../shared/arena/protocol";
 import { downPlayer } from "../../shared/arena/revive";
+import { createBug } from "../../shared/arena/bugs/registry";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
@@ -18,6 +19,22 @@ function fixture() {
   };
   return { db, manager, join, at: (n: number) => { now = n; }, cancelled: () => cancelled, async close() { await manager.stop(); db.close(); } };
 }
+
+test("room broadcasts authoritative spitter phase, globs and independent pop scoring identically", async () => {
+  const f = fixture(); try {
+    const a = f.join(), b = f.join(), room = a.c.room!, p = room.state.players.get(a.c.id!)!;
+    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(room.state.players.get(b.c.id!)!, { x: 1800, y: 1800 });
+    const bug = createBug("spitter", room.state.nextId++, 800, 1200); room.state.bugs = [bug];
+    Object.assign(bug, { phase: "swell", phaseUntil: 100 });
+    f.manager.tick(room); expect(a.messages.at(-1).bugs[0].phase).toBe("swell");
+    f.manager.tick(room); const glob = room.state.globs[0]!; expect(glob.born).toBe(100);
+    expect(a.messages.at(-1).globs).toEqual([glob]);
+    expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(parseServer(JSON.stringify(a.messages.at(-1)))).not.toBeNull();
+    room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: p.life, born: 100, x: glob.x + 20, y: glob.y, vx: -900, vy: 0 });
+    f.manager.tick(room); expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(a.messages.at(-1).events[0].type).toBe("glob-pop");
+    expect(p.score).toBe(5); expect(p.kills).toBe(0);
+  } finally { await f.close(); }
+});
 
 test("down/revive retains one run, clears held controls, rejects respawn and persists cross-team reward", async () => {
   const f = fixture(); try {
