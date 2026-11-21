@@ -29,7 +29,25 @@ An additional nineteen-bot cohort filled the arena to twenty players. Chrome's F
 
 ## Checks and reproduction
 
-`bun run check`: **570 passed, zero failed**, 116,535 assertions (44.58 s). `bun run build`: passed. Focused lifecycle, protocol, connection, engine, entry and real-process tests passed. They cover idempotence, multiple rooms, pending starts, dead players, close during drain, rejected joins/respawns, notification ordering, transient and permanent failures, lock release/deadline, repeated signals, exact retry delays, changed-build reload guards, stale sockets, automatic resume and storage fallback. The held-lock subprocess case completed in 4.41 s including startup and assertions, with a failed acknowledgement, logged run ids and exit status 1. Docker and Railway deployment were not run locally.
+Initial implementation: `bun run check` **570 passed, zero failed**, 116,535 assertions (44.58 s). `bun run build`: passed. Focused lifecycle, protocol, connection, engine, entry and real-process tests passed. They cover idempotence, multiple rooms, pending starts, dead players, close during drain, rejected joins/respawns, notification ordering, transient and permanent failures, lock release/deadline, repeated signals, exact retry delays, changed-build reload guards, stale sockets, automatic resume and storage fallback. The held-lock subprocess case completed in 4.41 s including startup and assertions, with a failed acknowledgement, logged run ids and exit status 1. Docker and Railway deployment were not run locally.
+
+### Returned-check fixes
+
+The follow-up adds independent fixture-score and rendered-feedback assertions, a production build-output test with a known commit, successful multi-page rollback coverage, and an actual-engine/server test with a 3.5-second write lock. Targeted mutations that zero restart scores, remove the status element, hard-code the production build id, retain a permanent reload guard, or ignore pending restart results each fail their regression test. Stale-bundle and alternating-build loop protection, old-life filtering, ordinary death/respawn, identity retention, failed-save semantics and exact backoff remain covered.
+
+Final follow-up checks: `bun run check` **573 passed, zero failed**, 116,575 assertions (43.06 s), and `bun run build` passed. Logs are `.evidence/66/fix-check-final.log`, `fix-build-final.log`, `fix-focused.log` and `fix-mutation-*.log`. The noted shutdown-log wording assertion remains unchanged; nearby Promise identity, feedback punctuation and exception-prose assertions were simplified while repairing the findings.
+
+The committed harness was run from `.evidence/66/repro/`, a fresh clone with no preexisting `.evidence` directory after dependency installation. It built commit `302536036120337cb1c64f407a01c92f9cc30562` and comment-only clone commit `f88c856a357050a99e398db34e238b65c4aa66d3`. Raw results are in `.evidence/66/repro/.evidence/66/redeploy-2F08Hk/`; the launch log is `.evidence/66/fix-browser.log`.
+
+| Follow-up scenario | Process exited | Playable again | Automatic navigations | Active lives saved |
+| --- | ---: | ---: | ---: | ---: |
+| Same artifact | 55.4 ms | 3560.9 ms | 0 | 11/11 |
+| Changed commit | 41.1 ms | 607.2 ms | 1 | 11/11 |
+| Rollback | 31.6 ms | 608.4 ms | 1 | 11/11 |
+| Redeploy to visited build | 39.4 ms | 576.9 ms | 1 | 11/11 |
+| SQLite lock held 3.5 s | 3547.2 ms | 4045.9 ms | 0 | 11/11 |
+
+These end-to-end measurements include the harness's post-stop SQL/stats inspection before starting the replacement process; they are not a minimum reconnect latency benchmark. In the delayed case, reconnect feedback appeared 1.2 ms after the signal and the confirmed saved banner at 3535.6 ms, followed by socket closure. The canvas stayed mounted and no death dialog appeared. The delayed stats report counted 58 finished lives, including the three short lives ended by changed-build navigation. Full-room follow-up measured 60.0 FPS, 0.465 ms/frame and 2.213 ms tick p95; portrait, landscape, simultaneous touch, release 1 and browser exception checks passed. All owned processes exited.
 
 From a fresh checkout, install dependencies and run the committed harness:
 
