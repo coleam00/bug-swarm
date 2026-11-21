@@ -7,6 +7,7 @@ import { validateName } from "../../server/rules";
 import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults, type CombatPlayer } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
+import { worldView } from "../../shared/arena/view";
 import type { Paint } from "../game/canvas-fixture.test-support";
 
 test("downed robots remain visible with countdown/progress, local copy and remote edge Help; revival removes them", () => {
@@ -16,14 +17,21 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
     const p = { ...lifeDefaults(), status: "downed" as const, hits: 0, downedUntil: 10000, reviveMs: 1000, reviving: true,
       id: "victim", name: "Victim", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
-    const q = { ...p, id: "remote", x: 1200 };
-    const draw = (local: CombatPlayer, remote = [q], now = 0) => {
+    const q = { ...p, id: "remote", name: "Teammate", team: "spaces" as const, x: 1200 };
+    const draw = (local: CombatPlayer, remote: CombatPlayer[] = [q], now = 0) => {
       fixture.context.paints.length = 0;
       renderer.draw(390, 844, { x: 0, y: 0 }, [local, ...remote], local, input, [], [], 1, 40, now);
       return [...fixture.context.paints];
     };
-    const body = (paints: Paint[]) => paints.find(p => p.op === "stroke" && p.path.some(c => c.op === "roundRect"))!;
-    const marker = (paints: Paint[]) => paints.find(paint => paint.op === "fillText" && paint.args[1] === p.x && Number(paint.args[2]) > p.y)!;
+    const body = (paints: Paint[], target: Pick<CombatPlayer, "x" | "y"> = p) => paints.find(paint => paint.op === "stroke" && paint.path.some(c => c.op === "roundRect") &&
+      paint.transform[4] === target.x && paint.transform[5] === target.y)!;
+    const marker = (paints: Paint[], target: Pick<CombatPlayer, "x" | "y"> = p) => paints.find(paint => paint.op === "fillText" && paint.args[1] === target.x && Number(paint.args[2]) > target.y)!;
+    const ringsAt = (paints: Paint[], target: Pick<CombatPlayer, "x" | "y"> = p) => paints.filter(paint => paint.op === "stroke").flatMap(paint =>
+      paint.path.filter(c => c.op === "arc" && c.args[0] === target.x && c.args[1] === target.y && c.args[2]! > PLAYER_RADIUS + 8));
+    const aspect = (paint: Paint) => {
+      const [a, b, c, d] = paint.transform as [number, number, number, number];
+      const x = Math.hypot(a, b), y = Math.hypot(c, d); return Math.min(x, y) / Math.max(x, y);
+    };
     const arrows = (paints: Paint[]) => paints.filter(paint => paint.op === "fill" && paint.path[0]?.op === "moveTo" && paint.path.some(c => c.op === "lineTo"));
     const overlay = (paints: Paint[]) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > 390 / 2 &&
       Number(paint.args[1]) > 78 && Number(paint.args[1]) + Number(paint.args[3]) < p.y);
@@ -54,17 +62,85 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     }
     const revived = { ...p, status: "active" as const, hits: 1, downedUntil: 0, reviveMs: 0, reviving: false };
     const active = draw(revived, []), fallenBody = body(paints), activeBody = body(active);
-    const aspect = (paint: Paint) => {
-      const [a, b, c, d] = paint.transform as [number, number, number, number];
-      const x = Math.hypot(a, b), y = Math.hypot(c, d); return Math.min(x, y) / Math.max(x, y);
-    };
     expect(aspect(fallenBody)).toBeLessThan(aspect(activeBody) * 0.75);
     expect(fallenBody.globalAlpha).toBeGreaterThan(0); expect(fallenBody.globalAlpha).toBeLessThan(activeBody.globalAlpha);
     expect(overlay(active)).toBeUndefined(); expect(marker(active)).toBeUndefined(); expect(arrows(active)).toHaveLength(0);
+    // The rescuer's on-screen view needs the same feedback as the victim's.
+    const teammate = { ...q, x: 280 }, teammateAlphas: number[] = [];
+    for (const now of [0, 180, 360, 540]) {
+      const frame = draw(revived, [teammate], now), fallen = body(frame, teammate), help = marker(frame, teammate);
+      expect(fallen).toBeDefined(); expect(help).toBeDefined();
+      expect(aspect(fallen)).toBeLessThan(aspect(activeBody) * 0.75);
+      expect(fallen.globalAlpha).toBeGreaterThan(0); expect(fallen.globalAlpha).toBeLessThan(activeBody.globalAlpha);
+      const rings = ringsAt(frame, teammate); expect(rings).toHaveLength(2);
+      const spans = rings.map(c => c.args[4]! - c.args[3]!);
+      expect(spans.some(span => Math.abs(span - Math.PI) < 1e-8)).toBe(true);
+      expect(spans.some(span => Math.abs(span - Math.PI * 1.6) < 1e-8)).toBe(true);
+      expect(help.globalAlpha).toBeGreaterThan(0); expect(help.globalAlpha).toBeLessThanOrEqual(1);
+      teammateAlphas.push(help.globalAlpha); expect(arrows(frame)).toHaveLength(0); expect(overlay(frame)).toBeUndefined();
+    }
+    expect(Math.max(...teammateAlphas) - Math.min(...teammateAlphas)).toBeGreaterThan(0.1);
+    const teammateRevived = { ...teammate, status: "active" as const, hits: 1, downedUntil: 0, reviveMs: 0, reviving: false };
+    const afterRescue = draw(revived, [teammateRevived]);
+    expect(aspect(body(afterRescue, teammate))).toBeCloseTo(aspect(activeBody));
+    expect(body(afterRescue, teammate).globalAlpha).toBe(activeBody.globalAlpha);
+    expect(marker(afterRescue, teammate)).toBeUndefined(); expect(ringsAt(afterRescue, teammate)).toHaveLength(0);
+    expect(arrows(afterRescue)).toHaveLength(0);
     fixture.context.paints.length = 0;
     const out = { ...p, status: "out" as const };
     renderer.draw(390, 844, { x: 0, y: 0 }, [out], null, input);
     expect(fixture.context.paints.some(p => p.op === "drawImage")).toBe(false);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
+test("downed message leaves the complete name, rescue rings and Help clear at viewport boundaries", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), id: "local", name: "WideWWWWWWWWWWWW", team: "tabs" as const, x: 1200, y: 14,
+      vx: 0, vy: 0, facing: 0, status: "downed" as const, hits: 0, spawnProtectedUntil: 0, downedUntil: 10000, reviveMs: 50, reviving: true };
+    const rect = (paint: Paint, x: number, y: number, width: number, height: number) => {
+      const [a, b, c, d, e, f] = paint.transform as [number, number, number, number, number, number];
+      const xs = [a * x + c * y + e, a * (x + width) + c * y + e, a * x + c * (y + height) + e, a * (x + width) + c * (y + height) + e];
+      const ys = [b * x + d * y + f, b * (x + width) + d * y + f, b * x + d * (y + height) + f, b * (x + width) + d * (y + height) + f];
+      return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+    };
+    for (const [width, height] of [[390, 844], [844, 390], [1280, 800]]) {
+      const view = worldView(width!, height!);
+      for (const [x, y] of [[1200, 14], [14, 14], [2386, 14], [2386, 1200], [2386, 2386], [1200, 2386], [14, 2386], [14, 1200], [1200, 1200]]) for (const progress of [50, 1000, 1950]) {
+        Object.assign(p, { x, y, reviveMs: progress }); fixture.context.paints.length = 0;
+        renderer.draw(width!, height!, cameraFor(x!, y!, view.width, view.height), [p], p, input, [], [], 1, 40, 0, view.scale);
+        const paints = fixture.context.paints;
+        const panels = paints.filter(paint => paint.op === "fillRect" && paint.transform[0] === 1 && paint.transform[4] === 0 &&
+          Number(paint.args[2]) > 200 && Number(paint.args[3]) >= 40 && Number(paint.args[3]) < 100);
+        expect(panels).toHaveLength(2);
+        const occupied = panels.map(paint => rect(paint, ...paint.args.map(Number) as [number, number, number, number]));
+        const name = paints.find(paint => paint.op === "drawImage" && fixture.source(paint).paints.some(p => p.op === "fillText"))!;
+        expect(name).toBeDefined();
+        const image = name.args[0] as HTMLCanvasElement;
+        const feedback = [rect(name, Number(name.args[1]), Number(name.args[2]), image.width, image.height)];
+        const rings = paints.filter(paint => paint.op === "stroke" && paint.path.some(c => c.op === "arc" && c.args[0] === x && c.args[1] === y && c.args[2]! > PLAYER_RADIUS + 8));
+        expect(rings).toHaveLength(2);
+        for (const paint of rings) {
+          const arc = paint.path.find(c => c.op === "arc")!, radius = arc.args[2]! + paint.lineWidth / 2;
+          // Reserve the whole circle even for the very first progress segment.
+          feedback.push(rect(paint, x! - radius, y! - radius, radius * 2, radius * 2));
+        }
+        const help = paints.find(paint => paint.op === "fillText" && paint.args[1] === x && Number(paint.args[2]) > y!)!;
+        expect(help).toBeDefined();
+        const textWidth = fixture.context.measureText(String(help.args[0])).width;
+        feedback.push(rect(help, x! - textWidth / 2, Number(help.args[2]) - 18, textWidth, 24));
+        for (const bounds of [...occupied, ...feedback]) {
+          expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(width!);
+          expect(bounds.top).toBeGreaterThanOrEqual(0); expect(bounds.bottom).toBeLessThanOrEqual(height!);
+        }
+        for (const bounds of feedback) for (const panel of occupied)
+          expect(bounds.right <= panel.left || bounds.left >= panel.right || bounds.bottom <= panel.top || bounds.top >= panel.bottom).toBe(true);
+      }
+    }
   } finally {
     if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
   }

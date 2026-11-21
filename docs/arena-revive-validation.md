@@ -62,7 +62,7 @@ Exploration stayed in `.evidence/72/`: minimum drop-in clearances 350/400/450 pr
 
 ## Checks and full skill matrix
 
-- `bun run check`: 611 tests passed, zero failures, including TypeScript checks; `.evidence/72/check-after.log`.
+- `bun run check`: 612 tests passed, zero failures, including TypeScript checks after the returned visual repair; `.evidence/72/boundary-check.log`. The earlier 611-test run remains in `.evidence/72/check-after.log`.
 - `bun run build`: passed; `.evidence/72/build-after.log`.
 - Focused spawn-credit/curve, combat and revive tests: 26 passed; `.evidence/72/pacing-focused.log`. Literal expected rates, integrated requests and fractional credit were updated for the selected knot.
 - Production Chrome/touch/browser/load assertions passed after tuning; `.evidence/72/production-after.log`, `.evidence/72/cli-load-after.log` and the reports above.
@@ -83,3 +83,23 @@ Aimer/mover median score ratio is **8.546x**, above the unchanged 2x requirement
 | eight-minute aimer, eight incumbents | 81.75 -> 116.625 | 17 / 3 | yes |
 
 Both final aimer medians are exact under the existing censoring rules, despite three late lives censored at the common 600-second horizon. Late survival reaches **88.352%**, above **80%**; no horizon extension was needed. Final observations match the exploratory pair exactly. The previously blocking gate is resolved.
+
+## Returned visual repairs
+
+The short downed message now stays above the local robot only when that slot clears the complete name and rescue feedback; otherwise it moves below the Help marker. Positions are calculated in CSS pixels from the existing camera and world scale. Copy, camera behavior, simulation, pacing and controls are unchanged. This adds constant-time arithmetic to the existing downed banner draw, with no extra canvas operations or frame allocations.
+
+The existing renderer test now also uses an active local player and an on-screen downed player from the opposite team. It checks that teammate's flattened pose, dimming, countdown/progress rings and pulsing Help, then checks removal on revival. The prior local-overlay and off-screen arrow cases remain. A separate geometry regression covers all four walls, four corners and the center in portrait, landscape and scaled desktop views, with 50/1,000/1,950 ms revive progress. It reserves each complete ring, including stroke width, rather than only the currently filled arc.
+
+The new layout regression fails against the previous fixed banner position. In isolated source copies, both newly returned mutations (local-only downed rendering and restoring the fixed banner position) fail their intended tests. All eight previous regression mutations still fail, and the wording-only variant passes. Raw mutation output is in `.evidence/72/returned-mutations-pdlGlS/` and `.evidence/72/boundary-mutations.log`. Focused visual checks passed all eight tests; `bun run check` passed 612 tests, and `bun run build` passed (`boundary-focused.log`, `boundary-check.log`, `boundary-build.log`).
+
+Owned local-file Chrome fixtures bundled the production renderer, using `cameraFor`/`worldView` and actual canvas glyph/paint bounds. The preserved pre-fix bundle reproduces the overlap at (1200, 14), 390 x 844, with 50 ms progress: `.evidence/72/boundary-browser-9Xy9eI/before-390x844-north-50.png`. Final Chrome 157.0.8103.51 screenshots and all 84 successful geometry observations are in `.evidence/72/boundary-browser-iL0Nik/`: `after-<width>x<height>-north-<progress>.png`, `<width>x<height>-teammate.png` and `report.json`. The final portrait/landscape captures, including the first progress segment and on-screen teammate, were visually inspected. Every recorded name, complete ring and Help bound stays inside the viewport and clear of the HUD/message. All Chrome processes exited; profiles and scratch files remain inside this checkout.
+
+A bounded renderer fixture additionally includes a downed local robot at the center, 19 downed teammates, 150 bugs, 140 shots and 140 effects. With explicit foreground/background-timer controls, two warm-up seconds and four one-second samples per view:
+
+| View | FPS | Update/draw ms/frame |
+| --- | ---: | ---: |
+| 390 x 844 | 59.0-60.0 | 0.732-0.865 |
+| 844 x 390 | 60.0-60.0 | 0.768-0.782 |
+| 1280 x 800 | 60.0-60.0 | 0.803-0.892 |
+
+Initial local-file fixture runs without those foreground controls varied from 52.1 to 60 FPS, with CPU draw cost at most 1.564 ms; their reports remain under `boundary-browser-TkB8B7/` and `boundary-browser-NrG32n/`. The final controlled report above retains all samples. The earlier live two-browser/touch, server-load and full skill evidence remains applicable to the unchanged gameplay/server code; those long-running scenarios were not repeated for this renderer-only repair.

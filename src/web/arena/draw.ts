@@ -80,11 +80,14 @@ export class ArenaRenderer {
       c.font = "bold 16px system-ui"; c.fillStyle = "#7be7ca"; c.fillText(`×${Math.min(3, 1 + p.streak / 10).toFixed(1)}   ${p.hits} hits left   ${lifeClock(p, tick)}`, 22, 62);
       if (p.status === "downed") {
         const message = "Downed — a teammate can revive you", wide = c.measureText(message).width <= width - 32;
-        c.fillStyle = "#060b12ee"; c.fillRect(8, 82, width - 16, wide ? 52 : 74);
+        const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale;
+        // Keep the entire name/rings/Help clear, including at the top wall.
+        const panelY = robotY - 54 * scale >= 82 + panelHeight + 8 ? 82 : Math.ceil(robotY + 72 * scale);
+        c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
         c.textAlign = "center"; c.fillStyle = "#ffe09a";
-        if (wide) c.fillText(message, width / 2, 102);
-        else { c.fillText("Downed — a teammate", width / 2, 102); c.fillText("can revive you", width / 2, 124); }
-        c.fillText(`${Math.ceil(Math.max(0, p.downedUntil - this.time) / 1000)}s`, width / 2, wide ? 124 : 146);
+        if (wide) c.fillText(message, width / 2, panelY + 20);
+        else { c.fillText("Downed — a teammate", width / 2, panelY + 20); c.fillText("can revive you", width / 2, panelY + 42); }
+        c.fillText(`${Math.ceil(Math.max(0, p.downedUntil - this.time) / 1000)}s`, width / 2, panelY + (wide ? 42 : 64));
       }
     }
   }
