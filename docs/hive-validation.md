@@ -4,7 +4,7 @@ Validated on Windows with Bun 1.4.2 and factory Chrome 157.0.8103.51. Evidence i
 
 ## Rules and bounds
 
-Shipped tuning: radius 48, speed 80 units/s, cluster radius 300, frozen HP `120 + 60 * living players`, three crawlers every four seconds, and twelve 180-unit/s globs every six seconds. Active and downed lives count toward initial HP. Solo kills are allowed. A surviving encounter consumes later fifth-wave triggers. Ordinary spawning reserves one of the shared 150 bug slots; brood consumes available slots without debt. Twelve spitter globs plus twelve hive globs bound the collection at 24.
+Implemented tuning: radius 48, speed 80 units/s, cluster radius 300, frozen HP `120 + 60 * living players`, three crawlers every four seconds, and twelve 180-unit/s globs every six seconds. Active and downed lives count toward initial HP. Solo kills are allowed. A surviving encounter consumes later fifth-wave triggers. Ordinary spawning reserves one of the shared 150 bug slots; brood consumes available slots without debt. Twelve spitter globs plus twelve hive globs bound the collection at 24.
 
 Placement checks every connected player's position. It evaluates clipped Voronoi candidates rather than relying on random sampling. When no point has 600 units of clearance, the best-clearance location receives a two-second harmless arrival warning. A fixed-step test covers the final warning interval and exact 600-unit activation boundary.
 
@@ -63,7 +63,7 @@ Seven full-arena samples per viewport again held **60.0 FPS**. Average update/dr
 
 The repeated **200-aimer / ten-room / 145-second** workload passes all gates: tick p50/p95/max **1.39 / 2.52 / 9.32 ms** over 28,364 ticks; scheduler lateness p95/max **2.47 / 58.94 ms**; maximum player mean output **36.09 KB/s**. Population stayed exactly 200; all connections closed normally, with zero errors or drops. Live globs reached the complete **24-glob bound**, with natural hive rings observed.
 
-The complete combined skill/fairness command is running; its raw results will be recorded before delivery.
+The complete combined `bun run skill` passed with exit code 0: `.evidence/84/skill-merged.json` and its `.exit.json` record retain all 1,300 observations across 65 cohorts. Mover median score **204**, aimer **2,133**, ratio **10.46x**. The full run confirms fresh survival **156.225 seconds** and late survival **at least 540.825 seconds**, or **346.18%** of fresh survival. Every idle cohort passes: minimum with eight incumbents **20.6 seconds** (arena age 105 seconds), and minimum including solo controls **18.625 seconds**. The score, newcomer, idle, frame, tick and bandwidth gates are all preserved. Combined-code GitHub CI passed on both Linux and Windows.
 
 
 The final presentation review found the hive HUD leaving centered text alignment on the canvas, which clipped the FPS prefix of the following F readout. The helper now saves/restores its drawing state; the existing renderer test checks the caller's alignment. The complete check passes again (478 tests / 29,957 assertions), as does production build. `.evidence/84/chrome-6vEJSe/` repeats the controlled boss/ring/kill, arrival/downed and two-point-touch captures with a fully visible active-play F readout. All seven samples per layout remain 60.0 FPS; average draw ranges are 1.012-1.958 ms desktop, 0.943-1.490 ms portrait and 0.872-1.507 ms landscape. This presentation-only correction changes no simulation or transport behavior.
