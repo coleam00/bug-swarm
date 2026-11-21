@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, existsSync, appendFileSync, symlinkSync, realpathSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, existsSync, appendFileSync, symlinkSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
@@ -21,7 +21,7 @@ const chromePath = process.env.CHROME_PATH ?? [
 if (!chromePath || !existsSync(chromePath)) throw Error("Set CHROME_PATH to an installed Chrome executable");
 console.log(`Evidence: ${evidence}`);
 function run(command: string[], cwd = root) {
-  const result = Bun.spawnSync(command, { cwd, env: { ...env, NODE_ENV: "production" }, stdout: "pipe", stderr: "pipe", timeout: 60000 });
+  const result = Bun.spawnSync(command, { cwd, env: { ...env, NODE_ENV: "production" }, windowsVerbatimArguments: command[0] === "cmd.exe", stdout: "pipe", stderr: "pipe", timeout: 60000 });
   assert.equal(result.exitCode, 0, result.stdout.toString() + result.stderr.toString());
   return result.stdout.toString();
 }
@@ -30,7 +30,7 @@ function chromeDirectory(path: string) {
   // Use the same owned directory's existing 8.3 spelling when available.
   if (process.platform !== "win32") return path;
   const short = run(["cmd.exe", "/d", "/c", `for %I in ("${path}") do @echo %~sI`]).trim();
-  assert.equal(realpathSync(short), realpathSync(path));
+  assert.equal(statSync(short).ino, statSync(path).ino);
   return short;
 }
 const browserProfile = chromeDirectory(profile), browserHome = chromeDirectory(home), browserTemp = chromeDirectory(temp);

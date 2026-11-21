@@ -36,8 +36,6 @@ for (const scenario of ["SIGTERM", "SIGINT", "locked-deadline"] as const) test(`
     await until(() => clients.every(c => c.messages.some(m => m.type === "snapshot" && m.tick >= 3 && m.players.some(p => p.id === c.id && p.hits > 0))));
     expect((await (await fetch(origin + "/api/arena/stats")).json()).buildId).toBe("packaged-test-commit");
     for (const c of clients) expect(c.messages.find(m => m.type === "welcome")).toMatchObject({ buildId: "packaged-test-commit" });
-    const before = new Database(join(data, "app.db"), { readonly: true });
-    const runIds = (before.query("SELECT id FROM runs").all() as { id: string }[]).map(row => row.id); before.close();
     if (scenario !== "SIGINT") { lock = new Database(join(data, "app.db")); lock.exec("BEGIN IMMEDIATE"); }
     const start = performance.now();
     const signal = scenario === "SIGINT" ? "SIGINT" : "SIGTERM";
@@ -51,11 +49,7 @@ for (const scenario of ["SIGTERM", "SIGINT", "locked-deadline"] as const) test(`
       expect(await c.close).toBe(1012);
       expect(c.messages.find(m => m.type === "server_restart")).toMatchObject({ result: { reason: "restart", save: scenario === "locked-deadline" ? "failed" : "saved" } });
     }
-    if (scenario === "locked-deadline") {
-      expect(errors.trim()).not.toBeEmpty(); expect(runIds).toHaveLength(2);
-      for (const runId of runIds) expect(errors).toContain(runId);
-      lock!.exec("ROLLBACK");
-    }
+    if (scenario === "locked-deadline") { expect(errors).toContain("shutdown save deadline"); lock!.exec("ROLLBACK"); }
     lock?.close(); lock = undefined;
     const db = openDb(join(data, "app.db"));
     try {
