@@ -17,7 +17,7 @@ export type BugKind = keyof typeof import("./bugs/registry").BUGS;
 export interface Bug { id: number; kind: BugKind; x: number; y: number; vx: number; vy: number; hp: number; facing: number; phase?: string; phaseUntil?: number }
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }
 export type CombatEvent = { id: number; tick: number; x: number; y: number; kind: BugKind } &
-  ({ type: "hit"; points: 0 } | { type: "kill"; points: number });
+  ({ type: "hit" | "bounce"; points: 0 } | { type: "kill"; points: number });
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; players: Map<string, CombatPlayer>; slots: Map<string, number>;
   wave: number; bugs: Bug[]; shots: Shot[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }

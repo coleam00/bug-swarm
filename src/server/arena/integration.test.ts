@@ -6,11 +6,13 @@ import { createServer } from "../server";
 import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
 import { runBots, BotFailure } from "../../../scripts/bots";
 import { createBug } from "../../shared/arena/bugs/registry";
-function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID()) {
+import { ServerDecoder } from "../../shared/arena/snapshot-codec";
+function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID(), binary = false) {
   const socket = new WebSocket(url), messages: ServerMessage[] = [];
   const observers = new Set<() => void>();
-  socket.onopen = () => socket.send(JSON.stringify({ v: 1, type: "hello", playerId: id, name, team: index % 2 ? "tabs" : "spaces", touch: false, buildId: "integration" }));
-  socket.onmessage = event => { const m = parseServer(event.data); if (m) messages.push(m); for (const notify of observers) notify(); };
+  socket.binaryType = "arraybuffer"; const decoder = new ServerDecoder();
+  socket.onopen = () => socket.send(JSON.stringify({ v: 1, type: "hello", playerId: id, name, team: index % 2 ? "tabs" : "spaces", touch: false, buildId: "integration", ...(binary ? { snapshotEncoding: "delta-v1" } : {}) }));
+  socket.onmessage = event => { const m = binary ? decoder.read(event.data) : parseServer(event.data); if (m) messages.push(m); for (const notify of observers) notify(); };
   function wait<T extends ServerMessage>(predicate: (message: ServerMessage) => message is T): Promise<T>;
   function wait(predicate: (message: ServerMessage) => boolean): Promise<ServerMessage>;
   function wait(predicate: (message: ServerMessage) => boolean): Promise<ServerMessage> {
@@ -22,6 +24,26 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   }
   return { id, socket, messages, wait };
 }
+
+test("real JSON and binary clients agree on beetle bounce, damage and lethal score", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "beetle-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2, "Other", undefined, true);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
+    const bug = createBug("beetle", 999, 1200, 1200); room.state.bugs = [bug];
+    Object.assign(p, { x: 1400, y: 1200, streak: 4 });
+    Object.assign(room.state.players.get(b.id)!, { x: 1600, y: 1200 });
+    for (let hit = 0; hit <= 5; hit++) {
+      room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: 1, x: bug.x + (hit ? -24 : 24), y: bug.y, vx: hit ? 900 : -900, vy: 0, born: room.state.tick * 50 });
+      for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.events.some(e => e.kind === "beetle" && e.type === (hit === 0 ? "bounce" : hit === 5 ? "kill" : "hit")) &&
+        (hit === 5 ? !m.bugs.some(b => b.id === 999) : m.bugs.some(b => b.id === 999 && b.hp === 5 - hit)) &&
+        m.players.some(q => q.id === p.id && q.streak === hit && q.score === (hit === 5 ? 90 : 0)));
+    }
+    expect(p.kills).toBe(1);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
 test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-combat-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });

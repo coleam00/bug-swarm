@@ -53,6 +53,6 @@ export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
       if (distance > bestDistance) { bestX = x; bestY = y; bestDistance = distance; }
     }
   }
-  if (bestDistance >= 0) { state.bugs.push(createBug(spawnKind(state.wave, () => random(state)), state.nextId++, bestX, bestY)); return true; }
+  if (bestDistance >= 0) { state.bugs.push(createBug(spawnKind(state.wave, () => random(state), state.bugs), state.nextId++, bestX, bestY)); return true; }
   return false;
 }

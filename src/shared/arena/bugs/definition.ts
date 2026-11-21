@@ -6,7 +6,10 @@ export interface BugDefinition {
   advancePhase?(bug: Bug, time: number): void;
   /** Velocity is locked until phaseUntil in these phases; advancePhase supplies the next interval. */
   committedPhases?: readonly string[];
-  move(bug: Bug, players: Iterable<CombatPlayer>, time: number): void;
+  /** elapsedMs is positive only for the opening movement call of an actual step. */
+  move(bug: Bug, players: Iterable<CombatPlayer>, time: number, elapsedMs?: number): void;
+  /** Unit vector from the bug centre toward the projectile at earliest contact. */
+  blocksShot?(bug: Bug, contactX: number, contactY: number): boolean;
   valid(bug: Bug, time: number): boolean;
 }
 export function nearestPlayer(bug: Bug, players: Iterable<CombatPlayer>) {

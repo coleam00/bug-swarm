@@ -11,6 +11,46 @@ import { worldView } from "../../shared/arena/view";
 import type { Paint } from "../test-support/canvas-fixture.test-support";
 import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
+import { Interpolation } from "./interpolation";
+
+test("beetle plate follows facing, each lost HP cracks once, and pale bounces leave cracks unchanged without a score", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("beetle", 1, 500, 500);
+    b.facing = Math.PI / 2;
+    const draw = (now = 0) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, new ArenaInput(), [b], [], 5, 0, now); return [...fixture.context.paints]; };
+    const cracks = (p: Paint[]) => p.filter(p => p.op === "stroke" && p.strokeStyle === "#38291f").length;
+    const intact = draw(), plate = intact.find(p => p.op === "stroke" && p.strokeStyle === "#fff0a5")!;
+    expect(Math.atan2(plate.transform[1]!, plate.transform[0]!)).toBeCloseTo(b.facing);
+    const arc = plate.path.find(p => p.op === "arc")!; expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
+    for (let hp = 5; hp >= 1; hp--) { b.hp = hp; expect(cracks(draw())).toBe(5 - hp); }
+    const cached = fixture.created, event = { id: 2, tick: 1, kind: "beetle" as const, type: "bounce" as const, x: 500, y: 522, points: 0 as const };
+    renderer.events([event], 0); const spark = draw(50);
+    expect(cracks(spark)).toBe(4); expect(spark.some(p => p.op === "stroke" && p.strokeStyle === "#e9f8ff")).toBe(true);
+    expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    renderer.events([event], 170); expect(draw(181).some(p => p.strokeStyle === "#e9f8ff")).toBe(false);
+    expect(fixture.created).toBe(cached); renderer.reset(); expect(draw().some(p => p.strokeStyle === "#e9f8ff")).toBe(false);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("bounce, HP cracks, facing and removal stay on the delayed combat clock and reset without replay", () => {
+  const view = new Interpolation(), b = createBug("beetle", 1, 500, 500);
+  const shot = { id: 2, owner: "a", life: 1, x: 550, y: 500, vx: -900, vy: 0, born: 0 };
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], events: [] };
+  view.push(structuredClone(s), 0);
+  s.tick = 2; s.shots = []; s.events = [{ id: 3, tick: 2, kind: "beetle", type: "bounce", x: 522, y: 500, points: 0 }];
+  view.push(structuredClone(s), 50);
+  expect(view.combat(149).shots).toHaveLength(1); expect(view.combat(149).events).toHaveLength(0);
+  const bounce = view.combat(150); expect(bounce.shots).toHaveLength(0); expect(bounce.bugs[0]!.hp).toBe(5); expect(bounce.events[0]!.type).toBe("bounce");
+  expect(view.combat(150).events).toHaveLength(0);
+  s.tick = 3; b.hp = 4; b.facing = 0.1; s.events = [{ id: 4, tick: 3, kind: "beetle", type: "hit", x: 500, y: 500, points: 0 }]; view.push(structuredClone(s), 100);
+  expect(view.combat(199).bugs[0]).toMatchObject({ hp: 5, facing: 0 });
+  expect(view.combat(200).bugs[0]).toMatchObject({ hp: 4, facing: 0.1 });
+  s.tick = 4; s.bugs = []; s.events = [{ id: 5, tick: 4, kind: "beetle", type: "kill", x: 500, y: 500, points: 90 }]; view.push(structuredClone(s), 150);
+  expect(view.combat(249).bugs).toHaveLength(1); expect(view.combat(250).bugs).toHaveLength(0);
+  view.clear(); expect(view.combat(1000).events).toHaveLength(0); view.push(s, 1000); expect(view.combat(1100).events[0]!.type).toBe("kill");
+});
 
 test("kind dispatch paints a crouched hot tell along locked facing, keeps offscreen warnings, and sparks without score", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");

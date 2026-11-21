@@ -6,6 +6,40 @@ import { createArena, joinPlayer, stepArena } from "../simulation";
 import { downPlayer } from "../revive";
 const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
 
+test("aimer prefers exposed targets, withholds guarded shots and retains an edge-aware flank side", () => {
+  const b = createBug("beetle", 1, 1100, 1200), exposed = createBug("crawler", 2, 1200, 1400);
+  const state = createPolicy(83), observation = { players: [player], bugs: [b] };
+  const first = policyInput("aimer", observation, player, state);
+  expect(first.fire).toBe(false); expect(state.flankId).toBe(b.id); expect(state.flankSide).toBe(1);
+  policyInput("aimer", observation, player, state); expect(state.flankSide).toBe(1);
+  const input = policyInput("aimer", { ...observation, bugs: [b, exposed] }, player, state);
+  expect(input.fire).toBe(true); expect(input.aim).toBeCloseTo(Math.PI / 2); expect(state.flankId).toBeUndefined();
+  const edge = { ...player, y: 30 }, edgeBug = { ...b, y: 30 };
+  policyInput("aimer", { players: [edge], bugs: [edgeBug] }, edge, state); expect(state.flankSide).toBe(-1);
+  policyInput("aimer", { players: [], bugs: [] }, { ...player, status: "out" }, state); expect(state.flankId).toBeUndefined();
+});
+
+test("solo aimer circles into an exposed angle and kills a turning beetle; a teammate can draw its shell away", () => {
+  for (const teammate of [false, true]) {
+    const a = createArena(83), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;
+    Object.assign(p, { x: 1300, y: 1200 });
+    const b = createBug("beetle", 900, 1200, 1200); a.bugs = [b];
+    if (teammate) {
+      const q = joinPlayer(a, { id: "b", name: "Friend", team: "spaces" })!;
+      Object.assign(q, { x: 1250, y: 1200, immuneUntil: 60000 }); p.x = 1100;
+    }
+    const state = createPolicy(83); let fired = false, survived = true;
+    for (let i = 0; i < 1200 && a.bugs.some(b => b.id === 900); i++) {
+      a.bugs = a.bugs.filter(b => b.id === 900); // Isolate this maneuver from unrelated pressure.
+      a.spawnCredits.clear();
+      const input = policyInput("aimer", { players: [...a.players.values()], bugs: a.bugs }, p, state);
+      fired ||= input.fire; stepArena(a, new Map([[p.id, input]])); survived &&= p.status === "active";
+    }
+    expect(fired).toBe(true); expect(a.bugs.some(b => b.id === 900)).toBe(false);
+    expect(p.kills).toBe(1); expect(p.score).toBeGreaterThanOrEqual(66); expect(survived).toBe(true);
+  }
+});
+
 test("aimer reads visible locked corridor, prefers earliest tell/id, holds perpendicular dodge through dash and chooses edge clearance", () => {
   const b = createBug("dasher", 2, 960, 1200); Object.assign(b, { phase: "windup", phaseUntil: 700 });
   const state = createPolicy(71), observation = { players: [player], bugs: [b] };

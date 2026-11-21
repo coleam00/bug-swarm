@@ -55,6 +55,7 @@ export class RecordingContext {
     this.transform = [a * cos + c * sin, b * cos + d * sin, c * cos - a * sin, d * cos - b * sin, e, f];
   }
   beginPath(): void { this.path = []; }
+  closePath(): void { this.path.push({ op: "closePath", args: [] }); }
   moveTo(...args: number[]): void { this.path.push({ op: "moveTo", args }); }
   lineTo(...args: number[]): void { this.path.push({ op: "lineTo", args }); }
   arc(...args: number[]): void { this.path.push({ op: "arc", args }); }
