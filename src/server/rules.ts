@@ -33,7 +33,7 @@ const reserved = new Set(RESERVED_NAMES.map(moderationKey));
 export function validateName(value: unknown): { name: string; error?: never } | { error: string; name?: never } {
   if (typeof value !== "string") return { error: "Enter a name." };
   const name = value.trim();
-  if (!/^[A-Za-z0-9 _-]{2,16}$/.test(name)) return { error: "Use 2–16 letters, numbers, spaces, hyphens or underscores." };
+  if (!/^[A-Za-z0-9 _-]{2,16}$/.test(name)) return { error: "Use 2 to 16 letters, numbers, spaces, hyphens or underscores." };
   const normalized = moderationKey(name);
   if (reserved.has(normalized)) return { error: "That name is reserved" };
   if (approved.has(normalized)) return { name };
