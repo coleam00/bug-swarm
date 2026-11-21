@@ -9,7 +9,7 @@ test("engine routes controls, predicts/reconciles and renders interpolated movem
   const probe = `
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
-let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal;
+let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal, lifePanel;
 const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set();
 performance.now = () => clock;
 globalThis.setInterval = (fn, ms) => { assert.equal(ms, 50); const id = ++next; timers.set(id, fn); return id; };
@@ -20,8 +20,9 @@ globalThis.ResizeObserver = class { constructor(fn) { this.fn = fn; } observe() 
 globalThis.window = Object.assign(new EventTarget(), { devicePixelRatio: 1 });
 globalThis.document = new EventTarget();
 const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight: 844, dataset: {}, getContext: () => ({ setTransform() {} }),
+  getBoundingClientRect: () => ({ left: 0, top: 0 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
-mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { draw(width, height, camera, players, local) {
+mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events() {} draw(width, height, camera, players, local) {
   draws.push(structuredClone({ width, height, camera, players, local }));
 } } }));
 mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, touch, got, status, gone) => {
@@ -30,18 +31,18 @@ mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, tou
 } }));
 const { mountArena } = await import(${moduleUrl("engine.ts")});
 const identity = { playerId: crypto.randomUUID(), name: "Robot", team: "tabs" };
-const key = (code, type = "keydown") => { const event = new Event(type); event.code = code; window.dispatchEvent(event); };
+const key = (code, type = "keydown", repeat = false) => { const event = new Event(type); event.code = code; event.repeat = repeat; window.dispatchEvent(event); };
 const pointer = (type, id, x, y) => canvas.dispatchEvent(Object.assign(new Event(type), { pointerType: "touch", pointerId: id, clientX: x, clientY: y }));
 const send = () => timers.values().next().value();
 const frame = at => { clock = at; const [id, fn] = frames.entries().next().value; frames.delete(id); fn(clock); return draws.at(-1); };
 for (let cycle = 0; cycle < 2; cycle++) {
-  const base = clock, cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++);
+  const base = clock, cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++, result => lifePanel = result);
   assert.equal(timers.size, 1); assert.equal(frames.size, 1); assert.equal(observers, 1);
   receive({ v: 1, type: "welcome" });
   assert.equal(admissions, cycle * 2 + 1);
-  const own = { id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
+  const own = { life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
-  const snapshot = (tick, ownX, remoteX, ackSeq) => receive({ v: 1, type: "snapshot", arenaId: "room", tick,
+  const snapshot = (tick, ownX, remoteX, ackSeq) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, bugs: [], shots: [], events: [],
     players: [{ ...own, x: ownX, ackSeq }, { ...remote, x: remoteX }] });
   snapshot(1, 1200, 1000, 0);
   let draw = frame(base); assert.equal(draw.local.x, 1200); assert.deepEqual(draw.camera, { x: 1005, y: 778 });
@@ -63,11 +64,21 @@ for (let cycle = 0; cycle < 2; cycle++) {
   pointer("pointerdown", 2, 350, 400); pointer("pointermove", 2, 300, 300); send();
   assert.deepEqual(inputs.at(-1).move, { x: 1, y: 0 });
   pointer("pointercancel", 1, 110, 400); pointer("pointermove", 1, 160, 400); send();
-  assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
+  assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 }); assert.equal(inputs.at(-1).fire, false, "Cancellation clears both sticks, including held touch fire");
   key("KeyD"); send(); assert.equal(inputs.at(-1).move.x, 1);
   window.dispatchEvent(new Event("blur")); send(); assert.equal(inputs.at(-1).move.x, 0);
+  key("Space"); send();
+  own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
+  snapshot(4, 1203, 1020, inputs.at(-1).seq); assert.equal(lifePanel.score, 34);
+  const deadCount = inputs.length; key("Space", "keydown", true); send(); assert.equal(inputs.length, deadCount, "Held input at death cannot respawn");
+  key("KeyW"); assert.equal(inputs.at(-1).type, "respawn"); assert.equal(inputs.at(-1).life, 1);
+  own.hits = 3; own.life = 2; delete own.result; snapshot(5, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);
+  receive({ v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, save: "saved" }); assert.equal(lifePanel, null, "Late save cannot reopen previous life");
+  key("Space", "keydown", true); key("KeyW", "keydown", true);
+  send(); assert.equal(inputs.at(-1).fire, false); assert.deepEqual(inputs.at(-1).move, { x: 0, y: 0 });
+  key("Space", "keyup"); key("KeyW", "keyup");
   key("KeyD"); disconnected(); const count = inputs.length; timers.values().next().value(); assert.equal(inputs.length, count);
-  receive({ v: 1, type: "welcome" }); timers.values().next().value(); assert.equal(inputs.at(-1).move.x, 0); assert.equal(inputs.at(-1).seq, 1);
+  receive({ v: 1, type: "welcome" }); snapshot(1, 1200, 1000, 0); timers.values().next().value(); assert.equal(inputs.at(-1).move.x, 0); assert.equal(inputs.at(-1).seq, 1);
   clock += 3001; timers.values().next().value(); assert.equal(reconnects, cycle + 1);
   receive({ v: 1, type: "error", code: "name-hidden", message: "Unavailable" });
   assert.deepEqual(refusal, ["Unavailable", undefined, "name-hidden"]);

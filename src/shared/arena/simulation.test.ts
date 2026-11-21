@@ -7,8 +7,8 @@ const identity = (i = 0) => ({ id: String(i), name: `bot-${i}`, team: "tabs" as 
 test("seeded joins reproduce, vary across seeds and cannot overwrite players", () => {
   const a = createArena(42), b = createArena(42);
   for (let i = 0; i < MAX_PLAYERS; i++) expect(joinPlayer(a, identity(i))).toEqual(joinPlayer(b, identity(i)));
-  const other = createArena(43);
-  expect(joinPlayer(other, identity(0))).not.toEqual(a.players.get("0")!);
+  const positions = new Set(Array.from({ length: 10 }, (_, seed) => { const p = joinPlayer(createArena(seed), identity(0))!; return `${p.x},${p.y}`; }));
+  expect(positions.size).toBeGreaterThan(1);
   expect(joinPlayer(a, identity(21))).toBeNull(); expect(joinPlayer(a, identity(0))).toBeNull();
   leavePlayer(a, "3"); expect(a.players.has("3")).toBe(false); expect(a.slots.has("3")).toBe(false);
   expect(joinPlayer(a, identity(21))).not.toBeNull(); expect(a.players.size).toBe(MAX_PLAYERS);

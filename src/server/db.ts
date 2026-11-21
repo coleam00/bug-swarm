@@ -40,6 +40,7 @@ export function openDb(path: string): Database {
       CREATE INDEX IF NOT EXISTS runs_finished ON runs(ended_at_ms) WHERE ended_at_ms IS NOT NULL;
     `);
     const runColumns = db.query("PRAGMA table_info(runs)").all() as { name: string }[];
+    if (!runColumns.some(column => column.name === "mode")) db.exec("ALTER TABLE runs ADD COLUMN mode TEXT NOT NULL DEFAULT 'release1';");
     if (!runColumns.some(column => column.name === "held")) {
       db.exec("ALTER TABLE runs ADD COLUMN held INTEGER NOT NULL DEFAULT 0 CHECK (held IN (0,1));");
       // Only on column creation: ordinary reopen must preserve owner approvals.
@@ -70,6 +71,7 @@ export function countEvents(db: Database): Record<EventType, number> {
 }
 
 export interface Run {
+  mode: "release1" | "arena";
   held: number; team: Team | null;
   id: string; player_id: string; started_at_ms: number; ended_at_ms: number | null;
   score: number | null; squashes: number | null; seconds: number | null; touch: number | null; upgrades: string;
@@ -93,7 +95,8 @@ export function registerArenaPlayer(db: Database, playerId: string, name: string
   return db.transaction(() => {
     // UUID hex casing cannot create a new arena identity or bypass a release 1 team assignment.
     const existing = db.query("SELECT id FROM players WHERE id = ? COLLATE NOCASE ORDER BY id LIMIT 1").get(playerId) as { id: string } | null;
-    return registerPlayer(db, existing?.id ?? playerId.toLowerCase(), name, team);
+    const id = existing?.id ?? playerId.toLowerCase(), result = registerPlayer(db, id, name, team);
+    return "error" in result ? result : { ...result, playerId: id };
   }).immediate();
 }
 export function startRun(db: Database, playerId: string, name: string, now: number, team?: Team): StartResult {
@@ -111,7 +114,7 @@ export function finishRun(db: Database, id: string, finish: Finish, now: number)
   return db.transaction(() => {
     const held = needsReview(finish.score);
     const result = db.query(`UPDATE runs SET ended_at_ms = ?, score = ?, squashes = ?, seconds = ?, touch = ?, upgrades = ?, held = ?
-      WHERE id = ? AND ended_at_ms IS NULL`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), JSON.stringify(finish.upgrades ?? []), Number(held), id);
+      WHERE id = ? AND ended_at_ms IS NULL AND mode = 'release1'`).run(now, finish.score, finish.squashes, finish.seconds, Number(finish.touch), JSON.stringify(finish.upgrades ?? []), Number(held), id);
     if (!result.changes) return null;
     db.query("INSERT INTO events(type, at, run_id) VALUES (?, ?, ?)").run(EVENT_TYPES[2], new Date(now).toISOString(), id);
     return { saved: true, held } as const;

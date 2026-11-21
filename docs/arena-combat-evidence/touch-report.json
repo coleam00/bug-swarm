@@ -1,0 +1,118 @@
+{
+  "origin": "http://127.0.0.1:54902",
+  "errors": [],
+  "samples": {
+    "portrait": {
+      "frame": {
+        "fps": "58.5",
+        "frameMs": "0.722",
+        "players": "12",
+        "x": "1168.31",
+        "y": "896.12"
+      },
+      "overflow": false,
+      "errors": [],
+      "players": 12,
+      "own": {
+        "id": "26bb8b08-41ce-4fbe-b9a2-b4d65eb63581",
+        "name": "Pilot-B",
+        "team": "spaces",
+        "x": 1148.309,
+        "y": 909.461,
+        "vx": -133.359,
+        "vy": 88.906,
+        "facing": -2.356,
+        "life": 1,
+        "hits": 3,
+        "heat": 6,
+        "overheatUntil": 0,
+        "nextShotAt": 1350,
+        "immuneUntil": 1100,
+        "streak": 0,
+        "points": 0,
+        "score": 0,
+        "kills": 0,
+        "startedTick": 2,
+        "touch": true,
+        "ackSeq": 23
+      }
+    },
+    "landscape": {
+      "frame": {
+        "fps": "60.0",
+        "frameMs": "0.403",
+        "players": "12",
+        "x": "1211.80",
+        "y": "877.71"
+      },
+      "overflow": false,
+      "errors": [],
+      "players": 12,
+      "own": {
+        "id": "26bb8b08-41ce-4fbe-b9a2-b4d65eb63581",
+        "name": "Pilot-B",
+        "team": "spaces",
+        "x": 1223.348,
+        "y": 871.941,
+        "vx": 115.445,
+        "vy": -57.722,
+        "facing": -0.644,
+        "life": 1,
+        "hits": 3,
+        "heat": 4,
+        "overheatUntil": 0,
+        "nextShotAt": 3216.667,
+        "immuneUntil": 1100,
+        "streak": 0,
+        "points": 0,
+        "score": 0,
+        "kills": 0,
+        "startedTick": 2,
+        "touch": true,
+        "ackSeq": 62
+      }
+    }
+  },
+  "browser": "Chrome/156.0.8078.4",
+  "twinInput": {
+    "v": 1,
+    "type": "input",
+    "seq": 20,
+    "life": 1,
+    "touch": true,
+    "move": {
+      "x": -0.7408833006291284,
+      "y": 0.493922200419419
+    },
+    "aim": -2.356194490192345,
+    "fire": true
+  },
+  "tenBots": {
+    "requested": 10,
+    "joins": 10,
+    "arenas": [
+      "9707c4e5-6708-4618-8fd5-5d329b54f337"
+    ],
+    "arenaCount": 1,
+    "sent": 1180,
+    "received": 1245,
+    "policy": "aimer",
+    "messagesPerSecond": {
+      "sent": 196.49141270082197,
+      "received": 207.31509221400285
+    },
+    "errors": 0,
+    "tick": {
+      "windowMs": 60000,
+      "samples": 122,
+      "p50Ms": 0.5887999999995372,
+      "p95Ms": 1.212600000000748
+    },
+    "schedulerLateness": {
+      "windowMs": 60000,
+      "samples": 122,
+      "p50Ms": 1.119900000000598,
+      "p95Ms": 2.0172999999995227
+    }
+  }
+}

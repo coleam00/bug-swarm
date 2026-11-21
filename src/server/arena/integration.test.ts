@@ -22,6 +22,31 @@ function client(url: string, index: number, name = `bot-${index}`) {
   }
   return { id, socket, messages, wait };
 }
+test("real combat transport: travelling hit, remote score, terminal save and exactly one fresh respawn", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "arena-combat-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
+    p.x = p.y = 1200; room.state.tick = 21; room.state.bugs = [{ id: 999, kind: "crawler", x: 1320, y: 1200, vx: 0, vy: 0 }];
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: true }));
+    await a.wait(m => m.type === "snapshot" && m.shots.some(s => s.owner === a.id));
+    await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.score === 11));
+    p.hits = 1; p.immuneUntil = 0; room.state.bugs.push({ id: 1000, kind: "crawler", x: p.x, y: p.y, vx: 0, vy: 0 });
+    expect(await a.wait(m => m.type === "life_over" && m.save === "saved")).toMatchObject({ score: 11, kills: 1, life: 1 });
+    await b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && !p.hits && p.result?.score === 11));
+    for (let i = 0; i < 2; i++) a.socket.send(JSON.stringify({ v: 1, type: "respawn", life: 1, touch: true }));
+    await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.hits === 3));
+    expect(p.score).toBe(0); expect(p.touch).toBe(true);
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 100, move: { x: 1, y: 0 }, aim: 0, fire: true }));
+    await a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.life === 2 && p.nextShotAt > p.startedTick * 50));
+    expect(app.arenas.active.get(a.id)!.lastSeq).toBe(1); expect(room.state.shots.some(s => s.owner === a.id)).toBe(false);
+    app.arenas.stop();
+    expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE player_id = ? AND ended_at_ms IS NOT NULL").get(a.id) as any).n).toBe(2);
+    expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(3);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
 test("real server: clients see each other move, 21st player is isolated, refused names and live hides close", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-integration-")); mkdirSync(join(scratch, "home"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
@@ -31,8 +56,8 @@ test("real server: clients see each other move, 21st player is isolated, refused
     const both = (m: ServerMessage): m is Snapshot => m.type === "snapshot" && m.players.some(p => p.id === a.id) && m.players.some(p => p.id === b.id);
     const [initial] = await Promise.all([a.wait(both), b.wait(both)]);
     const ax = initial.players.find(p => p.id === a.id)!.x, by = initial.players.find(p => p.id === b.id)!.y;
-    a.socket.send(JSON.stringify({ v: 1, type: "input", seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false }));
-    b.socket.send(JSON.stringify({ v: 1, type: "input", seq: 1, move: { x: 0, y: 1 }, aim: 1, fire: false }));
+    a.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false }));
+    b.socket.send(JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 1 }, aim: 1, fire: false }));
     await Promise.all([
       a.wait(m => m.type === "snapshot" && m.players.some(p => p.id === b.id && p.y > by && p.ackSeq === 1)),
       b.wait(m => m.type === "snapshot" && m.players.some(p => p.id === a.id && p.x > ax && p.ackSeq === 1)),
@@ -50,7 +75,9 @@ test("real server: clients see each other move, 21st player is isolated, refused
     expect(await refused.wait(m => m.type === "error")).toMatchObject({ code: "name-refused" });
     hideName(app.db, "bot-1", Date.now());
     expect(await a.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden", message: HIDDEN_IDENTITY_MESSAGE });
-    expect((app.db.query("SELECT COUNT(*) AS n FROM runs").get() as any).n).toBe(0);
+    app.arenas.writer.flush();
+    expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE mode = 'arena'").get() as any).n).toBe(21);
+    expect((app.db.query("SELECT COUNT(*) AS n FROM runs WHERE ended_at_ms IS NOT NULL").get() as any).n).toBe(1);
   } finally {
     const closed = clients.map(c => new Promise<void>(resolve => {
       if (c.socket.readyState === WebSocket.CLOSED) { resolve(); return; }
@@ -97,6 +124,7 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     const deadline = performance.now() + 2000;
     while (app.arenas.active.size && performance.now() < deadline) await Bun.sleep(5);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
+    expect(await runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 1, policy: "mover" })).toMatchObject({ joins: 2, policy: "mover", errors: 0 });
     const interrupted = new AbortController(), timer = setTimeout(() => interrupted.abort(), 200);
     try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
     finally { clearTimeout(timer); }

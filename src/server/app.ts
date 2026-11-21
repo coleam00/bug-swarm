@@ -10,6 +10,7 @@ export const START_LIMIT = 300;
 export const PLAYER_START_LIMIT = 40;
 export const START_WINDOW_MS = 10 * 60 * 1000;
 export interface AppOptions {
+  scoreCacheHook?: (invalidate: () => void) => void;
   arenaStats?: () => unknown;
   startLimit?: number;
   now?: () => number;
@@ -55,6 +56,7 @@ export function createApp(db: Database, options: AppOptions = {}) {
     return cached;
   }
   let cachedTeams: { at: number; totals: TeamTotals } | undefined;
+  options.scoreCacheHook?.(() => { cached = undefined; cachedTeams = undefined; });
   const app = new Hono<{ Variables: { clientIp: string } }>();
   app.onError((error, c) => {
     log(`API failed ${c.req.method} ${c.req.path}`, error);
@@ -123,6 +125,7 @@ export function createApp(db: Database, options: AppOptions = {}) {
     if (!finish) return c.json({ error: "Invalid run result." }, 400);
     const run = getRun(db, id);
     if (!run || run.player_id !== finish.playerId) return c.json({ error: "Run not found." }, 404);
+    if (run.mode === "arena") return c.json({ error: "Arena scores are saved by the server." }, 403);
     if (run.ended_at_ms !== null) {
       const identical = run.score === finish.score && run.squashes === finish.squashes && run.seconds === finish.seconds && run.touch === Number(finish.touch) && run.upgrades === JSON.stringify(finish.upgrades);
       return identical ? c.json({ saved: true, held: Boolean(run.held) }) : c.json({ error: "Run already finished." }, 409);

@@ -5,6 +5,7 @@ import { TEAMS, TEAM_COLOURS, TEAM_NAMES, type Team } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { loadIdentity, storeIdentity } from "../game/identity";
 import { mountArena } from "./engine";
+import type { LifeOver } from "../../shared/arena/protocol";
 import "./arena.css";
 function saved() { try { return loadIdentity(localStorage); } catch { return null; } }
 export function Arena() {
@@ -30,8 +31,13 @@ export function Arena() {
   </form></main>;
 }
 function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identity; touch: boolean; onAccepted: () => void; onError: (message: string, team?: Team, code?: string) => void }) {
+  const [life, setLife] = useState<{ result: LifeOver; respawn: (touch: boolean) => void } | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null), error = useRef(onError), accepted = useRef(onAccepted), [status, setStatus] = useState("Connecting…");
   error.current = onError; accepted.current = onAccepted;
-  useEffect(() => mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current()), [identity.playerId]);
-  return <main className="arena-game"><canvas ref={canvas} aria-label="Shared arena" tabIndex={0} />{status && <p role="status" className="arena-status">{status}</p>}</main>;
+  useEffect(() => mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current(),
+    (result, respawn) => setLife(result ? { result: { ...result }, respawn } : null)), [identity.playerId]);
+  return <main className="arena-game"><canvas ref={canvas} aria-label="Shared arena" tabIndex={0} />{status && <p role="status" className="arena-status">{status}</p>}
+    {life && <div className="arena-life" role="dialog" aria-label="Life over" onPointerDown={event => { event.preventDefault(); life.respawn(event.pointerType === "touch"); }}><h1>Life over</h1><strong>{life.result.score.toLocaleString()}</strong><p>{life.result.save === "saved" ? "Score saved" : life.result.save === "failed" ? "Save failed" : "Saving score…"}</p>
+      <button onClick={event => { if (event.detail === 0) life.respawn(false); }}>Play again</button></div>}
+  </main>;
 }

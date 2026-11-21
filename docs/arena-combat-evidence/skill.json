@@ -1,0 +1,305 @@
+{
+  "results": [
+    {
+      "policy": "mover",
+      "medianScore": 236,
+      "medianSeconds": 67.825,
+      "lives": 366,
+      "deaths": 206,
+      "cutoffs": 160,
+      "seeds": [
+        {
+          "seed": 0,
+          "lives": 18,
+          "medianScore": 219.5,
+          "medianSeconds": 75.725
+        },
+        {
+          "seed": 1,
+          "lives": 22,
+          "medianScore": 260.5,
+          "medianSeconds": 53.675
+        },
+        {
+          "seed": 2,
+          "lives": 19,
+          "medianScore": 181,
+          "medianSeconds": 67.35
+        },
+        {
+          "seed": 3,
+          "lives": 17,
+          "medianScore": 267,
+          "medianSeconds": 63.35
+        },
+        {
+          "seed": 4,
+          "lives": 19,
+          "medianScore": 159,
+          "medianSeconds": 78.05
+        },
+        {
+          "seed": 5,
+          "lives": 14,
+          "medianScore": 333.5,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 6,
+          "lives": 15,
+          "medianScore": 309,
+          "medianSeconds": 94.05
+        },
+        {
+          "seed": 7,
+          "lives": 19,
+          "medianScore": 224,
+          "medianSeconds": 74.25
+        },
+        {
+          "seed": 8,
+          "lives": 17,
+          "medianScore": 279,
+          "medianSeconds": 70.2
+        },
+        {
+          "seed": 9,
+          "lives": 17,
+          "medianScore": 223,
+          "medianSeconds": 73.55
+        },
+        {
+          "seed": 10,
+          "lives": 18,
+          "medianScore": 232,
+          "medianSeconds": 40.325
+        },
+        {
+          "seed": 11,
+          "lives": 16,
+          "medianScore": 216.5,
+          "medianSeconds": 68.8
+        },
+        {
+          "seed": 12,
+          "lives": 19,
+          "medianScore": 212,
+          "medianSeconds": 65.25
+        },
+        {
+          "seed": 13,
+          "lives": 17,
+          "medianScore": 245,
+          "medianSeconds": 71.55
+        },
+        {
+          "seed": 14,
+          "lives": 20,
+          "medianScore": 247.5,
+          "medianSeconds": 58.1
+        },
+        {
+          "seed": 15,
+          "lives": 21,
+          "medianScore": 201,
+          "medianSeconds": 48.15
+        },
+        {
+          "seed": 16,
+          "lives": 18,
+          "medianScore": 215,
+          "medianSeconds": 81.175
+        },
+        {
+          "seed": 17,
+          "lives": 22,
+          "medianScore": 225,
+          "medianSeconds": 59.25
+        },
+        {
+          "seed": 18,
+          "lives": 21,
+          "medianScore": 249,
+          "medianSeconds": 63.45
+        },
+        {
+          "seed": 19,
+          "lives": 17,
+          "medianScore": 369,
+          "medianSeconds": 57.35
+        }
+      ]
+    },
+    {
+      "policy": "aimer",
+      "medianScore": 879.5,
+      "medianSeconds": 133.95,
+      "lives": 242,
+      "deaths": 82,
+      "cutoffs": 160,
+      "seeds": [
+        {
+          "seed": 0,
+          "lives": 16,
+          "medianScore": 881,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 1,
+          "lives": 16,
+          "medianScore": 502,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 2,
+          "lives": 8,
+          "medianScore": 1620,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 3,
+          "lives": 8,
+          "medianScore": 2361,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 4,
+          "lives": 16,
+          "medianScore": 695.5,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 5,
+          "lives": 8,
+          "medianScore": 1025,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 6,
+          "lives": 16,
+          "medianScore": 192,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 7,
+          "lives": 8,
+          "medianScore": 1609,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 8,
+          "lives": 16,
+          "medianScore": 514.5,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 9,
+          "lives": 16,
+          "medianScore": 762,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 10,
+          "lives": 8,
+          "medianScore": 1589.5,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 11,
+          "lives": 16,
+          "medianScore": 669,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 12,
+          "lives": 16,
+          "medianScore": 627.5,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 13,
+          "lives": 8,
+          "medianScore": 1165.5,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 14,
+          "lives": 12,
+          "medianScore": 1027,
+          "medianSeconds": 128.675
+        },
+        {
+          "seed": 15,
+          "lives": 16,
+          "medianScore": 884,
+          "medianSeconds": 90
+        },
+        {
+          "seed": 16,
+          "lives": 8,
+          "medianScore": 1085.5,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 17,
+          "lives": 9,
+          "medianScore": 1970,
+          "medianSeconds": 180
+        },
+        {
+          "seed": 18,
+          "lives": 13,
+          "medianScore": 1073,
+          "medianSeconds": 138.1
+        },
+        {
+          "seed": 19,
+          "lives": 8,
+          "medianScore": 1033,
+          "medianSeconds": 180
+        }
+      ]
+    }
+  ],
+  "ratio": 3.7266949152542375,
+  "constants": {
+    "CLIENT_MESSAGE_BYTES": 1024,
+    "CRAWLER_RADIUS": 12,
+    "CRAWLER_SPEED": 140,
+    "HEAT_CAPACITY": 18,
+    "HEAT_COOLING": 6,
+    "HEAT_GAIN": 1,
+    "HEAT_WARNING": 0.8,
+    "HELLO_TIMEOUT_MS": 5000,
+    "IMMUNITY_MS": 1000,
+    "INPUT_LIMIT": 30,
+    "INPUT_STALE_MS": 250,
+    "INPUT_WINDOW_MS": 1000,
+    "INTERPOLATION_MS": 100,
+    "MAX_BUGS": 150,
+    "MAX_EVENTS": 140,
+    "MAX_PENDING": 120,
+    "MAX_PLAYERS": 20,
+    "MAX_SHOTS": 140,
+    "MAX_SNAPSHOTS": 40,
+    "METRIC_WINDOW_MS": 60000,
+    "MUZZLE_OFFSET": 25,
+    "OVERHEAT_MS": 1500,
+    "PLAYER_HITS": 3,
+    "PLAYER_RADIUS": 14,
+    "PLAYER_SPEED": 180,
+    "SERVER_MESSAGE_BYTES": 65536,
+    "SHOT_LIFETIME_MS": 900,
+    "SHOT_RADIUS": 3,
+    "SHOT_RATE": 6,
+    "SHOT_SPEED": 900,
+    "SNAPSHOT_TIMEOUT_MS": 3000,
+    "SPAWN_CLEARANCE": 500,
+    "STALL_TIMEOUT_MS": 5000,
+    "STEP_MS": 50,
+    "TRICKLE_RATE": 0.5,
+    "WAVE_MS": 30000,
+    "WORLD_HEIGHT": 2400,
+    "WORLD_WIDTH": 2400
+  }
+}
