@@ -29,3 +29,14 @@ test("approaching a teammate keeps normal aim/fire burst cooling instead of forc
   await player.drive(); expect(applied!.fire).toBe(false);
   local.heat = 3; await player.drive(); expect(applied!.fire).toBe(true);
 });
+test("boss plan focuses the hive while dodging, defends imminent contact and retains burst cooling", async () => {
+  const local = { ...lifeDefaults(), id: "a", name: "PilotA", team: "tabs" as const, x: 1000, y: 1000, vx: 0, vy: 0, facing: 0 };
+  const hive = createBug("hive", 1, 1400, 1000), crawler = createBug("crawler", 2, 1000, 1200);
+  const frame = { local, players: [local], snapshot: { tick: 50, globs: [], bugs: [hive, crawler] }, paint: { bugs: [hive, crawler] } } as unknown as ArenaFrame;
+  const player = new Player({} as Browser, {} as Awaited<ReturnType<Browser["page"]>>, "PilotA", "tabs");
+  player.observation = { frame } as PageObservation; player.plan = "boss";
+  let applied: Input | undefined; player.input = async input => { applied = input; };
+  await player.drive(); expect(applied!.fire).toBe(true); expect(applied!.aim).toBeCloseTo(0);
+  crawler.y = 1080; await player.drive(); expect(applied!.aim).toBeCloseTo(Math.PI / 2);
+  local.heat = 12; await player.drive(); expect(applied!.fire).toBe(false);
+});

@@ -18,6 +18,7 @@ export function parseArgs(args: string[]) {
   if (result.bots !== undefined && !result.scenario) throw Error("--bots requires --scenario because required scenario populations differ");
   if (result.bots !== undefined && result.scenario === "together" && result.bots !== 10) throw Error("together requires exactly 10 bots");
   if (result.bots !== undefined && result.scenario === "late-join" && result.bots < 8) throw Error("late-join requires at least eight bots");
+  if (result.bots !== undefined && result.scenario === "boss" && result.bots < 1) throw Error("boss requires bots for the fifth-wave encounter");
   if (result.bots && result.scenario === "revive") throw Error("revive requires no bots so only the browser rescuer can complete it");
   return result;
 }

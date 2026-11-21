@@ -9,7 +9,7 @@ export function Board({ controller: supplied, origin = window.location.origin }:
   const [controller] = useState(() => supplied ?? new BoardController(boardApi));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
-    document.title = "Bug Swarm — Stream Board";
+    document.title = "Bug Swarm: Stream Board";
     controller.start();
     return controller.stop;
   }, [controller]);
@@ -23,7 +23,7 @@ export function Board({ controller: supplied, origin = window.location.origin }:
         style={{ "--team-colour": TEAM_COLOURS[team] } as CSSProperties}>
         <h2>{TEAM_NAMES[team]}</h2>
         <strong title={race ? exactScore(race.totals[team]) : undefined} aria-label={race ? `${exactScore(race.totals[team])} points` : undefined}>
-          {race ? displayScore(race.totals[team]) : "—"}
+          {race ? displayScore(race.totals[team]) : "…"}
         </strong>
       </div>)}</div>
       <div className={`board-race-bar${race && !race.totals.tabs && !race.totals.spaces ? " board-neutral" : ""}`} aria-hidden="true">
@@ -32,7 +32,7 @@ export function Board({ controller: supplied, origin = window.location.origin }:
       <p className="board-race-note">{!race ? "Waiting for team scores…" : !race.totals.tabs && !race.totals.spaces ? "No team scores yet" : "Every team score counts"}</p>
     </section>
     <section className="board-activity" aria-label="Live players">
-      <p className="board-playing">{activity ? exactScore(activity.totalPlayers) : "—"} playing now</p>
+      <p className="board-playing">{activity ? exactScore(activity.totalPlayers) : "…"} playing now</p>
       {activity && activity.arenas.length > 0 && <div className="board-arenas">
         {activity.arenas.map(arena => <span className="board-arena" key={arena.id}>Arena {arena.number} · {exactScore(arena.players)}</span>)}
         {activity.moreArenas > 0 && <span className="board-arena">+{exactScore(activity.moreArenas)} more</span>}

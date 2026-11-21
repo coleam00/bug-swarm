@@ -17,11 +17,11 @@ Release 1 was a single-player survival game where the robot fired on its own: yo
 
 - Opening the link shows a clean start screen: the title, a name field and two team buttons (Tabs, Spaces). Return visitors skip straight to one tap.
 - Joining drops you into the arena that has room (up to 20 players). You see the other players, their names and team colours, live.
-- You move and aim separately and shoot by holding fire. Shots travel; the gun overheats if held too long. Swarm pressure starts low with each life and rises with that life's age, so late joiners get an opening. Bugs chase the nearest player, so groups share pressure. The 30-second wave clock unlocks kinds and events; it never multiplies spawn volume. Each kind needs a different answer (dodge the dasher's lunge, sidestep the spitter's shots, flank the armoured beetle).
+- You move and aim separately and shoot by holding fire. Shots travel; the gun overheats if held too long. Swarm pressure starts low with each life and rises with that life's age, so late joiners get an opening. Bugs chase the nearest player, so groups share pressure. The 30-second wave clock unlocks kinds and events; it never multiplies ordinary spawn volume. Each kind needs a different answer (dodge the dasher's lunge, sidestep the spitter's shots, flank the armoured beetle).
 - 3 hits put you down. A teammate who stands next to you for 2 seconds revives you; if nobody does within 10 seconds, your life ends, your score is saved and one tap drops you back in.
 - Kills score by bug kind; consecutive hits build an accuracy multiplier that a miss resets; reviving a teammate scores too. Every point counts for your team.
 - Pickups dropped by bugs (spread shot, rapid fire, shield) give short boosts you have to go and grab.
-- Every few waves a boss arrives that only a group can take down.
+- Every fifth wave a hive boss arrives with health scaled to living players; the arena shares damage-based rewards, and a solo kill is allowed.
 - `/board` shows the top 10 lives, the Tabs vs Spaces totals and how many people are playing right now, readable on a stream.
 - Merges during the stream redeploy the game; players are reconnected automatically and nobody loses a life's score to a deploy.
 
@@ -41,7 +41,7 @@ Release 1 was a single-player survival game where the robot fired on its own: yo
 - [ ] Two browsers and 18 bots share one arena; each browser sees the others move, shoot, get hit, go down and be revived, in real time.
 - [ ] Desktop: WASD/arrows move, the mouse aims, holding the mouse button or Space fires. Phone (two-point touch emulation counts): left thumb moves, right thumb aims and fires while held.
 - [ ] Shots travel and can miss; holding fire overheats the gun; the aiming bot out-scores the moving-only bot by the release's threshold over seeded arenas.
-- [ ] At least four bug kinds with distinct behaviours and visible tells; waves unlock kinds and events independently of personal pressure; a boss every fifth wave needs several players.
+- [ ] At least four bug kinds with distinct behaviours and visible tells; waves unlock kinds and events independently of personal pressure; a hive boss every fifth wave scales with living players and rewards surviving contributors.
 - [ ] Downed players can be revived by teammates; lives end after 10 s down; one tap respawns.
 - [ ] Scores are server-side; the top 10, best, team totals and `/board` show arena lives; `bun run stats` counts lives.
 - [ ] `bun run bots -- --url <base> --count 200 --seconds 120` runs 200 WebSocket bots across arenas and reports server tick p50/p95, message rates and errors; p95 tick < 10 ms.

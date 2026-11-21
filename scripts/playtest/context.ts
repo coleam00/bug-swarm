@@ -36,7 +36,7 @@ export class Context {
     this.report.checks.push({ name, pass: !!condition, ...(detail !== undefined ? { detail } : {}) });
     requireAgreement(condition, name + (detail !== undefined ? ": " + JSON.stringify(detail) : ""));
   }
-  async startServer(warmup = 0) { await this.server.start(warmup, this.bots); }
+  async startServer(warmup = 0, idleWarmup = false) { await this.server.start(warmup, this.bots, idleWarmup); }
   async join(count = 3, phones = false) {
     for (let i = 0; i < count; i++) {
       const touch = phones && i >= 2, portrait = i === 3;

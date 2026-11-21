@@ -12,10 +12,10 @@ export class OwnedServer {
   private reader?: Promise<void>;
   private errorReader?: Promise<number>;
   constructor(readonly root: string, readonly assets: string, readonly seed: number) { mkdirSync(root, { recursive: true }); }
-  async start(warmup = 0, bots = 0) {
+  async start(warmup = 0, bots = 0, idleWarmup = false) {
     const port = this.origin ? new URL(this.origin).port : "0";
     this.generation++;
-    const env = { ...scratchEnv(this.root), NODE_ENV: "production", ARENA_PLAYTEST: "1", PLAYTEST_ROOT: this.root, PLAYTEST_PORT: port, PLAYTEST_DATA: join(this.root, "data"), PLAYTEST_ASSETS: this.assets, PLAYTEST_SEED: String(this.seed), PLAYTEST_GENERATION: String(this.generation), PLAYTEST_WARMUP: String(warmup), PLAYTEST_BOTS: String(bots) };
+    const env = { ...scratchEnv(this.root), NODE_ENV: "production", ARENA_PLAYTEST: "1", PLAYTEST_ROOT: this.root, PLAYTEST_PORT: port, PLAYTEST_DATA: join(this.root, "data"), PLAYTEST_ASSETS: this.assets, PLAYTEST_SEED: String(this.seed), PLAYTEST_GENERATION: String(this.generation), PLAYTEST_WARMUP: String(warmup), PLAYTEST_BOTS: String(bots), PLAYTEST_IDLE_WARMUP: idleWarmup ? "1" : "0" };
     const child = this.child = Bun.spawn([process.execPath, join(import.meta.dir, "server-child.ts")], { env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     this.errorReader = Bun.write(join(this.root, `server-${this.generation}.log`), child.stderr);
     let ready!: () => void, failed!: (e: Error) => void;

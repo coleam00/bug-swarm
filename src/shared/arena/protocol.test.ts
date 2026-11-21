@@ -3,9 +3,26 @@ import { parseClient, parseServer, serializeSnapshot, type Hello, type InputMess
 import { createArena, joinPlayer } from "./simulation";
 import { MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "./constants";
 import { MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SERVER_MESSAGE_BYTES } from "./constants";
+import { SnapshotEncoder, ServerDecoder } from "./snapshot-codec";
 import { createBug } from "./bugs/registry";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
+
+test("beetle HP/facing/forward motion and zero-point shell bounces are validated", () => {
+  const b = createBug("beetle", 1, 1200, 1200);
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [], globs: [], events: [] };
+  const parse = () => parseServer(serializeSnapshot(s));
+  for (let hp = 1; hp <= 5; hp++) { b.hp = hp; expect(parse()).not.toBeNull(); }
+  const valid = { ...b, facing: 0.70049, vx: Math.cos(0.70049) * 84, vy: Math.sin(0.70049) * 84 };
+  s.bugs[0] = valid; expect(parse()).not.toBeNull();
+  for (const fields of [{ hp: 0 }, { hp: 6 }, { hp: 1.5 }, { facing: 4 }, { facing: null }, { vx: 85 }, { vx: -84, vy: 0 }, { phase: "approach" }, { phaseUntil: 0 }]) {
+    s.bugs[0] = { ...valid, ...fields } as any; expect(parse()).toBeNull();
+  }
+  s.bugs[0] = valid;
+  s.events = [{ id: 2, tick: 1, kind: "beetle", type: "bounce", x: 1222, y: 1200, points: 0 }]; expect(parse()).not.toBeNull();
+  s.events[0] = { ...s.events[0]!, points: 1 } as any; expect(parse()).toBeNull();
+  s.events[0] = { ...s.events[0]!, type: "bounce", points: 0, kind: "crawler" }; expect(parse()).toBeNull();
+});
 
 test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
   const bug = createBug("crawler", 1, 1200, 1200);
@@ -69,10 +86,19 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
   const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "r".repeat(128), tick: 9999999, wave: 9999, players,
     bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: i < 12 ? "spitter" : "dasher", hp: 2, facing: 2.356, phase: i < 12 ? "move" : "recovery", phaseUntil: 500000950, x: 1234.56789, y: 1234.56789, vx: -24.748737, vy: 24.748737 })),
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
-    globs: Array.from({ length: 12 }, (_, i) => ({ id: 500 + i, x: 1234.56789, y: 1234.56789, vx: -226.27417, vy: 226.27417, born: 499999949 })),
+    globs: Array.from({ length: 24 }, (_, i) => ({ id: 500 + i, x: 1234.56789, y: 1234.56789, vx: i < 12 ? -226.27417 : -127.27922, vy: i < 12 ? 226.27417 : 127.27922, ...(i < 12 ? {} : { source: "hive" as const }), born: 499999949 })),
     events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 75, type: "kill" as const, kind: "dasher" as const })) };
   for (const entities of [snapshot.bugs, snapshot.shots, snapshot.globs, snapshot.events]) for (const e of entities) e.id += Number.MAX_SAFE_INTEGER - 10000;
+  snapshot.bugs[149] = { ...createBug("hive", snapshot.bugs[149]!.id, 1234.56789, 1234.56789, snapshot.tick * 50), vx: -35.355339, vy: 35.355339 };
+  snapshot.events[139] = { ...snapshot.events[139]!, type: "kill", kind: "hive", points: 0, rewards: players.map(p => ({ playerId: p.id, life: p.life, amount: 65, x: p.x, y: p.y })) };
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  const encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
+  const frame = encoder.encode(snapshot); expect(frame.keyframe.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES);
+  const expectedAwards = (parseServer(raw) as Snapshot).events[139] as Extract<Snapshot["events"][number], { type: "kill" }>;
+  expect((decoder.read(frame.keyframe) as Snapshot).events[139]).toMatchObject({ rewards: expectedAwards.rewards, kind: "hive", points: 0 });
+  const next = structuredClone(snapshot); next.tick++; next.bugs.filter(b => b.kind === "spitter").forEach(b => b.phaseUntil! += 50);
+  const delta = encoder.encode(next); expect(delta.delta.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES);
+  expect((decoder.read(delta.delta) as Snapshot).events[139]).toMatchObject({ rewards: expectedAwards.rewards, kind: "hive", points: 0 });
   const parsed = parseServer(raw) as Snapshot;
   expect(parsed.shots.map(s => s.owner)).toEqual(snapshot.shots.map(s => s.owner));
   expect(typeof JSON.parse(raw).shots[0].owner).toBe("number");
@@ -96,6 +122,7 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     split.shots = split.shots.filter(s => split.players.find(p => p.id === s.owner)!.status === "active");
     const wire = serializeSnapshot(split);
     expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+    const binary = new SnapshotEncoder().encode(split).keyframe; expect(binary.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(new ServerDecoder().read(binary)).not.toBeNull();
   }
   const corrupt = JSON.parse(raw); corrupt.players[0].result = null; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
   for (const value of [undefined, -1, "2000", null]) {

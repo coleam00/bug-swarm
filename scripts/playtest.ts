@@ -34,7 +34,7 @@ export async function main(args = process.argv.slice(2)) {
     const browserStart = performance.now(); await browser.start(root); timing.browserStartupMs = performance.now() - browserStart;
     for (const name of options.scenario ? [options.scenario] : scenarios) {
       controller.signal.throwIfAborted();
-      const bots = options.bots ?? (name === "together" ? 10 : name === "late-join" ? 8 : 0);
+      const bots = options.bots ?? (name === "together" ? 10 : name === "late-join" ? 8 : name === "boss" ? 2 : 0);
       const c = new Context(name, join(root, name), assets, browser, bots, deadline, controller.signal);
       console.log(`${name}: starting (${bots} bots)`);
       let failure: unknown;

@@ -4,10 +4,10 @@ declare const __ARENA_PLAYTEST__: boolean;
 const observing = typeof __ARENA_PLAYTEST__ === "undefined" || __ARENA_PLAYTEST__;
 
 export interface MapBounds { x: number; y: number; width: number; height: number }
-export function minimapBounds(viewWidth: number, viewHeight: number, worldWidth: number, worldHeight: number): MapBounds {
+export function minimapBounds(viewWidth: number, viewHeight: number, worldWidth: number, worldHeight: number, boss = false): MapBounds {
   const size = Math.min(viewWidth, viewHeight) < 600 ? 96 : 144;
   const scale = size / Math.max(worldWidth, worldHeight);
-  return { x: viewWidth - 12 - worldWidth * scale, y: 52, width: worldWidth * scale, height: worldHeight * scale };
+  return { x: viewWidth - 12 - worldWidth * scale, y: boss ? 94 : 52, width: worldWidth * scale, height: worldHeight * scale };
 }
 export function projectMarker(value: number, worldSize: number, mapStart: number, mapSize: number, radius: number): number {
   return mapStart + Math.max(radius, Math.min(mapSize - radius, value / worldSize * mapSize));
@@ -22,7 +22,12 @@ export function drawMinimap(c: CanvasRenderingContext2D, map: MapBounds, worldWi
     c.beginPath(); c.arc(projectMarker(x, worldWidth, map.x, map.width, radius), projectMarker(y, worldHeight, map.y, map.height, radius), radius, 0, Math.PI * 2); c.fill();
   };
   c.fillStyle = "#e3928140";
-  for (const bug of bugs) dot(bug.x, bug.y, 1);
+  for (const bug of bugs) if (bug.kind !== "hive") dot(bug.x, bug.y, 1);
+  for (const bug of bugs) if (bug.kind === "hive") {
+    const x = projectMarker(bug.x, worldWidth, map.x, map.width, 6), y = projectMarker(bug.y, worldHeight, map.y, map.height, 6);
+    c.fillStyle = "#eaff8c"; c.strokeStyle = "#ffffff"; c.lineWidth = 1.5;
+    c.beginPath(); c.moveTo(x, y - 6); c.lineTo(x + 6, y); c.lineTo(x, y + 6); c.lineTo(x - 6, y); c.lineTo(x, y - 6); c.fill(); c.stroke();
+  }
   for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).hits !== 0) {
     c.fillStyle = TEAM_COLOURS[p.team]; dot(p.x, p.y, 2.5);
     if (observing) trace?.push({ id: p.id, colour: TEAM_COLOURS[p.team] });

@@ -3,6 +3,7 @@ import type { ServerObservation, PageObservation } from "./types";
 import { TEAM_COLOURS } from "../../src/shared/teams";
 import type { Snapshot } from "../../src/shared/arena/protocol";
 import { STEP_MS, INTERPOLATION_MS, PLAYER_RADIUS } from "../../src/shared/arena/constants";
+import { personalLevel } from "../../src/web/arena/level";
 export function requireAgreement(condition: unknown, message: string): asserts condition { if (!condition) throw Error(message); }
 export function same(actual: unknown, expected: unknown, label: string) {
   requireAgreement(JSON.stringify(actual) === JSON.stringify(expected), `${label}: expected ${JSON.stringify(expected)}, observed ${JSON.stringify(actual)}`);
@@ -60,7 +61,8 @@ export function comparePage(page: PageObservation, server: ServerObservation, pr
   const position = aligned.players.find(p => p.id === f.playerId)!;
   requireAgreement(Math.hypot(f.local.x - position.x, f.local.y - position.y) <= (stopped ? 2 : 40), `Local prediction position: rendered (${f.local.x}, ${f.local.y}), server (${position.x}, ${position.y}) at tick ${aligned.tick}`);
   same(f.local.score, own.score, "HUD score");
-  same(f.paint.hud, { score: own.score, hits: own.hits, population: s.players.length, wave: s.wave }, "Painted HUD");
+  const age = own.result?.seconds ?? Math.max(0, (s.tick - own.startedTick) * STEP_MS / 1000);
+  same(f.paint.hud, { score: own.score, hits: own.hits, population: s.players.length, level: personalLevel(age) }, "Painted HUD");
   return f;
 }
 export function visiblePlayers(frames: ArenaFrame[], ids: string[]) {

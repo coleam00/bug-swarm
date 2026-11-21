@@ -17,7 +17,7 @@ function fixture() {
   const page: PageObservation = { now: 1000, text: "", fps: 60, frameMs: 1, result: null, frame: {
     at: 1000, epoch: 1000, receivedAt: 975, frame: 10, generation: 1, playerId: local.id, local, snapshot: s, width: 1280, height: 720, camera: { x: local.x - 640, y: local.y - 360 }, scale: 1,
     players: [local, remote], interpolation: { a: 3, b: 4, fraction: .5, transitions: [["local", 1], ["remote", 1]] },
-    paint: { players: [local, remote].map(p => ({ ...p, colour: TEAM_COLOURS[p.team], reviveRing: false })), bugs: [], effects: [], shots: [], minimap: [local, remote].map(p => ({ id: p.id, colour: TEAM_COLOURS[p.team] })), hud: { score: local.score, hits: local.hits, population: 2, wave: s.wave } }, input: { left: false, right: false, fire: false },
+    paint: { players: [local, remote].map(p => ({ ...p, colour: TEAM_COLOURS[p.team], reviveRing: false })), bugs: [], effects: [], shots: [], minimap: [local, remote].map(p => ({ id: p.id, colour: TEAM_COLOURS[p.team] })), hud: { score: local.score, hits: local.hits, population: 2, level: 1 } }, input: { left: false, right: false, fire: false },
   } };
   const server = { generation: 1, snapshots, lives: [] } as unknown as ServerObservation;
   return { page: structuredClone(page), server };
@@ -63,6 +63,7 @@ for (const [label, mutate] of Object.entries({
   colour: (p: PageObservation) => { p.frame!.paint.players[0]!.colour = "red"; },
   minimap: (p: PageObservation) => { p.frame!.paint.minimap.pop(); },
   hud: (p: PageObservation) => { p.frame!.paint.hud!.score++; },
+  level: (p: PageObservation) => { p.frame!.paint.hud!.level++; },
   fraction: (p: PageObservation) => { p.frame!.interpolation.fraction += .2; },
   name: (p: PageObservation) => { p.frame!.players[1]!.name = "Wrong"; },
   team: (p: PageObservation) => { p.frame!.players[1]!.team = "tabs"; },

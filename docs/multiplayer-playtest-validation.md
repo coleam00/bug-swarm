@@ -56,3 +56,21 @@ Scenario completion now requires a screenshot reference for every arena player a
 The screenshot fixture fakes only the CDP response and exercises the actual browser capture writer. It accepts complete captures and rejects missing player coverage, missing files, zero-byte files and directory paths. Removing only the screenshot file write fails both this fixture and the real `together` scenario with `Missing screenshot file`; the mutated scenario lists eight captures but produces zero PNGs. Restoring the writer passes `together` in 22.1 scenario seconds with all eight nonempty PNGs, and `boss` still skips explicitly. Evidence is in `.evidence/86/ssfix/` (`unit-errors.log`, `mutant/`, `passing/`, `boss/`). The shared-movement screenshot was visually inspected.
 
 For this follow-up, `bun run check` passed **488 tests** across 66 files, including type checking (184.24 seconds), and `bun run build` passed. Logs are in `.evidence/86/ssfix/check/` and `.evidence/86/ssfix/build/`. The full browser suite remains the factory's check; this correction ran the relevant focused scenarios.
+
+## Integration with main: beetles, personal levels and the hive
+
+The merge with main at `dae234479bf53d43988db380a2741c64e75edf5e` preserves beetle bounce colours/180 ms expiry, zero-point feedback, personal-level HUD text, hive art/health/arrows/awards and the playtest paint observations. HUD agreement now checks personal level from authoritative life age instead of claiming that the retired wave text was painted.
+
+The registered hive now runs in `boss`, replacing the pre-hive skip in the historical reports above. A new bot-only room advances 119 seconds through ordinary ticks with two idle bots; they die and wait naturally, then resume through validated respawn before human admission. Three browser players approach and fight using mouse aim/keyboard fire, defend nearby threats and validate ended lives before UI respawn. Every page must see the health bar and off-screen arrow and paint the actual body clear of HUD/minimap occlusion; ring-warning draw dispatch alone cannot satisfy body visibility. Each eligible browser contributor's painted reward must match the server event by player/life and exact amount. No gameplay values or rules are changed.
+
+Focused Chrome evidence after the merge:
+
+| Scenario | Result | Scenario seconds | Evidence folder |
+| --- | --- | ---: | --- |
+| together | pass | 18.4 | `.evidence/86/playtest/0dc0c083/` |
+| phone-desktop | pass | 27.7 | `.evidence/86/playtest/435a6a23/` |
+| boss | pass | 63.7 | `.evidence/86/playtest/1d4c71c3/` |
+
+The boss run painted all three human rewards (183, 146 and 93 points, including a replacement life). Mean page FPS was 59.91–59.93, mean instrumented frame cost 0.604–0.704 ms and live server tick p95 2.2265 ms with five participants. These are total costs for this encounter, not an overhead delta or a full-arena benchmark. Body, arrow and reward screenshots were inspected. Earlier failed plan-development runs are retained alongside this passing evidence.
+
+`bun run check` passed **530 tests** across 71 files (210.50 seconds), and `bun run build` passed. The final additional body-visibility fixture passed separately, as did a fresh TypeScript check. It rejects ring-only draw dispatch, clipping, HUD occlusion and minimap occlusion. Normal built JS contains none of `__arenaDebug`, `hiveRewards`, `reviveRing`, `receivedAt` or `observedAt`. Logs: `.evidence/86/merge-fix/`. The full browser suite remains the factory's product check.

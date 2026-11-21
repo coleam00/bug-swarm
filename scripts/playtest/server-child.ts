@@ -31,7 +31,11 @@ app = createServer({ port: Number(process.env.PLAYTEST_PORT), hostname: "127.0.0
   },
 } });
 let warmup: ServerObservation["warmup"], driver: ReturnType<typeof botDriver> | undefined;
-if (seconds) { driver = botDriver(app.arenas, Number(process.env.PLAYTEST_BOTS), seed); warmup = await warmRoom(app.arenas, driver, seconds, () => { clock += 50; }, process.env); }
+if (seconds) {
+  driver = botDriver(app.arenas, Number(process.env.PLAYTEST_BOTS), seed);
+  warmup = await warmRoom(app.arenas, driver, seconds, () => { clock += 50; }, process.env, process.env.PLAYTEST_IDLE_WARMUP === "1");
+  driver.input(); // ordinary respawn for any setup bots waiting at life-over
+}
 offset = clock - performance.now(); warming = false;
 const botTimer = driver ? setInterval(() => driver!.input(), 50) : undefined;
 const shutdown = registerShutdown(app, () => writeFileSync(join(process.env.PLAYTEST_ROOT!, `shutdown-${generation}.json`), JSON.stringify(lives)));

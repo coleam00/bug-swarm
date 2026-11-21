@@ -42,6 +42,7 @@ test("submitted gameplay duration is capped at 300 seconds despite longer wall t
   expect(plausible({ ...boundary, seconds: 301, score: 301 }, 1000, 601000)).toBe(false);
 });
 test("name rules trim and allow exactly the published character set and lengths", () => {
+  expect(validateName("!")).toEqual({ error: "Use 2 to 16 letters, numbers, spaces, hyphens or underscores." });
   expect(validateName("  Robot-7_ ok  ")).toEqual({ name: "Robot-7_ ok" });
   for (const name of [null, "a", "12345678901234567", "🤖", "a<b", "a\nb", "éé", "  "]) expect(validateName(name).error).toBeDefined();
   expect(validateName("ab").name).toBe("ab"); expect(validateName("1234567890123456").name).toBeDefined();

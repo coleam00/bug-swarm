@@ -4,6 +4,7 @@ import { ArenaRenderer } from "./draw";
 import { ArenaInput } from "./input";
 import { canvasFixture } from "../test-support/canvas-fixture.test-support";
 import { lifeDefaults } from "../../shared/arena/types";
+import { createBug } from "../../shared/arena/bugs/registry";
 test("debug property returns copies and has no setter or action methods", () => {
   const target = {}, observation = new ArenaObservation(target);
   observation.publish({ at: 1, local: { x: 8 } } as Omit<ArenaFrame, "frame" | "paint">);
@@ -17,6 +18,25 @@ test("debug property returns copies and has no setter or action methods", () => 
   observation.publish({ at: 2, generation: 2 } as Omit<ArenaFrame, "frame" | "paint">);
   expect(observation.read()!.paint.effects).toEqual([]);
   observation.dispose(); expect("__arenaDebug" in target).toBe(false);
+});
+test("merged hive paints report health, edge arrows, body culling and only visible contributor awards", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const trace = new ArenaObservation({}).paint, renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D, trace);
+    const hive = createBug("hive", 9, 1200, 300);
+    renderer.draw(800, 600, { x: 0, y: 0 }, [], null, new ArenaInput(), [hive]);
+    expect(trace.hive).toEqual({ id: 9, hp: hive.hp, maxHp: hive.maxHp!, arrow: true });
+    expect(trace.bugs).toEqual([]);
+    hive.x = 400;
+    renderer.draw(800, 600, { x: 0, y: 0 }, [], null, new ArenaInput(), [hive]);
+    expect(trace.hive!.arrow).toBe(false); expect(trace.bugs.map(b => b.id)).toEqual([9]);
+    renderer.events([{ id: 10, tick: 1, kind: "hive", type: "kill", x: 400, y: 300, points: 0, rewards: [
+      { playerId: "visible", life: 1, amount: 200, x: 400, y: 300 }, { playerId: "offscreen", life: 2, amount: 150, x: 2200, y: 300 },
+    ] }], 100);
+    renderer.draw(800, 600, { x: 0, y: 0 }, [], null, new ArenaInput(), [], [], 5, 1, 200);
+    expect(trace.hive).toBeUndefined(); expect(trace.hiveRewards?.map(r => [r.playerId, r.life, r.amount])).toEqual([["visible", 1, 200]]);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 test("paint observation follows actual culling, downed rings, names/colours, shots and visible effects", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");

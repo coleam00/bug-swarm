@@ -9,6 +9,7 @@ import { motionFor, stopAtBoundary } from "./motion";
 import { resolveRevives } from "./revive";
 import { damagePlayer } from "./damage";
 import { advanceGlobs } from "./globs";
+import { arrivingHive, spawnHive } from "./bugs/hive";
 export function createArena(seed: number): ArenaState { return { tick: 0, random: seed >>> 0, players: new Map(), slots: new Map(),
   wave: 0, bugs: [], shots: [], globs: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
 export function joinPlayer(state: ArenaState, identity: Pick<Player, "id" | "name" | "team">) {
@@ -21,6 +22,7 @@ export function endLife(state: ArenaState, id: string): LifeResult | null {
   const p = state.players.get(id); if (!p || p.status === "out") return null;
   p.status = "out"; p.downedUntil = p.reviveMs = 0; p.reviving = false;
   p.hits = 0; p.vx = p.vy = 0; state.spawnCredits.delete(id);
+  state.hive?.contributions.delete(id);
   const result = { playerId: id, life: p.life, score: p.score, kills: p.kills, seconds: (state.tick - p.startedTick) * STEP_MS / 1000, touch: p.touch };
   state.shots = state.shots.filter(s => s.owner !== id || s.life !== p.life); state.ended.push(result); return result;
 }
@@ -41,7 +43,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
     const credit = (state.spawnCredits.get(id) ?? 0) + (threatRate(age) + threatRate(age + STEP_MS / 1000)) * STEP_MS / 2000;
     state.spawnCredits.set(id, credit); requested ||= credit >= 1 - 1e-9;
   }
-  if (state.tick % (WAVE_MS / STEP_MS) === 0) state.wave++;
+  if (state.tick % (WAVE_MS / STEP_MS) === 0) { state.wave++; if (state.wave % 5 === 0) spawnHive(state, time); }
   if (requested) {
     const start = state.spawnCursor + 1;
     for (let offset = 0; offset < MAX_PLAYERS; offset++) {
@@ -56,7 +58,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
       }
     }
   }
-  for (const bug of state.bugs) { BUGS[bug.kind].move(bug, state.players.values(), time); stopAtBoundary(bug); }
+  for (const bug of state.bugs) { BUGS[bug.kind].move(bug, state.players.values(), time, STEP_MS); stopAtBoundary(bug); }
   fireAndAdvance(state, inputs, time);
   for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;
@@ -64,6 +66,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   for (const p of state.players.values()) {
     if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
     for (const b of state.bugs) {
+      if (arrivingHive(b)) continue;
       const m = motionFor(b), dt = STEP_MS / 1000, px = p.x - p.vx * dt, py = p.y - p.vy * dt, radius = PLAYER_RADIUS + BUGS[b.kind].radius;
       const moving = circleEntry(px - m.x, py - m.y, (p.vx - m.vx) * m.stop, (p.vy - m.vy) * m.stop, radius);
       const stopped = circleEntry(px + p.vx * m.stop - b.x, py + p.vy * m.stop - b.y, p.vx * (dt - m.stop), p.vy * (dt - m.stop), radius);

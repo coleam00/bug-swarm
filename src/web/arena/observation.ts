@@ -1,5 +1,5 @@
 import type { Snapshot } from "../../shared/arena/protocol";
-import type { CombatPlayer, Bug, CombatEvent } from "../../shared/arena/types";
+import type { CombatPlayer, Bug, CombatEvent, HiveReward } from "../../shared/arena/types";
 
 /** Filled at actual paint sites after culling, never inferred from receipt. */
 export interface PaintTrace {
@@ -8,7 +8,9 @@ export interface PaintTrace {
   effects: (CombatEvent & { at: number })[];
   shots: { owner: string; id: number }[];
   minimap: { id: string; colour: string }[];
-  hud?: { score: number; hits: number; population: number; wave: number };
+  hud?: { score: number; hits: number; population: number; level: number };
+  hive?: { id: number; hp: number; maxHp: number; arrow: boolean };
+  hiveRewards?: (HiveReward & { at: number })[];
 }
 export interface ArenaFrame {
   frame: number; at: number; epoch: number; receivedAt: number; generation: number;

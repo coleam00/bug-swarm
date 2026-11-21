@@ -1,11 +1,12 @@
 import { Browser, until } from "./browser";
 import type { PageObservation } from "./types";
 import type { Input } from "../../src/shared/arena/types";
-import { createPolicy, policyInput } from "../../src/shared/arena/policies";
+import { createPolicy, policyInput, intercept } from "../../src/shared/arena/policies";
+import { SHOT_LIFETIME_MS } from "../../src/shared/arena/constants";
 import { TEAMS, type Team } from "../../src/shared/teams";
 import type { ArenaFrame } from "../../src/web/arena/observation";
 
-export type PlayerPlan = "wait" | "fight" | "combat" | "still" | "follow" | "hunt" | { x: number; y: number; radius?: number; fire?: boolean; guard?: boolean };
+export type PlayerPlan = "wait" | "fight" | "combat" | "boss" | "still" | "follow" | "hunt" | { x: number; y: number; radius?: number; fire?: boolean; guard?: boolean };
 export interface AppliedInput { at: number; serial: number; life: number; input: Input }
 export function guardInput(f: ArenaFrame, target: { x: number; y: number }, state: ReturnType<typeof createPolicy>): Input {
   const waiting = f.players.find(p => p.name === "PilotA")!;
@@ -79,6 +80,23 @@ export class Player {
     if (f.local.status !== "active" || this.plan === "wait" || this.plan === "still") { await this.clear(); return; }
     const players = typeof this.plan === "object" && this.plan.fire ? [] : f.players;
     let input = policyInput("aimer", { players, bugs: f.paint.bugs, globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+    if (this.plan === "boss") {
+      const hive = f.snapshot.bugs.find(b => b.kind === "hive");
+      // The hive's HUD/edge arrow exposes its direction on this player's own
+      // screen. Approach and shoot it while keeping the normal glob dodges.
+      const threatened = f.paint.bugs.some(b => b.kind !== "hive" && Math.hypot(b.x - f.local.x, b.y - f.local.y) < 250);
+      if (hive) {
+        input = policyInput("aimer", { players: [], bugs: threatened ? f.paint.bugs : [hive], globs: f.snapshot.globs, tick: f.snapshot.tick }, f.local, this.policy);
+        const imminent = f.paint.bugs.some(b => b.kind !== "hive" && Math.hypot(b.x - f.local.x, b.y - f.local.y) < 90);
+        const time = intercept(hive.x - f.local.x, hive.y - f.local.y, hive.vx, hive.vy);
+        // Keep dodging the crowd, but focus the boss rather than spending the
+        // entire encounter clearing its endlessly replenished brood.
+        if (!imminent && time !== null && time <= SHOT_LIFETIME_MS / 1000) {
+          input.aim = Math.atan2(hive.y + hive.vy * time - f.local.y, hive.x + hive.vx * time - f.local.x);
+          input.fire = !this.policy.pause;
+        }
+      }
+    }
     if (this.plan === "combat") {
       // Exercise real aim/fire throughout the encounter, including scanning an
       // empty viewport after respawn. Cool between ordinary 750 ms bursts.

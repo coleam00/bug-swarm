@@ -118,17 +118,18 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
   };
   try {
     await act(async () => { tree = create(createElement(Board, { controller })); });
-    assertNoRows(); assertStatus(false); assertActivity("—");
-    assert.ok(document.title.trim());
+    assertNoRows(); assertStatus(false); assertActivity("…");
+    assert.equal(document.title, "Bug Swarm: Stream Board");
     const pendingTotals = tree.root.findByProps({ className: "board-teams" }).findAllByType("strong");
-    assert.ok(pendingTotals.every(total => total.props.title === undefined && text(total).trim()), "Missing team placeholders");
+    assert.ok(pendingTotals.every(total => total.props.title === undefined && text(total) === "…"), "Missing team placeholders");
     assert.equal(tree.root.findByType("a").props.href, origin);
     assert.equal(text(tree.root.findByType("a")), origin);
     assert.equal(tree.root.findAllByType("input").length, 0);
     assert.equal(tree.root.findAllByType("canvas").length, 0);
     assert.equal(tree.root.findAllByType("button").length, 0);
     await act(async () => { leaders[0].reject(new Error("initial failure")); teams[0].reject(new Error("initial failure")); stats[0].reject(new Error("initial failure")); });
-    assertStatus(true); assertNoRows(); assertActivity("—");
+    assertStatus(true); assertNoRows(); assertActivity("…");
+    assert.ok(tree.root.findByProps({ className: "board-teams" }).findAllByType("strong").every(total => text(total) === "…"));
     await act(async () => { await clock.tick(2000); });
     await act(async () => { leaders[1].resolve([]); teams[1].resolve({ tabs: 0, spaces: 0 }); stats[1].resolve({ totalPlayers: 0, arenas: [] }); });
     assertNoRows(); assertStatus(false); assertActivity("0");

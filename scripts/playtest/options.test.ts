@@ -6,6 +6,7 @@ const base = join(process.cwd(), ".evidence", "86", "tests"); mkdirSync(base, { 
 test("CLI validates scenarios, duplicates, populations and mandatory bots", () => {
   expect(parseArgs(["--", "--scenario", "phone-desktop", "--bots", "16", "--issue", "86"]).bots).toBe(16);
   expect(() => parseArgs(["--bots", "10"])).toThrow("requires --scenario");
+  expect(() => parseArgs(["--scenario", "boss", "--bots", "0"])).toThrow("boss requires bots");
   for (const args of [["--scenario", "missing"], ["--bots", "17"], ["--bots", "-1"], ["--scenario", "together", "--bots", "9"], ["--scenario", "late-join", "--bots", "0"], ["--out"], ["--issue", "../x"], ["--scenario", "revive", "--scenario", "revive"], ["--scenario", "revive", "--bots", "1"]]) expect(() => parseArgs(args)).toThrow();
 });
 test("output checks both lexical paths and existing junction/symlink ancestors", () => {

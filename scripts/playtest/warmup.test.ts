@@ -36,3 +36,15 @@ test("warm-up refuses missing opt-in, invalid duration, reused arena and human a
     await expect(warmRoom(g.manager, g.bots, 1, g.advance, { ARENA_PLAYTEST: "1" })).rejects.toThrow("bot-only");
   } finally { await g.close(); }
 });
+test("idle boss setup advances ordinary ticks, waits through natural deaths and resumes with validated respawn", async () => {
+  const f = fixture();
+  try {
+    await warmRoom(f.manager, f.bots, 119, f.advance, { ARENA_PLAYTEST: "1" }, true);
+    const room = [...f.manager.rooms.values()][0]!;
+    expect(room.state.tick).toBe(2380); expect(room.state.wave).toBe(4);
+    expect([...room.state.players.values()].every(p => p.status === "out" && p.life === 1)).toBe(true);
+    f.bots.input();
+    expect([...room.state.players.values()].every(p => p.status === "active" && p.life === 2)).toBe(true);
+    expect(f.manager.dropped.malformed).toBe(0);
+  } finally { await f.close(); }
+});

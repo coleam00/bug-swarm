@@ -3,7 +3,7 @@ import { nextRandom } from "./random";
 import { cameraFor } from "./view";
 import type { ArenaState, CombatPlayer } from "./types";
 import { createBug } from "./bugs/registry";
-import { MAX_SPITTERS, STEP_MS } from "./constants";
+import { STEP_MS } from "./constants";
 import { spawnKind } from "./bugs/spawn-mix";
 export function random(state: ArenaState) { state.random = nextRandom(state.random); return state.random / 4294967296; }
 export function safeSpawn(state: ArenaState, except?: string) {
@@ -33,7 +33,8 @@ export function pushBugsFromSpawn(state: ArenaState, point: { x: number; y: numb
   }
 }
 export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
-  if (state.bugs.length >= MAX_BUGS || source.status !== "active") return false;
+  // Reserve the scheduled boss's slot even before it arrives.
+  if (state.bugs.length >= MAX_BUGS - (state.hive ? 0 : 1) || source.status !== "active") return false;
   // Prefer outer candidates within the source annulus, leaving interior openings for drop-ins.
   let bestX = 0, bestY = 0, bestDistance = -1;
   for (let i = 0; i < 224; i++) {
@@ -54,6 +55,6 @@ export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
       if (distance > bestDistance) { bestX = x; bestY = y; bestDistance = distance; }
     }
   }
-  if (bestDistance >= 0) { state.bugs.push(createBug(spawnKind(state.wave, () => random(state), state.bugs.filter(b => b.kind === "spitter").length < MAX_SPITTERS), state.nextId++, bestX, bestY, state.tick * STEP_MS)); return true; }
+  if (bestDistance >= 0) { state.bugs.push(createBug(spawnKind(state.wave, () => random(state), state.bugs), state.nextId++, bestX, bestY, state.tick * STEP_MS)); return true; }
   return false;
 }

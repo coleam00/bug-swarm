@@ -11,6 +11,193 @@ import { worldView } from "../../shared/arena/view";
 import type { Paint } from "../test-support/canvas-fixture.test-support";
 import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
+import { Interpolation } from "./interpolation";
+
+test("beetle plate follows facing, each lost HP cracks once, and pale bounces leave cracks unchanged without a score", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("beetle", 1, 500, 500);
+    b.facing = Math.PI / 2;
+    const draw = (now = 0) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, new ArenaInput(), [b], [], 5, 0, now); return [...fixture.context.paints]; };
+    const shapeKey = (p: Paint) => JSON.stringify([p.path, p.transform]);
+    const effectiveAlpha = (p: Paint) => {
+      const style = p.op === "fill" ? p.fillStyle : p.strokeStyle;
+      const rgba = typeof style === "string" ? Bun.color(style, "[rgba]") : null;
+      expect(rgba).not.toBeNull(); // Parse CSS color alpha too; never assume an unknown paint is opaque.
+      return p.globalAlpha * rgba![3] / 255;
+    };
+    const intact = draw();
+    const body = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "ellipse"))!;
+    const plate = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[4]! - q.args[3]! < Math.PI))!;
+    expect(body).toBeDefined(); expect(plate).toBeDefined();
+    const ellipse = body.path.find(p => p.op === "ellipse")!;
+    const xScale = Math.hypot(body.transform[0]!, body.transform[1]!), yScale = Math.hypot(body.transform[2]!, body.transform[3]!);
+    expect(2 * ellipse.args[2]! * xScale).toBeGreaterThanOrEqual(44);
+    expect(2 * ellipse.args[3]! * yScale).toBeGreaterThanOrEqual(36);
+    expect(Math.atan2(plate.transform[1]!, plate.transform[0]!)).toBeCloseTo(b.facing);
+    const arc = plate.path.find(p => p.op === "arc")!;
+    expect(arc.args[2]! * Math.min(Math.hypot(plate.transform[0]!, plate.transform[1]!), Math.hypot(plate.transform[2]!, plate.transform[3]!))).toBeGreaterThanOrEqual(20);
+    expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
+    const rim = intact.find(p => p.op === "stroke" && shapeKey(p) === shapeKey(plate))!;
+    expect(rim).toBeDefined();
+    expect(effectiveAlpha(body)).toBeGreaterThan(0.5);
+    expect(effectiveAlpha(plate)).toBeGreaterThan(0.5); expect(effectiveAlpha(rim)).toBeGreaterThan(0.5);
+    expect(plate.fillStyle).not.toEqual(body.fillStyle); expect(plate.strokeStyle).not.toEqual(body.strokeStyle);
+    const onBody = (p: Paint) => p.op === "stroke" && p.transform.every((value, i) => value === body.transform[i]);
+    const intactPaths = new Set(intact.filter(onBody).map(p => JSON.stringify(p.path)));
+    const cracks = (paints: Paint[]) => paints.filter(p => onBody(p) && !intactPaths.has(JSON.stringify(p.path)));
+    for (let hp = 5; hp >= 1; hp--) {
+      b.hp = hp; const damaged = cracks(draw()); expect(damaged).toHaveLength(5 - hp);
+      for (const crack of damaged) expect(effectiveAlpha(crack)).toBeGreaterThan(0.5);
+    }
+    const baseline = new Set(draw().filter(p => p.op === "stroke").map(shapeKey));
+    const effects = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && !baseline.has(shapeKey(p)));
+    const cached = fixture.created, event = { id: 2, tick: 1, kind: "beetle" as const, type: "bounce" as const, x: 500, y: 522, points: 0 as const };
+    renderer.events([event], 0); const spark = draw(50), bounce = effects(spark);
+    expect(cracks(spark)).toHaveLength(4); expect(bounce).toHaveLength(1); expect(effectiveAlpha(bounce[0]!)).toBeGreaterThan(0.5);
+    expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    renderer.events([event], 170); expect(effects(draw(181))).toHaveLength(0);
+    expect(fixture.created).toBe(cached); renderer.reset(); expect(effects(draw())).toHaveLength(0);
+    renderer.events([{ ...event, type: "hit" }], 0);
+    expect(effects(draw(50))[0]!.strokeStyle).not.toEqual(bounce[0]!.strokeStyle);
+
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("bounce, HP cracks, facing and removal stay on the delayed combat clock and reset without replay", () => {
+  const view = new Interpolation(), b = createBug("beetle", 1, 500, 500);
+  const shot = { id: 2, owner: "a", life: 1, x: 550, y: 500, vx: -900, vy: 0, born: 0 };
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
+  view.push(structuredClone(s), 0);
+  s.tick = 2; s.shots = []; s.events = [{ id: 3, tick: 2, kind: "beetle", type: "bounce", x: 522, y: 500, points: 0 }];
+  view.push(structuredClone(s), 50);
+  expect(view.combat(149).shots).toHaveLength(1); expect(view.combat(149).events).toHaveLength(0);
+  const bounce = view.combat(150); expect(bounce.shots).toHaveLength(0); expect(bounce.bugs[0]!.hp).toBe(5); expect(bounce.events[0]!.type).toBe("bounce");
+  expect(view.combat(150).events).toHaveLength(0);
+  s.tick = 3; b.hp = 4; b.facing = 0.1; s.events = [{ id: 4, tick: 3, kind: "beetle", type: "hit", x: 500, y: 500, points: 0 }]; view.push(structuredClone(s), 100);
+  expect(view.combat(199).bugs[0]).toMatchObject({ hp: 5, facing: 0 });
+  expect(view.combat(200).bugs[0]).toMatchObject({ hp: 4, facing: 0.1 });
+  s.tick = 4; s.bugs = []; s.events = [{ id: 5, tick: 4, kind: "beetle", type: "kill", x: 500, y: 500, points: 90 }]; view.push(structuredClone(s), 150);
+  expect(view.combat(249).bugs).toHaveLength(1); expect(view.combat(250).bugs).toHaveLength(0);
+  view.clear(); expect(view.combat(1000).events).toHaveLength(0); view.push(s, 1000); expect(view.combat(1100).events[0]!.type).toBe("kill");
+});
+
+test("hive has cached pulsing art, authoritative health, edge arrow, minimap diamond and delayed awards/banner", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
+    const boss = createBug("hive", 1, 1200, 1200), authoritative = { ...boss, hp: 660 };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 100, wave: 5, players: [{ ...p, ackSeq: 0 }], bugs: [authoritative], shots: [], globs: [], events: [] };
+    for (const [width, height] of [[1280, 720], [390, 844], [844, 390]] as const) {
+      c.paints.length = 0;
+      renderer.draw(width, height, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, 1000, 1, snapshot, 4900);
+      const label = c.paints.find(p => p.op === "fillText" && /660\s*\/\s*1320/.test(String(p.args[0]))); expect(label).toBeDefined();
+      const bar = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#d9f278")!;
+      expect(bar.args[2]).toBe((width - 32) / 2); expect(bar.transform).toEqual([1, 0, 0, 1, 0, 0]);
+      expect(c.paints.some(p => p.op === "fillText" && p.args[0] === "Hive")).toBe(true);
+      const map = c.paints.find(p => p.op === "strokeRect" && p.strokeStyle === "#66849baa")!; expect(map.args[1]).toBe(94);
+      expect(c.paints.some(p => p.op === "fill" && p.fillStyle === "#eaff8c" && p.path.filter(q => q.op === "lineTo").length === 4)).toBe(true);
+    }
+    boss.x = boss.y = 300;
+    const draw = (now: number) => { c.paints.length = 0; renderer.draw(800, 600, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, now, 1, snapshot, now); return [...c.paints]; };
+    const early = draw(0), cached = fixture.created, late = draw(280); expect(fixture.created).toBe(cached);
+    const glow = (paints: Paint[]) => paints.find(p => p.op === "drawImage" && p.args.length === 5)!;
+    expect(glow(early).args[3]).not.toBe(glow(late).args[3]);
+    renderer.events([{ id: 2, type: "kill", kind: "hive", tick: 100, x: 300, y: 300, points: 0, rewards: [{ playerId: p.id, life: 1, amount: 350, x: p.x, y: p.y }] }], 1000);
+    expect(draw(999).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(false);
+    const killed = draw(1100); expect(killed.filter(p => p.op === "fillText" && p.args[0] === "+350")).toHaveLength(1);
+    expect(c.textAlign).toBe("left"); // Keep the following F readout anchored on screen.
+    expect(killed.some(p => p.op === "fillText" && p.args[0] === "+0")).toBe(false);
+    expect(killed.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+    renderer.reset(); expect(draw(1200).some(p => p.op === "fillText" && ["Hive down!", "+350"].includes(String(p.args[0])))).toBe(false);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("hive edge arrows point at the boss on every side, including diagonals", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), camera = { x: 1000, y: 1000 };
+    for (const [x, y] of [[2300, 1300], [100, 1300], [1400, 100], [1400, 2300], [100, 100], [2300, 2300]] as const) {
+      c.paints.length = 0;
+      renderer.draw(800, 600, camera, [], null, new ArenaInput(), [createBug("hive", 1, x, y)]);
+      const arrow = c.paints.find(p => p.op === "fill" && p.fillStyle === "#d9f278" && p.path.some(q => q.op === "moveTo" && q.args[0] === 15))!;
+      expect(arrow).toBeDefined();
+      const [a, b, , , ax, ay] = arrow.transform as [number, number, number, number, number, number];
+      const dx = x - camera.x - ax, dy = y - camera.y - ay;
+      expect((a * dx + b * dy) / Math.hypot(dx, dy)).toBeCloseTo(1);
+      expect(ax).toBeGreaterThanOrEqual(0); expect(ax).toBeLessThanOrEqual(800);
+      expect(ay).toBeGreaterThanOrEqual(0); expect(ay).toBeLessThanOrEqual(600);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("each hive recipient gets its own world award; the banner avoids their full paths and expires without reset", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const rewards = [{ playerId: "local", life: 1, amount: 125, x: 1200, y: 1200 }, { playerId: "remote", life: 2, amount: 275, x: 1320, y: 1260 }];
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const event = { id: 1, type: "kill" as const, kind: "hive" as const, tick: 1, x: 1000, y: 1200, points: 0, rewards };
+    for (const [width, height] of [[844, 390], [390, 844], [1280, 720]] as const) {
+      const view = worldView(width, height), camera = cameraFor(local.x, local.y, view.width, view.height);
+      renderer.reset(); renderer.events([event], 1000);
+      const birthY = new Map<string, number>();
+      const draw = (age: number) => { c.paints.length = 0; renderer.draw(width, height, camera, [local], local, input, [], [], 5, 100, 1000 + age, view.scale); return [...c.paints]; };
+      for (const age of [0, 180, 800, ...Array.from({ length: 32 }, (_, i) => i * 50)]) {
+        const paints = draw(age), panel = paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12dd")!;
+        expect(paints.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+        expect(panel).toBeDefined();
+        const [px, py, pw, ph] = panel.args.map(Number) as [number, number, number, number];
+        for (const r of rewards) {
+          const awards = paints.filter(p => p.op === "fillText" && p.args[0] === `+${r.amount}`); expect(awards).toHaveLength(1);
+          const award = awards[0]!, [a, b, cx, d, e, f] = award.transform as [number, number, number, number, number, number];
+          expect(award.args[1]).toBe(r.x);
+          if (age === 0) birthY.set(r.playerId, Number(award.args[2])); else expect(Number(award.args[2])).toBeLessThan(birthY.get(r.playerId)!);
+          // A minimum rendered size guards readability without pinning the 32px font.
+          const fontSize = Number.parseFloat(award.font.match(/[\d.]+px/)?.[0] ?? "0"), glyphScale = Math.min(Math.hypot(a, b), Math.hypot(cx, d));
+          expect(fontSize * glyphScale).toBeGreaterThanOrEqual(24);
+          const x = a * r.x + e, y = d * Number(award.args[2]) + f, half = (c.measureText(`+${r.amount}`).width / 2 + 5) * view.scale;
+          expect(y - fontSize * glyphScale).toBeGreaterThanOrEqual(0); expect(y + fontSize * glyphScale * 0.3).toBeLessThanOrEqual(height);
+          expect(x + half <= px || x - half >= px + pw || y + 10 * view.scale <= py || y - 36 * view.scale >= py + ph).toBe(true);
+          expect(award.globalAlpha).toBeGreaterThan(0);
+        }
+      }
+      expect(draw(1999).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+      expect(draw(2000).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(false);
+      expect(draw(4000).some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("hive forecasts successive rings on the combat clock, with twelve world-aligned lanes and no arrival warning", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), boss = createBug("hive", 1, 400, 300);
+    boss.facing = Math.PI / 3;
+    const draw = (combatTime: number) => { c.paints.length = 0; renderer.draw(800, 600, { x: 0, y: 0 }, [], null, new ArenaInput(), [boss], [], 5, 0, 123456, 1, undefined, combatTime); return [...c.paints]; };
+    const warned = (paints: Paint[]) => paints.some(p => p.op === "fillText" && p.args[0] === "RING INCOMING");
+    for (const deadline of [6000, 12000]) {
+      boss.ringAt = deadline;
+      expect(warned(draw(deadline - 1001))).toBe(false);
+      const early = draw(deadline - 1000), late = draw(deadline - 50);
+      expect(warned(early)).toBe(true); expect(warned(late)).toBe(true);
+      const ring = (paints: Paint[]) => paints.find(p => p.op === "stroke" && p.strokeStyle === "#ffd05a" && p.path.some(q => q.op === "arc"))!;
+      expect(ring(late).path[0]!.args[2]).toBeLessThan(ring(early).path[0]!.args[2] as number);
+      const lanes = late.find(p => p.op === "stroke" && p.strokeStyle === "#ffd05a" && p.path.filter(q => q.op === "lineTo").length === 12)!;
+      expect(lanes).toBeDefined(); expect(lanes.transform).toEqual([1, 0, 0, 1, boss.x, boss.y]);
+      for (const [i, end] of lanes.path.filter(q => q.op === "lineTo").entries()) expect(Math.atan2(end.args[1]!, end.args[0]!)).toBeCloseTo(Math.atan2(Math.sin(i * Math.PI / 6), Math.cos(i * Math.PI / 6)));
+      expect(warned(draw(deadline))).toBe(false); expect(warned(draw(deadline + 50))).toBe(false);
+    }
+    boss.phase = "arrival"; boss.phaseUntil = 11500;
+    expect(warned(draw(11500))).toBe(false);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
 
 test("spitter swells on the combat clock; green globs have a larger core, cached glow, trail and distinct +5", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
@@ -87,12 +274,46 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
       // Counting every text paint also catches persistent instructions outside that line.
       const hud = c.paints.filter(p => p.op === "fillText" || p.op === "strokeText");
       expect(hud).toHaveLength(1);
-      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+W19\s+20 in this arena$/);
+      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+Lv 1\s+20 in this arena$/);
       if (score === 123) expect(String(hud[0]!.args[0])).toStartWith("123 pts");
       c.font = hud[0]!.font;
       expect(Number(hud[0]!.args[1]) + c.measureText(String(hud[0]!.args[0])).width).toBeLessThanOrEqual(width! - 16);
       expect(hud[0]!.transform).toEqual([1, 0, 0, 1, 0, 0]);
     }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("HUD level follows authoritative life age, freezes at termination and resets on respawn", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const p: Snapshot["players"][number] = { ...local, startedTick: 73800, ackSeq: 0 };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], events: [] };
+    const draw = (level: number, now = 0) => {
+      fixture.context.paints.length = 0;
+      renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], snapshot.wave, 1, now, 1, snapshot, 0);
+      const hud = fixture.context.paints.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"));
+      expect(String(hud?.args[0])).toMatch(new RegExp(`\\bLv ${level}\\b`));
+      expect(String(hud?.args[0])).not.toMatch(/\bW\d+\b/);
+    };
+    draw(1); // Wave 124, but this life just joined. Predicted startedTick is stale.
+    for (const [age, level] of [[59.95, 1], [60, 2], [120, 3], [240, 4]]) {
+      snapshot.tick = p.startedTick + age! * 20; draw(level!);
+    }
+    snapshot.tick = p.startedTick + 1200; draw(2);
+    snapshot.wave++; draw(2); draw(2, 1e9); // Neither waves nor animation time set level.
+    p.status = "downed"; draw(2);
+    p.status = "active"; draw(2); // Revival retains the original startedTick.
+    p.status = "out";
+    p.result = { v: 1, type: "life_over", playerId: p.id, life: p.life, score: 0, kills: 0, seconds: 60, touch: false, save: "saved" };
+    snapshot.tick += 100000; draw(2); // Terminal duration stays frozen across thresholds.
+    Object.assign(p, lifeDefaults(snapshot.tick, 2)); delete p.result; draw(1);
+    local.startedTick = 100;
+    fixture.context.paints.length = 0;
+    renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], 124, 2500, 1e9);
+    expect(fixture.context.paints.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"))?.args[0]).toContain("Lv 3");
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 
@@ -161,8 +382,7 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const arrows = (paints: Paint[]) => paints.filter(paint => paint.op === "fill" && paint.path[0]?.op === "moveTo" && paint.path.some(c => c.op === "lineTo"));
     const overlay = (paints: Paint[], width = 390) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > width / 2 &&
       Number(paint.args[1]) > 78 && Number(paint.args[1]) + Number(paint.args[3]) < p.y);
-    // Require the explanation separately from the countdown in both banner
-    // layouts, without pinning the wording of either explanation line.
+    // Both layouts read as the same sentence, separate from the countdown.
     for (const [width, height, lines] of [[390, 844, 2], [844, 390, 1]] as const) {
       const frame = draw(p, [], 0, width, height), panel = overlay(frame, width);
       expect(panel).toBeDefined();
@@ -171,6 +391,7 @@ test("downed robots remain visible with countdown/progress, local copy and remot
         Number(paint.args[2]) > Number(panel!.args[1]) && Number(paint.args[2]) < Number(panel!.args[1]) + Number(panel!.args[3]));
       const explanation = text.filter(paint => /\p{L}{2,}/u.test(String(paint.args[0])));
       expect(explanation).toHaveLength(lines);
+      expect(explanation.map(paint => paint.args[0]).join(" ")).toBe("Downed. A teammate can revive you.");
       expect(text.filter(paint => paint.args[0] === "8s")).toHaveLength(1);
       for (const paint of text) {
         expect(paint.globalAlpha).toBeGreaterThan(0);
@@ -527,12 +748,12 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
     expect(immuneA.globalAlpha).not.toBe(immuneB.globalAlpha); expect(immuneB.globalAlpha).toBeGreaterThan(0);
     const numbers = (paints: typeof cold) => paints.filter(paint => paint.op === "fillText")
       .flatMap(paint => String(paint.args[0]).match(/\d+(?:\.\d+)?/g)?.map(Number) ?? []);
-    expect(numbers(cold)).toEqual(expect.arrayContaining([5, 123, 1, 3]));
+    expect(numbers(cold)).toEqual(expect.arrayContaining([123, 1, 3]));
     p.score = 987; p.streak = 7; p.hits = 1;
-    const updated = numbers(draw(3, 12)); expect(updated).toEqual(expect.arrayContaining([12, 987, 1.7, 1]));
+    const updated = numbers(draw(3, 12)); expect(updated).toEqual(expect.arrayContaining([987, 1.7, 1]));
     expect(updated).not.toContain(123); expect(updated).not.toContain(5);
     p.streak = 30;
-    const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([17, 987, 3, 1]));
+    const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([987, 3, 1]));
     expect(capped).not.toContain(4);
     const effectTime = 1_000_000_000, kill = { id: 1, tick: 4, x: 550, y: 550, points: 11, type: "kill" as const, kind: "crawler" as const };
     renderer.events([kill], effectTime);

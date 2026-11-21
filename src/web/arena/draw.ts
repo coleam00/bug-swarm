@@ -8,16 +8,19 @@ import { helpArrow } from "./help-arrow";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
 import type { PaintTrace } from "./observation";
+import { HiveHud } from "./hive-hud";
+import { personalLevel } from "./level";
 declare const __ARENA_PLAYTEST__: boolean;
 const observing = typeof __ARENA_PLAYTEST__ === "undefined" || __ARENA_PLAYTEST__;
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bugDraw: Record<BugKind, BugDraw>;
   private globDraw = createGlobDraw();
+  private hiveHud = new HiveHud();
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ id: 0, tick: 0, x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
-  reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
-  events(events: CombatEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
+  reset() { this.hiveHud.reset(); this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
+  events(events: CombatEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { this.hiveHud.event(e, now); Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
   private floor: CanvasPattern | null;
   private glows = new Map<string, HTMLCanvasElement>();
   private labels = new Map<string, HTMLCanvasElement>();
@@ -35,11 +38,12 @@ export class ArenaRenderer {
     }
   }
   draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null, combatTime = tick * STEP_MS, globs: Glob[] = []) {
-    if (observing && this.trace) { this.trace.players = []; this.trace.bugs = []; this.trace.effects = []; this.trace.shots = []; this.trace.minimap = []; this.trace.hud = undefined; }
+    if (observing && this.trace) { this.trace.players = []; this.trace.bugs = []; this.trace.effects = []; this.trace.shots = []; this.trace.minimap = []; this.trace.hud = undefined; this.trace.hive = undefined; this.trace.hiveRewards = []; }
     this.time = tick * STEP_MS;
     this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
-    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT);
+    const boss = (snapshot?.bugs ?? bugs).find(b => b.kind === "hive"), visibleBoss = bugs.find(b => b.kind === "hive");
+    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT, !!boss || !!visibleBoss);
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -69,13 +73,17 @@ export class ArenaRenderer {
     for (const p of players) if (p.id !== local?.id) this.robot(p, false, camera, worldWidth, worldHeight);
     if (local) this.robot(local, true, camera, worldWidth, worldHeight);
     for (const e of this.bursts) {
-      const age = now - e.at, duration = e.type === "hit" ? 180 : 700; if (age < 0 || age > duration) continue;
+      const age = now - e.at, duration = e.type === "kill" || e.type === "glob-pop" ? 700 : 180; if (age < 0 || age > duration) continue;
       if (observing && e.x >= camera.x && e.x <= camera.x + worldWidth && e.y >= camera.y && e.y <= camera.y + worldHeight)
         this.trace?.effects.push({ ...e } as CombatEvent & { at: number });
-      c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = 2;
+      c.globalAlpha = 1 - age / duration; c.strokeStyle = e.type === "bounce" ? "#e9f8ff" : e.type === "glob-pop" ? "#aaff38" : "#ffce79"; c.lineWidth = e.type === "bounce" ? 3 : 2;
       c.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, r = 8 + age / 22; c.moveTo(e.x + Math.cos(a) * r, e.y + Math.sin(a) * r); c.lineTo(e.x + Math.cos(a) * (r + 7), e.y + Math.sin(a) * (r + 7)); } c.stroke();
-      if (e.type !== "hit") { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
+      if (e.type !== "hit" && e.points > 0) { c.fillStyle = e.type === "glob-pop" ? "#d8ff80" : "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); } c.globalAlpha = 1;
     }
+    this.hiveHud.world(c, now, observing && this.trace ? reward => {
+      const x = (reward.x - camera.x) * scale, y = (reward.y - camera.y - 65 - (now - reward.at) / 35) * scale;
+      if (x >= 0 && x <= width && y >= 0 && y <= height) this.trace!.hiveRewards!.push({ ...reward });
+    } : undefined);
     c.restore();
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
       const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height, map.y + map.height + 24);
@@ -87,20 +95,26 @@ export class ArenaRenderer {
       c.fillText("Help", arrow.x, arrow.y + 26);
     }
     if (local && "life" in local) {
-      const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
+      const authoritative = snapshot?.players.find(p => p.id === local.id);
+      const p = authoritative ?? local as CombatPlayer;
       const population = snapshot?.players.length ?? players.length;
-      const key = `${p.score}/${p.streak}/${p.hits}/${wave}/${population}/${width}/${height}`;
+      const result = authoritative?.result;
+      const age = result ? result.seconds : Math.max(0, ((snapshot?.tick ?? tick) - p.startedTick) * STEP_MS / 1000);
+      const level = personalLevel(age);
+      const key = `${p.score}/${p.streak}/${p.hits}/${level}/${population}/${width}/${height}`;
       if (key !== this.hudKey) {
         this.hudKey = key; this.hudFont = Math.min(width, height) < 600 ? 16 : 20;
-        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  W${wave}  ${population} in this arena`;
+        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  Lv ${level}  ${population} in this arena`;
         this.hudText = text(p.score.toLocaleString()); c.font = `bold ${this.hudFont}px system-ui`;
         if (c.measureText(this.hudText).width > width - 32) this.hudText = text(Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(p.score));
         while (c.measureText(this.hudText).width > width - 32 && this.hudFont > 12) c.font = `bold ${--this.hudFont}px system-ui`;
       }
       c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
-      if (observing && this.trace) this.trace.hud = { score: p.score, hits: p.hits, population, wave };
+      if (observing && this.trace) this.trace.hud = { score: p.score, hits: p.hits, population, level };
     }
+    this.hiveHud.draw(c, width, height, camera, scale, boss, visibleBoss, now, map.y + map.height + 24,
+      observing && this.trace ? value => { this.trace!.hive = value; } : undefined);
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
       c.strokeStyle = "#ffffff55"; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, 60, 0, Math.PI * 2); c.stroke();
@@ -110,14 +124,14 @@ export class ArenaRenderer {
       const p = local as CombatPlayer;
       if (p.status === "downed") {
         c.font = "bold 16px system-ui";
-        const message = "Downed — a teammate can revive you", wide = c.measureText(message).width <= width - 32;
+        const message = "Downed. A teammate can revive you.", wide = c.measureText(message).width <= width - 32;
         const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale, preferredY = map.y + map.height + 8;
         // Keep the entire name/rings/Help clear, including at the top wall.
         const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
         c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
         c.textAlign = "center"; c.fillStyle = "#ffe09a";
         if (wide) c.fillText(message, width / 2, panelY + 20);
-        else { c.fillText("Downed — a teammate", width / 2, panelY + 20); c.fillText("can revive you", width / 2, panelY + 42); }
+        else { c.fillText("Downed. A teammate", width / 2, panelY + 20); c.fillText("can revive you.", width / 2, panelY + 42); }
         c.fillText(`${Math.ceil(Math.max(0, p.downedUntil - this.time) / 1000)}s`, width / 2, panelY + (wide ? 42 : 64));
       }
     }
