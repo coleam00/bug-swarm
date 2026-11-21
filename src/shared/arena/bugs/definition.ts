@@ -1,7 +1,9 @@
-import type { Bug, CombatPlayer } from "../types";
+import type { ArenaState, Bug, CombatPlayer } from "../types";
 export interface BugDefinition {
   radius: number; health: number; points: number;
-  initialize(bug: Bug): void;
+  initialize(bug: Bug, time: number): void;
+  /** Authoritative boundary only, before phase advancement; never called by rendering. */
+  attack?(bug: Bug, state: ArenaState, time: number): void;
   /** Advance only committed phase/timer/velocity state, including skipped snapshots. */
   advancePhase?(bug: Bug, time: number): void;
   /** Velocity is locked until phaseUntil in these phases; advancePhase supplies the next interval. */

@@ -12,6 +12,25 @@ import type { Paint } from "../test-support/canvas-fixture.test-support";
 import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
 
+test("spitter swells on the combat clock; green globs have a larger core, cached glow, trail and distinct +5", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("spitter", 1, 500, 500), input = new ArenaInput();
+    Object.assign(b, { phase: "swell", phaseUntil: 2200 });
+    const glob = { id: 2, x: 600, y: 500, vx: 320, vy: 0, born: 0 };
+    const draw = (time: number) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, input, [b], [], 4, 100, 0, 1, undefined, time, [glob]); return [...fixture.context.paints]; };
+    const early = draw(1700), late = draw(2150);
+    const radius = (p: Paint[]) => p.find(p => p.op === "fill" && p.fillStyle === "#aaff38" && p.path.some(q => q.op === "ellipse"))!.path.find(q => q.op === "ellipse")!.args[2]!;
+    expect(radius(late)).toBeGreaterThan(radius(early));
+    expect(late.some(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[2] === 9))).toBe(true);
+    expect(late.some(p => p.op === "stroke" && p.strokeStyle === "#8dff3866" && p.lineWidth === 12)).toBe(true);
+    const cached = fixture.created; draw(2150); expect(fixture.created).toBe(cached);
+    renderer.events([{ id: 4, tick: 100, x: 600, y: 500, type: "glob-pop", points: 5 }], 0);
+    expect(draw(2150).some(p => p.op === "fillText" && p.args[0] === "+5" && p.fillStyle === "#d8ff80")).toBe(true);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
 test("kind dispatch paints a crouched hot tell along locked facing, keeps offscreen warnings, and sparks without score", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
@@ -49,7 +68,7 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
     const predicted = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
     const authoritative = { ...predicted, score: 123, streak: 7, hits: 2 };
     const players = Array.from({ length: 20 }, (_, i) => ({ ...authoritative, ackSeq: 0, id: i ? `remote-${i}` : "local", hits: i ? 0 : 2 }));
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], events: [] };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 19, players, bugs: [], shots: [], globs: [], events: [] };
     for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) for (const score of [123, Number.MAX_SAFE_INTEGER]) {
       players[0]!.score = score; c.paints.length = 0;
       // Interpolated membership is deliberately stale; connected dead players still count.

@@ -22,6 +22,27 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   }
   return { id, socket, messages, wait };
 }
+
+test("two real clients receive the same swell, emitted glob, interception and authoritative five points", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "spitter-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!, q = room.state.players.get(b.id)!;
+    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(q, { x: 1800, y: 1800 });
+    const bug = createBug("spitter", room.state.nextId++, 800, 1200, room.state.tick * 50); room.state.bugs = [bug];
+    Object.assign(bug, { phase: "swell", phaseUntil: (room.state.tick + 4) * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "spitter" && b.phase === "swell"));
+    const snapshots: Snapshot[] = [];
+    for (const c of [a, b]) snapshots.push(await c.wait((m): m is Snapshot => m.type === "snapshot" && m.globs.length === 1));
+    expect(snapshots[0]!.globs).toEqual(snapshots[1]!.globs);
+    const g = room.state.globs[0]!;
+    room.state.shots.push({ id: room.state.nextId++, x: g.x + 20, y: g.y, vx: -900, vy: 0, owner: p.id, life: p.life, born: room.state.tick * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && !m.globs.length && m.events.some(e => e.type === "glob-pop") && m.players.some(p => p.id === a.id && p.score === 5 && p.kills === 0));
+    expect(p.streak).toBe(1);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
 test("real combat transport: hit, cross-team revival in the same run, timeout save and one fresh respawn", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-combat-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });

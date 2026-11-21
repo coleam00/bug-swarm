@@ -2,6 +2,8 @@ import { HEAT_CAPACITY, HEAT_COOLING, HEAT_GAIN, MUZZLE_OFFSET, OVERHEAT_MS, SHO
 import { BUGS } from "./bugs/registry";
 import type { ArenaState, Input } from "./types";
 import { recordMotion, motionFor } from "./motion";
+import { prepareGlobs, globMotion } from "./globs";
+import { GLOB_RADIUS, GLOB_POINTS } from "./constants";
 // First entry of a relative segment into a circle, including initial overlap.
 export function circleEntry(x: number, y: number, dx: number, dy: number, radius: number): number | null {
   const c = x * x + y * y - radius * radius; if (c <= 0) return 0;
@@ -11,6 +13,7 @@ export function circleEntry(x: number, y: number, dx: number, dy: number, radius
 }
 export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, Input>, time: number) {
   const end = time + STEP_MS;
+  prepareGlobs(state, time);
   for (const b of state.bugs) recordMotion(b);
   for (const p of state.players.values()) {
     if (p.status === "out") continue;
@@ -52,6 +55,21 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
         const entry = t === null ? Infinity : start + t * (finish - start);
         if (entry < first || entry !== Infinity && entry === first && b.id < state.bugs[victim]!.id) { first = entry; victim = i; }
       }
+    }
+    let glob = -1, globFirst = first, firstId = victim >= 0 ? state.bugs[victim]!.id : Infinity;
+    for (let i = 0; i < state.globs.length; i++) {
+      const g = state.globs[i]!, m = globMotion(g), offset = (from - time) / 1000;
+      const duration = Math.min(boundary, m.duration - offset, m.contact - offset);
+      if (duration < 0) continue;
+      const t = circleEntry(s.x - g.x - g.vx * offset, s.y - g.y - g.vy * offset, (s.vx - g.vx) * duration, (s.vy - g.vy) * duration, SHOT_RADIUS + GLOB_RADIUS);
+      const entry = t === null ? Infinity : t * duration;
+      if (entry < globFirst || entry !== Infinity && entry === globFirst && g.id < firstId) { glob = i; globFirst = entry; firstId = g.id; }
+    }
+    if (glob >= 0) {
+      const g = state.globs[glob]!, impact = (from - time) / 1000 + globFirst;
+      owner.streak++; owner.points += GLOB_POINTS * 10; owner.score = Math.round(owner.points / 10);
+      state.events.push({ id: state.nextId++, tick: state.tick + 1, type: "glob-pop", x: g.x + g.vx * impact, y: g.y + g.vy * impact, points: GLOB_POINTS });
+      state.globs.splice(glob, 1); continue;
     }
     if (victim >= 0) {
       const b = state.bugs[victim]!, m = motionFor(b), multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;

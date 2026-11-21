@@ -1,4 +1,4 @@
-import { IMMUNITY_MS, MAX_PLAYERS, PLAYER_HITS, PLAYER_RADIUS, STEP_MS, WAVE_MS } from "./constants";
+import { MAX_PLAYERS, PLAYER_HITS, PLAYER_RADIUS, STEP_MS, WAVE_MS } from "./constants";
 import { threatRate } from "./threat";
 import { movePlayer } from "./movement";
 import { neutralInput, lifeDefaults, type ArenaState, type Input, type Player, type LifeResult } from "./types";
@@ -6,9 +6,11 @@ import { safeSpawn, spawnBug } from "./spawn";
 import { BUGS } from "./bugs/registry";
 import { fireAndAdvance, circleEntry } from "./combat";
 import { motionFor, stopAtBoundary } from "./motion";
-import { downPlayer, resolveRevives } from "./revive";
+import { resolveRevives } from "./revive";
+import { damagePlayer } from "./damage";
+import { advanceGlobs } from "./globs";
 export function createArena(seed: number): ArenaState { return { tick: 0, random: seed >>> 0, players: new Map(), slots: new Map(),
-  wave: 0, bugs: [], shots: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
+  wave: 0, bugs: [], shots: [], globs: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
 export function joinPlayer(state: ArenaState, identity: Pick<Player, "id" | "name" | "team">) {
   if (state.players.has(identity.id) || state.players.size >= MAX_PLAYERS) return null;
   let slot = 0; const occupied = new Set(state.slots.values()); while (occupied.has(slot)) slot++;
@@ -58,6 +60,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   fireAndAdvance(state, inputs, time);
   for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;
+  advanceGlobs(state, time);
   for (const p of state.players.values()) {
     if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
     for (const b of state.bugs) {
@@ -65,12 +68,12 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
       const moving = circleEntry(px - m.x, py - m.y, (p.vx - m.vx) * m.stop, (p.vy - m.vy) * m.stop, radius);
       const stopped = circleEntry(px + p.vx * m.stop - b.x, py + p.vy * m.stop - b.y, p.vx * (dt - m.stop), p.vy * (dt - m.stop), radius);
       if (moving === null && stopped === null) continue;
-      p.immuneUntil = time + IMMUNITY_MS;
-      if (p.hits === 1) downPlayer(state, p); else p.hits--;
+      damagePlayer(state, p, time);
       break;
     }
   }
   for (const p of resolveRevives(state, state.tick * STEP_MS)) endLife(state, p.id);
+  for (const b of state.bugs) BUGS[b.kind].attack?.(b, state, state.tick * STEP_MS);
   // Publish phase/velocity for the following interval, after resolving completed motion and life states.
   for (const b of state.bugs) { BUGS[b.kind].move(b, state.players.values(), state.tick * STEP_MS); stopAtBoundary(b); }
 }

@@ -24,7 +24,7 @@ test("WebSocket bots actually send distinct mover and aimer inputs for the same 
       if (message.type !== "hello") return;
       socket.send(JSON.stringify({ v: VERSION, type: "welcome", playerId: message.playerId, arenaId: "policy-test", buildId: "test",
         world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } }));
-      const snapshot: Snapshot = { v: VERSION, type: "snapshot", arenaId: "policy-test", tick: 1, wave: 1, events: [], shots: [],
+      const snapshot: Snapshot = { v: VERSION, type: "snapshot", arenaId: "policy-test", tick: 1, wave: 1, events: [], shots: [], globs: [],
         players: [{ ...lifeDefaults(), id: message.playerId, name: message.name, team: message.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 }],
         bugs: [{ id: 1, kind: "crawler", hp: 1, facing: 0, x: 1600, y: 1200, vx: 0, vy: 140 }] };
       socket.send(JSON.stringify(snapshot));
@@ -71,7 +71,7 @@ test("bot transport waits downed, resumes the same life after revival and reques
       snapshot.tick++; socket.send(JSON.stringify(snapshot));
     } },
   });
-  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "revive-test", tick: 0, wave: 1, players: [], bugs: [], shots: [], events: [] };
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "revive-test", tick: 0, wave: 1, players: [], bugs: [], shots: [], globs: [], events: [] };
   try {
     await runBots({ url: server.url.origin, count: 1, seconds: 1, policy: "aimer" });
     expect(phases).toEqual(["downed", "active"]); expect(respawns).toBe(1);
