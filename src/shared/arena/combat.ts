@@ -5,6 +5,9 @@ import { recordMotion, motionFor } from "./motion";
 import { dropPickup } from "./pickups/lifecycle";
 import { PICKUPS, PICKUP_KINDS } from "./pickups/registry";
 const SINGLE_SHOT = [0] as const;
+import { prepareGlobs, globMotion } from "./globs";
+import { GLOB_RADIUS, GLOB_POINTS } from "./constants";
+import { damagePlayer } from "./damage";
 // First entry of a relative segment into a circle, including initial overlap.
 export function circleEntry(x: number, y: number, dx: number, dy: number, radius: number): number | null {
   const c = x * x + y * y - radius * radius; if (c <= 0) return 0;
@@ -14,6 +17,7 @@ export function circleEntry(x: number, y: number, dx: number, dy: number, radius
 }
 export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, Input>, time: number) {
   const end = time + STEP_MS;
+  const contacts = prepareGlobs(state, time);
   for (const b of state.bugs) recordMotion(b);
   for (const p of state.players.values()) {
     if (p.status === "out") continue;
@@ -41,10 +45,28 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
       if (p.heat >= HEAT_CAPACITY - 1e-8) { p.overheatUntil = at + OVERHEAT_MS; p.nextShotAt = end; p.heat = Math.max(0, p.heat - HEAT_COOLING * (end - at) / 1000); break; }
     }
   }
+  // Resolve each possible contact only after shots have reached that boundary.
+  // A downing invalidates later contacts and cancels that player's pending shots.
+  // Interceptions win exact ties; shot order stays stable within each interval.
+  let cursor = time;
+  for (const c of contacts) {
+    if (c.player.status !== "active" || !state.globs.includes(c.glob)) continue;
+    const boundary = time + c.at * 1000;
+    advanceShots(state, cursor, boundary, time); cursor = boundary;
+    const index = state.globs.indexOf(c.glob);
+    if (index < 0) continue;
+    state.globs.splice(index, 1);
+    // Publish downing at the completed tick, matching body contact/revive timing.
+    damagePlayer(state, c.player, time, state.tick + 1);
+  }
+  advanceShots(state, cursor, end, time);
+}
+function advanceShots(state: ArenaState, start: number, end: number, time: number) {
   let count = 0;
   for (const s of state.shots) {
     const owner = state.players.get(s.owner); if (owner?.status !== "active" || owner.life !== s.life) continue;
-    const from = Math.max(time, s.born), to = Math.min(end, s.born + SHOT_LIFETIME_MS), dt = Math.max(0, to - from) / 1000;
+    if (s.born > end) { state.shots[count++] = s; continue; }
+    const from = Math.max(start, s.born), to = Math.min(end, s.born + SHOT_LIFETIME_MS), dt = Math.max(0, to - from) / 1000;
     let boundary = dt;
     if (s.vx > 0) boundary = Math.min(boundary, (WORLD_WIDTH - s.x) / s.vx); else if (s.vx < 0) boundary = Math.min(boundary, -s.x / s.vx);
     if (s.vy > 0) boundary = Math.min(boundary, (WORLD_HEIGHT - s.y) / s.vy); else if (s.vy < 0) boundary = Math.min(boundary, -s.y / s.vy);
@@ -62,6 +84,21 @@ export function fireAndAdvance(state: ArenaState, inputs: ReadonlyMap<string, In
         const entry = t === null ? Infinity : start + t * (finish - start);
         if (entry < first || entry !== Infinity && entry === first && b.id < state.bugs[victim]!.id) { first = entry; victim = i; }
       }
+    }
+    let glob = -1, globFirst = first, firstId = victim >= 0 ? state.bugs[victim]!.id : Infinity;
+    for (let i = 0; i < state.globs.length; i++) {
+      const g = state.globs[i]!, m = globMotion(g), offset = (from - time) / 1000;
+      const duration = Math.min(boundary, m.duration - offset);
+      if (duration < 0) continue;
+      const t = circleEntry(s.x - g.x - g.vx * offset, s.y - g.y - g.vy * offset, (s.vx - g.vx) * duration, (s.vy - g.vy) * duration, SHOT_RADIUS + GLOB_RADIUS);
+      const entry = t === null ? Infinity : t * duration;
+      if (entry < globFirst || entry !== Infinity && entry === globFirst && g.id < firstId) { glob = i; globFirst = entry; firstId = g.id; }
+    }
+    if (glob >= 0) {
+      const g = state.globs[glob]!, impact = (from - time) / 1000 + globFirst;
+      owner.streak++; owner.points += GLOB_POINTS * 10; owner.score = Math.round(owner.points / 10);
+      state.events.push({ id: state.nextId++, tick: state.tick + 1, type: "glob-pop", x: g.x + g.vx * impact, y: g.y + g.vy * impact, points: GLOB_POINTS });
+      state.globs.splice(glob, 1); continue;
     }
     if (victim >= 0) {
       const b = state.bugs[victim]!, m = motionFor(b), multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;

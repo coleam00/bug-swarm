@@ -9,7 +9,7 @@ import type { Paint } from "../../test-support/canvas-fixture.test-support";
 import { PICKUPS } from "../../../shared/arena/pickups/registry";
 import { canvasFixture } from "../../test-support/canvas-fixture.test-support";
 test("floor pickups share delayed combat birth/removal, while blink and HUD obey exact deadlines", () => {
-  const snapshot = (tick: number, visible: boolean): Snapshot => ({ v: 1, type: "snapshot", arenaId: "test", tick, wave: 1, players: [], bugs: [], shots: [], events: [],
+  const snapshot = (tick: number, visible: boolean): Snapshot => ({ globs: [], v: 1, type: "snapshot", arenaId: "test", tick, wave: 1, players: [], bugs: [], shots: [], events: [],
     pickups: visible ? [{ id: 1, kind: "shield", x: 500, y: 500, expiresAt: 12500 }] : [] });
   const i = new Interpolation(); i.push(snapshot(9, false), 450); i.push(snapshot(10, true), 500); i.push(snapshot(11, false), 550);
   expect(i.combat(599).pickups).toEqual([]); expect(i.combat(600).pickups).toHaveLength(1);
@@ -27,9 +27,9 @@ test.each(["shield", "spread", "rapid"] as const)("%s paints floor and HUD glyph
     const p = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 300, y: 300, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
     const deadline = 10000 + PICKUPS[kind].duration / 2;
     const remote = { ...p, id: "b", x: 500, effects: { [kind]: deadline } };
-    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 200, wave: 1, players: [{ ...p, effects: { [kind]: deadline } }, remote], bugs: [], shots: [], events: [],
+    const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", arenaId: "test", tick: 200, wave: 1, players: [{ ...p, effects: { [kind]: deadline } }, remote], bugs: [], shots: [], events: [],
       pickups: [{ id: 1, kind, x: 500, y: 400, expiresAt: 12000 }] };
-    const draw = (remaining = 2000) => { c.paints.length = 0; renderer.draw(390, 844, { x: 200, y: 200 }, [p, remote], p, input, [], [], 1, 200, 10000, 1, snapshot, 12000 - remaining, snapshot.pickups); return [...c.paints]; };
+    const draw = (remaining = 2000) => { c.paints.length = 0; renderer.draw(390, 844, { x: 200, y: 200 }, [p, remote], p, input, [], [], 1, 200, 10000, 1, snapshot, 12000 - remaining, [], snapshot.pickups); return [...c.paints]; };
     const paint = draw(); const count = f.created; draw(); expect(f.created).toBe(count);
     const ring = paint.filter(p => p.op === "stroke" && p.path.some(q => q.op === "arc" && q.args[0] === 32 && q.args[1] === 70)).at(-1)!;
     expect(ring.path[0]!.args[4]! - ring.path[0]!.args[3]!).toBeCloseTo(Math.PI);

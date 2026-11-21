@@ -1,6 +1,9 @@
-import { expect, test } from "bun:test";
+import { expect, test, spyOn } from "bun:test";
 import { connectArena } from "./connection";
 import { consumeResume, type Resume } from "./resume";
+import { SnapshotEncoder } from "../../shared/arena/snapshot-codec";
+import { lifeDefaults } from "../../shared/arena/types";
+import type { Snapshot } from "../../shared/arena/protocol";
 function fixture(pageBuild = "one", retained: Resume | null = null, storageWorks = true) {
   const sockets: any[] = [], timers = new Map<number, { fn: () => void; ms: number }>(), statuses: string[] = [], messages: any[] = [];
   let next = 0, reloads = 0, disconnects = 0, failSocket = false;
@@ -97,4 +100,21 @@ test("successful page transitions rearm reload protection for rollbacks and late
 test("socket construction failures back off and disposal cancels retry", () => {
   const f = fixture(); f.socket.close(); f.fail(); f.retry(500); expect(f.connection.state).toBe("reconnecting"); expect(f.statuses.at(-1)).toBeTruthy();
   f.retry(1000); f.connection.dispose(); expect(f.timers.size).toBe(0);
+});
+
+test("negotiated binary snapshots preserve history and reset the base for each socket", () => {
+  const f = fixture(), encoder = new SnapshotEncoder(), warn = spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    f.socket.onopen(); expect(f.socket.sent[0].snapshotEncoding).toBe("delta-v1"); expect(f.socket.binaryType).toBe("arraybuffer");
+    f.receive(f.welcome());
+    const value: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, players: [{ ...lifeDefaults(), id: f.identity.playerId, name: "Robot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 1 }], bugs: [], shots: [], globs: [], events: [] };
+    f.socket.onmessage({ data: encoder.encode(value).keyframe.buffer });
+    const first = f.messages.at(-1); value.tick++; value.players[0]!.x += 5;
+    f.socket.onmessage({ data: encoder.encode(value).delta.buffer });
+    expect(first.players[0].x).toBe(1200); expect(f.messages.at(-1).players[0].x).toBe(1205);
+    f.connection.reconnect(); f.retry(500); f.receive(f.welcome());
+    value.tick++; const frames = encoder.encode(value), count = f.messages.length;
+    f.socket.onmessage({ data: frames.delta.buffer }); expect(f.messages.length).toBe(count); expect(warn).toHaveBeenCalledTimes(1);
+    f.socket.onmessage({ data: frames.keyframe.buffer }); expect(f.messages.at(-1).tick).toBe(3);
+  } finally { f.connection.dispose(); warn.mockRestore(); }
 });

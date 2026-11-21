@@ -15,7 +15,7 @@ function grant(f: ReturnType<typeof setup>) {
   f.arena.pickups.push({ id: f.arena.nextId++, kind: "shield", x: f.p.x, y: f.p.y, expiresAt: f.arena.tick * STEP_MS + 12000 });
   stepArena(f.arena, new Map());
 }
-test.each(["crawler", "dasher"] as const)("shield absorbs one eligible %s contact, preserves life/score/streak and grants hit immunity", kind => {
+test.each(["crawler", "dasher", "spitter"] as const)("shield absorbs one eligible %s contact, preserves life/score/streak and grants hit immunity", kind => {
   const f = setup(), { arena, p } = f; grant(f);
   p.effects.spread = p.effects.rapid = 8000;
   p.points = 100; p.score = 10; p.streak = 7;
@@ -25,6 +25,22 @@ test.each(["crawler", "dasher"] as const)("shield absorbs one eligible %s contac
   expect(p).toMatchObject({ status: "active", life: 1, score: 10, streak: 7, kills: 0 });
   for (let i = 0; i < 19; i++) stepArena(arena, new Map());
   expect(p.hits).toBe(3); stepArena(arena, new Map()); expect(p.hits).toBe(2);
+});
+
+test.each(["none", "spawn", "immunity"])("acid globs respect shield and protection precedence (%s)", protection => {
+  const f = setup(); grant(f); const { arena, p } = f;
+  p.effects.spread = p.effects.rapid = 8000;
+  if (protection === "spawn") p.spawnProtectedUntil = 1000;
+  if (protection === "immunity") p.immuneUntil = 1000;
+  arena.globs.push({ id: arena.nextId++, x: p.x + 30, y: p.y, vx: -320, vy: 0, born: 50 });
+  stepArena(arena, new Map());
+  expect(arena.globs).toEqual([]); expect(p.hits).toBe(3); expect(p.status).toBe("active");
+  expect(p.effects).toEqual(protection === "none" ? { spread: 8000, rapid: 8000 } : { shield: 20000, spread: 8000, rapid: 8000 });
+  if (protection === "none") {
+    expect(p.immuneUntil).toBe(1050);
+    arena.tick = 21; arena.globs.push({ id: arena.nextId++, x: p.x + 30, y: p.y, vx: -320, vy: 0, born: 1050 });
+    stepArena(arena, new Map()); expect(p.hits).toBe(2);
+  }
 });
 test("twenty-second deadline is exact; same-kind collection replaces the timer without stacking charges", () => {
   const f = setup(); grant(f); expect(f.p.effects.shield).toBe(SHIELD_MS);

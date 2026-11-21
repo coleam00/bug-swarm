@@ -7,11 +7,12 @@ import { BUGS } from "./bugs/registry";
 import { fireAndAdvance, circleEntry } from "./combat";
 import { motionFor, stopAtBoundary } from "./motion";
 import { resolveRevives } from "./revive";
+import { advanceGlobs } from "./globs";
 import { nextRandom } from "./random";
 import { cleanupPickups, collectPickups } from "./pickups/lifecycle";
 import { damagePlayer } from "./damage";
 export function createArena(seed: number): ArenaState { return { tick: 0, random: seed >>> 0, pickupRandom: nextRandom((seed ^ 0x9e3779b9) >>> 0), pickups: [], players: new Map(), slots: new Map(),
-  wave: 0, bugs: [], shots: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
+  wave: 0, bugs: [], shots: [], globs: [], events: [], ended: [], nextId: 1, spawnCredits: new Map(), spawnCursor: -1 }; }
 export function joinPlayer(state: ArenaState, identity: Pick<Player, "id" | "name" | "team">) {
   if (state.players.has(identity.id) || state.players.size >= MAX_PLAYERS) return null;
   let slot = 0; const occupied = new Set(state.slots.values()); while (occupied.has(slot)) slot++;
@@ -63,6 +64,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   fireAndAdvance(state, inputs, time);
   for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;
+  advanceGlobs(state, time);
   for (const p of state.players.values()) {
     if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
     for (const b of state.bugs) {
@@ -76,6 +78,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   }
   for (const p of resolveRevives(state, state.tick * STEP_MS)) endLife(state, p.id);
   cleanupPickups(state, state.tick * STEP_MS);
+  for (const b of state.bugs) BUGS[b.kind].attack?.(b, state, state.tick * STEP_MS);
   // Publish phase/velocity for the following interval, after resolving completed motion and life states.
   for (const b of state.bugs) { BUGS[b.kind].move(b, state.players.values(), state.tick * STEP_MS); stopAtBoundary(b); }
 }

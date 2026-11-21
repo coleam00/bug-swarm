@@ -10,7 +10,7 @@ const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1
 test("compact combat records preserve identities, life, velocity, phase, timings and event type; malformed tuples are rejected", () => {
   const a = createArena(79), p = joinPlayer(a, { id: hello.playerId, name: "Pilot", team: "tabs" })!;
   const dasher = createBug("dasher", 4, 800, 800); Object.assign(dasher, { phase: "windup", phaseUntil: 750 });
-  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "wire", tick: 1, wave: 1, players: [{ ...p, x: 1200, y: 1200, ackSeq: 0 }],
+  const s: Snapshot = { globs: [], v: 1, type: "snapshot", arenaId: "wire", tick: 1, wave: 1, players: [{ ...p, x: 1200, y: 1200, ackSeq: 0 }],
     pickups: [], bugs: [createBug("crawler", 1, 500, 500), dasher],
     shots: [{ id: 2, owner: p.id, life: 1, x: 1234.125, y: 1200, vx: 900, vy: 0, born: 25.125 }],
     events: [{ id: 3, tick: 1, x: 100, y: 200, type: "hit", kind: "crawler", points: 0 }] };
@@ -28,7 +28,7 @@ test("compact combat records preserve identities, life, velocity, phase, timings
 
 test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
   const bug = createBug("crawler", 1, 1200, 1200);
-  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], events: [] };
+  const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], events: [] };
   const parse = () => parseServer(serializeSnapshot(snapshot));
   expect(parse()).not.toBeNull(); Object.assign(bug, { vx: 84, vy: 112 }); expect(parse()).not.toBeNull();
   const valid = { ...bug };
@@ -40,7 +40,7 @@ test("crawler validation accepts stationary and moving crawlers but rejects spee
 
 test("registered kind validation accepts each dasher phase and hit/kill events, rejects malformed state", () => {
   const b = createBug("dasher", 1, 1200, 1200);
-  const s: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 3, players: [], bugs: [b], shots: [], events: [] };
+  const s: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 3, players: [], bugs: [b], shots: [], events: [] };
   const parse = () => parseServer(serializeSnapshot(s));
   for (const [phase, until, vx] of [["approach", 0, 140], ["windup", 750, 0], ["dash", 500, 490], ["recovery", 1050, 35]] as const) {
     Object.assign(b, { phase, phaseUntil: until, vx }); expect(parse()).not.toBeNull();
@@ -57,8 +57,8 @@ test("registered kind validation accepts each dasher phase and hit/kill events, 
   s.events = [{ id: 2, tick: 1, kind: "dasher", type: "hit", x: 1200, y: 1200, points: 0 }]; expect(parse()).not.toBeNull();
   const e = s.events[0]!;
   for (const fields of [{ type: "other" }, { points: 1 }, { kind: "unknown" }]) { s.events[0] = { ...e, ...fields } as any; expect(parse()).toBeNull(); }
-  s.events[0] = { ...e, type: "kill", points: 27.5 }; expect(parse()).not.toBeNull();
-  s.events[0].points = 75; expect(parse()).not.toBeNull(); s.events[0].points = 75.1; expect(parse()).toBeNull();
+  s.events[0] = { ...e, kind: "dasher", type: "kill", points: 27.5 }; expect(parse()).not.toBeNull();
+  s.events[0]!.points = 75; expect(parse()).not.toBeNull(); s.events[0]!.points = 75.1; expect(parse()).toBeNull();
 });
 test("restart packets require a finalized restart result; legacy life results remain valid", () => {
   const result = { v: 1, type: "life_over", playerId: hello.playerId, life: 1, score: 21, kills: 2, seconds: 1.1, touch: true, save: "saved", reason: "restart" };
@@ -76,7 +76,7 @@ test("directional protocol accepts validated envelopes and full-room snapshots o
   const error: ArenaError = { v: 1, type: "error", code: "name-refused", message: "Pick another." }; expect(parseServer(JSON.stringify(error))).toEqual(error);
   const arena = createArena(3);
   for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: `bot-${i}`, team: "spaces" });
-  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, bugs: [], shots: [], events: [], players: [...arena.players.values()].map(p => ({ ...p, ackSeq: 0 })) };
+  const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, bugs: [], shots: [], events: [], players: [...arena.players.values()].map(p => ({ ...p, ackSeq: 0 })) };
   const raw = JSON.stringify(snapshot); expect(raw.length).toBeGreaterThan(1024); expect(parseServer(raw)).toEqual(snapshot); expect(parseClient(raw)).toBeNull();
   snapshot.players[0]!.name = "<script>"; expect(parseServer(JSON.stringify(snapshot))).toBeNull();
   expect(parseServer(JSON.stringify(hello))).toBeNull(); expect(parseClient(JSON.stringify(welcome))).toBeNull();
@@ -85,16 +85,34 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
   const arena = createArena(2);
   for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: "WideWWWWWWWWWWWW", team: "tabs" });
   const players = [...arena.players.values()].map(p => ({ ...p, effects: { shield: 500019950, spread: 500007950, rapid: 500007950 }, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, spawnProtectedUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
-  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 1234.56789, y: 1234.56789, expiresAt: 500011950 })), arenaId: crypto.randomUUID(), tick: 9999999, wave: 9999, players,
-    bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: "dasher", hp: 2, facing: 2.356, phase: "recovery", phaseUntil: 500000950, x: 1234.56789, y: 1234.56789, vx: -24.748737, vy: 24.748737 })),
+  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 1234.56789, y: 1234.56789, expiresAt: 500011950 })), arenaId: "r".repeat(128), tick: 9999999, wave: 9999, players,
+    bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: i < 12 ? "spitter" : "dasher", hp: 2, facing: 2.356, phase: i < 12 ? "move" : "recovery", phaseUntil: 500000950, x: 1234.56789, y: 1234.56789, vx: -24.748737, vy: 24.748737 })),
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
+    globs: Array.from({ length: 12 }, (_, i) => ({ id: 1800 + i, x: 1234.56789, y: 1234.56789, vx: -226.27417, vy: 226.27417, born: 499999949 })),
     events: [] };
+  const offset = Number.MAX_SAFE_INTEGER - 10000;
+  for (const entities of [snapshot.bugs, snapshot.shots, snapshot.globs, snapshot.events, snapshot.pickups]) for (const e of entities) e.id += offset;
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  const parsed = parseServer(raw) as Snapshot;
+  expect(parsed.shots.map(s => s.owner)).toEqual(snapshot.shots.map(s => s.owner));
+  expect(parsed.shots.map(s => s.id)).toEqual(snapshot.shots.map(s => s.id));
+  expect(parsed.pickups.map(p => p.id)).toEqual(snapshot.pickups.map(p => p.id));
+  for (const base of [-1, null, "1", Number.MAX_SAFE_INTEGER + 1]) {
+    const bad = JSON.parse(raw); bad.idBase = base; expect(parseServer(JSON.stringify(bad))).toBeNull();
+  }
+  for (const owner of [-1, 0.5, snapshot.players.length, null]) {
+    const bad = JSON.parse(raw); bad.shots[0][1] = owner; expect(parseServer(JSON.stringify(bad))).toBeNull();
+  }
   // Every split of the shared shot/impact budget, including simultaneous boosts.
   for (const impacts of [1, 60, 330, 600, MAX_EVENTS]) {
     const mix = structuredClone(snapshot); mix.shots = mix.shots.slice(impacts);
-    mix.events = Array.from({ length: impacts }, (_, i) => ({ id: 3000 + i, tick: mix.tick, x: 1234.56789, y: 1234.56789, points: 75, type: "kill", kind: "dasher" }));
+    mix.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: mix.tick, x: 1234.56789, y: 1234.56789, points: 75, type: "kill", kind: "dasher" }));
     const wire = serializeSnapshot(mix); expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+    for (const all of [false, true]) {
+      const pops = structuredClone(mix);
+      pops.events = pops.events.map((e, i) => all || i % 2 ? { id: e.id, tick: e.tick, x: e.x, y: e.y, type: "glob-pop", points: 5 } : e);
+      expect(new TextEncoder().encode(serializeSnapshot(pops)).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(serializeSnapshot(pops))).not.toBeNull();
+    }
   }
   // Downed/out owners cancel their shots, while other owners can still fill
   // their per-player projectile bounds. Check every population split.
@@ -108,7 +126,7 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     split.shots = split.shots.filter(s => split.players.find(p => p.id === s.owner)!.status === "active");
     for (const impacts of [0, MAX_EVENTS]) {
       const variant = structuredClone(split);
-      if (impacts) { variant.shots = []; variant.events = Array.from({ length: impacts }, (_, i) => ({ id: 3000 + i, tick: variant.tick, x: 1234.56789, y: 1234.56789, kind: "dasher", type: "kill", points: 75 })); }
+      if (impacts) { variant.shots = []; variant.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: variant.tick, x: 1234.56789, y: 1234.56789, kind: "dasher", type: "kill", points: 75 })); }
       const wire = serializeSnapshot(variant);
       expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
     }
@@ -119,6 +137,24 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
   }
   snapshot.bugs[0]!.vx = 1e6; expect(parseServer(serializeSnapshot(snapshot))).toBeNull(); snapshot.bugs[0]!.vx = 0;
   snapshot.shots[0]!.owner = crypto.randomUUID(); expect(parseServer(serializeSnapshot(snapshot))).toBeNull();
+});
+
+test("glob and spitter wire validation rejects corrupt lifetimes, speed, phases, bounds and duplicate ids", () => {
+  const g = { id: 2, x: 1200, y: 1200, vx: 320, vy: 0, born: 2000 }, b = createBug("spitter", 1, 800, 1200, 2000);
+  const s: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 50, wave: 4, players: [], bugs: [b], shots: [], globs: [g], events: [] };
+  const parse = () => parseServer(serializeSnapshot(s)); expect(parse()).not.toBeNull();
+  for (const fields of [{ id: 1 }, { x: -1 }, { x: 2401 }, { vx: 321 }, { vx: 0 }, { born: 2501 }, { born: -1 }, { born: 500 }, { born: null }, { y: NaN }]) {
+    s.globs = [{ ...g, ...fields } as any]; expect(parse()).toBeNull();
+  }
+  s.globs = Array.from({ length: 13 }, (_, i) => ({ ...g, id: i + 100 })); expect(parse()).toBeNull(); s.globs = [g];
+  const good = { ...b };
+  for (const fields of [{ hp: 3 }, { phase: "dash" }, { phaseUntil: 2500 }, { phaseUntil: 4201 }, { phaseUntil: 3000.5 }, { phase: "swell", phaseUntil: 3000, vx: 1 }]) {
+    Object.assign(b, good, fields); expect(parse()).toBeNull();
+  }
+  Object.assign(b, good, { phase: "swell", phaseUntil: 3000, vx: 0 }); expect(parse()).not.toBeNull();
+  const pop = { id: 3, tick: 50, x: 1200, y: 1200, type: "glob-pop" as const, points: 5 as const };
+  s.events = [pop]; expect(parse()).not.toBeNull();
+  for (const fields of [{ points: 6 }, { kind: "crawler" }, { id: 2 }, { tick: 51 }]) { s.events = [{ ...pop, ...fields } as any]; expect(parse()).toBeNull(); }
 });
 test("UTF-8 cap measures bytes: 1024 accepted, 1025 dropped, malformed and unknown counted", () => {
   const prefix = JSON.stringify({ ...input, extra: "é" });
@@ -133,7 +169,7 @@ test("UTF-8 cap measures bytes: 1024 accepted, 1025 dropped, malformed and unkno
 
 test("snapshot life states require consistent health, deadlines, progress and terminal results", () => {
   const arena = createArena(1), p = joinPlayer(arena, { id: hello.playerId, name: "Robot", team: "tabs" })!;
-  const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 100, wave: 1, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], events: [] };
+  const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 100, wave: 1, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], events: [] };
   const downed = { ...snapshot.players[0]!, status: "downed" as const, hits: 0, downedUntil: 15000, reviveMs: 1950, reviving: true };
   snapshot.players = [downed]; expect(parseServer(serializeSnapshot(snapshot))).not.toBeNull();
   for (const patch of [{ status: undefined }, { status: "dead" }, { hits: 1 }, { downedUntil: 5000 }, { downedUntil: 15001 }, { downedUntil: null },

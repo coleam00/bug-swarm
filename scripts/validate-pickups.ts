@@ -11,6 +11,9 @@ const chromePath = process.env.CHROME_PATH ?? [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome',
 ].find(existsSync);
 if (!chromePath || !existsSync(chromePath)) throw new Error("Set CHROME_PATH to a Chrome/Chromium executable, then run from the repository root.");
+const decoderBuild = await Bun.build({ entrypoints: [join(import.meta.dir, 'browser-decoder.ts')], target: 'browser', format: 'iife' });
+if (!decoderBuild.success) throw new Error('Browser observer decoder build failed');
+const decoderSource = await decoderBuild.outputs[0]!.text();
 const { createServer } = await import(pathToFileURL(join(repo, 'src/server/server.ts')).href);
 const { runBots } = await import(pathToFileURL(join(repo, 'scripts/bots.ts')).href);
 const evidenceRoot = join(repo, '.evidence/79'); mkdirSync(evidenceRoot, { recursive: true });
@@ -41,7 +44,8 @@ async function page(width: number, height: number, url: string, touch = false) {
   await call('Page.enable', {}, sessionId); await call('Runtime.enable', {}, sessionId);
   await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: touch }, sessionId);
   if (touch) await call('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 }, sessionId);
-  await call('Page.addScriptToEvaluateOnNewDocument', { source: `window.evidence={snap:null,inputs:[],errors:[],kills:0,life:[]}; const Native=WebSocket; window.WebSocket=class extends Native {constructor(...args){super(...args);window.gameSocket=this;this.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.type==='welcome')window.evidence.id=m.playerId;if(m.type==='snapshot'){window.evidence.snap=m;window.evidence.kills+=m.events.length;}if(m.type==='life_over')window.evidence.life.push(m);});}send(data){const m=JSON.parse(data); if(m.type!=='hello'){window.evidence.inputs.push(m); if(window.evidence.inputs.length>100)window.evidence.inputs.shift();}return super.send(data);}}; window.addEventListener('error',e=>window.evidence.errors.push(String(e.message))); const err=console.error;console.error=(...args)=>{window.evidence.errors.push(args.map(String).join(' '));err(...args);};` }, sessionId);
+  await call('Page.addScriptToEvaluateOnNewDocument', { source: `${decoderSource}
+window.evidence={snap:null,inputs:[],errors:[],kills:0,life:[]}; const Native=WebSocket; window.WebSocket=class extends Native {constructor(...args){super(...args);if(new URL(args[0],location.href).pathname!=='/ws')return;const decoder=new window.ArenaSnapshotDecoder();window.gameSocket=this;this.addEventListener('message',e=>{const m=decoder.read(e.data);if(!m)return;if(m.type==='welcome')window.evidence.id=m.playerId;if(m.type==='snapshot'){window.evidence.snap=m;window.evidence.kills+=m.events.length;}if(m.type==='life_over')window.evidence.life.push(m);});}send(data){if(this!==window.gameSocket)return super.send(data);const m=JSON.parse(data); if(m.type!=='hello'){window.evidence.inputs.push(m); if(window.evidence.inputs.length>100)window.evidence.inputs.shift();}return super.send(data);}}; window.addEventListener('error',e=>window.evidence.errors.push(String(e.message))); const err=console.error;console.error=(...args)=>{window.evidence.errors.push(args.map(String).join(' '));err(...args);};` }, sessionId);
   await call('Page.navigate', { url }, sessionId); return { session: sessionId, targetId, browserContextId };
 }
 async function joinPage(p: any, name: string, teamIndex: number) {
@@ -85,7 +89,7 @@ try {
   report.assertions.push('A ' + natural.kind + ' rolled naturally from a bot kill; observer repositioned for the screenshot.');
   // Controlled visual scenes are separate from natural frame/tick and load measurements.
   function clearThreats() {
-    state.bugs = []; state.shots = [];
+    state.bugs = []; state.shots = []; state.globs = [];
     for (const bot of state.players.values()) if (bot.id !== desktopId && bot.id !== phoneId) Object.assign(bot, { x: 2200, y: 2200, immuneUntil: state.tick * 50 + 60000 });
   }
   clearThreats(); state.pickups = [];

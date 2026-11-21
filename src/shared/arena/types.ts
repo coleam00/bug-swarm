@@ -19,9 +19,10 @@ export interface Pickup { id: number; kind: PickupKind; x: number; y: number; ex
 export type BugKind = keyof typeof import("./bugs/registry").BUGS;
 export interface Bug { id: number; kind: BugKind; x: number; y: number; vx: number; vy: number; hp: number; facing: number; phase?: string; phaseUntil?: number }
 export interface Shot { id: number; owner: string; life: number; x: number; y: number; vx: number; vy: number; born: number }
-export type CombatEvent = { id: number; tick: number; x: number; y: number; kind: BugKind } &
-  ({ type: "hit"; points: 0 } | { type: "kill"; points: number });
+export interface Glob { id: number; x: number; y: number; vx: number; vy: number; born: number }
+export type CombatEvent = { id: number; tick: number; x: number; y: number } &
+  ({ type: "hit"; kind: BugKind; points: 0 } | { type: "kill"; kind: BugKind; points: number } | { type: "glob-pop"; points: 5; kind?: never });
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; pickupRandom: number; pickups: Pickup[]; players: Map<string, CombatPlayer>; slots: Map<string, number>;
-  wave: number; bugs: Bug[]; shots: Shot[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }
+  wave: number; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number }
 export const neutralInput = (): Input => ({ move: { x: 0, y: 0 }, aim: 0, fire: false });

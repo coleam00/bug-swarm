@@ -5,7 +5,7 @@ import { lifeDefaults, type Pickup } from "../types";
 import { createBug } from "../bugs/registry";
 const player = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
 const pickup: Pickup = { id: 2, kind: "shield", x: 1200, y: 1400, expiresAt: 12000 };
-const observation = (): Observation => ({ players: [player], bugs: [createBug("crawler", 1, 1600, 1200)], pickups: [pickup], tick: 0 });
+const observation = (): Observation => ({ globs: [], players: [player], bugs: [createBug("crawler", 1, 1600, 1200)], pickups: [pickup], tick: 0 });
 test.each(["shield", "spread", "rapid"] as const)("aimer seeks safe %s within 250, keeps independent leading aim/bursts, and allows refresh", kind => {
   const o = observation(); o.pickups = [{ ...pickup, kind }];
   const ordinary = policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79));
@@ -38,4 +38,13 @@ test("dodge and eligible rescue take priority; mover behavior is identical with 
   const rescue = { ...o, players: [player, { ...player, id: "b", x: 1500, status: "downed" as const }] };
   expect(policyInput("aimer", rescue, player, createPolicy(79))).toMatchObject({ move: { x: 1, y: 0 }, fire: false });
   expect(policyInput("mover", o, player, createPolicy(79))).toEqual(policyInput("mover", { ...o, pickups: [] }, player, createPolicy(79)));
+});
+
+test("pickup routes avoid crossing acid globs and reconsider after passage or expiry", () => {
+  const o = observation(); o.bugs = [];
+  const glob = { id: 3, x: 1040, y: 1290, vx: 320, vy: 0, born: 0 };
+  o.globs = [glob]; // Crosses the proposed southward route after half a second.
+  expect(safePickup(o, player)).toBeUndefined();
+  o.globs = [{ ...glob, x: 1360 }]; expect(safePickup(o, player)).toBe(pickup);
+  o.globs = [glob]; o.tick = 40; expect(safePickup(o, player)).toBe(pickup);
 });

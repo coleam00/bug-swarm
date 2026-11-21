@@ -14,7 +14,7 @@ test("shutdown freezes all rooms, rejects admission/respawn, commits once before
   const db = openDb(":memory:"), manager = new RoomManager(db, "build", { seed: () => 1 });
   const clients = Array.from({ length: 22 }, (_, i) => {
     const messages: any[] = [], order: string[] = [];
-    const c = manager.open({ send: raw => { const m = JSON.parse(raw); messages.push(m); order.push(`${m.type}:${m.save ?? ""}`); },
+    const c = manager.open({ send: raw => { const m = JSON.parse(String(raw)); messages.push(m); order.push(`${m.type}:${m.save ?? ""}`); },
       close: code => { order.push(`close:${code}`); }, getBufferedAmount: () => 0 });
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: `Pilot-${i}`, team: i % 2 ? "tabs" : "spaces", touch: true, buildId: "build" }));
     const p = c.room!.state.players.get(c.id!)!; p.score = 100 + i; p.kills = 8; p.startedTick = 0; c.room!.state.tick = 123;
@@ -27,7 +27,7 @@ test("shutdown freezes all rooms, rejects admission/respawn, commits once before
     const stopping = manager.stop(), repeated = manager.stop(); expect(manager.accepting).toBe(false);
     manager.message(dead, JSON.stringify({ v: 1, type: "respawn", life: 1, touch: false }));
     manager.leave(clients[20]!.c);
-    const refused: any[] = []; manager.open({ send: raw => refused.push(JSON.parse(raw)), close() {}, getBufferedAmount: () => 0 });
+    const refused: any[] = []; manager.open({ send: raw => refused.push(JSON.parse(String(raw))), close() {}, getBufferedAmount: () => 0 });
     expect(refused.at(-1).code).toBe("restarting"); expect(await stopping).toBe(true); expect(await repeated).toBe(true);
     const rows = db.query("SELECT * FROM runs").all() as any[];
     expect(rows).toHaveLength(22); expect(rows.filter(r => r.end_reason === "restart")).toHaveLength(21);
@@ -71,7 +71,7 @@ test("permanent failures report failed restart results; throwing notification ca
   const db = openDb(":memory:"), manager = new RoomManager(db, "test"), log = spyOn(console, "error").mockImplementation(() => {});
   const messages: any[] = [];
   try {
-    const c = manager.open({ send: raw => { const m = JSON.parse(raw); messages.push(m); if (m.type === "life_over") throw Error("transport"); }, close() { throw Error("close"); }, getBufferedAmount: () => 0 });
+    const c = manager.open({ send: raw => { const m = JSON.parse(String(raw)); messages.push(m); if (m.type === "life_over") throw Error("transport"); }, close() { throw Error("close"); }, getBufferedAmount: () => 0 });
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Pilot", team: "tabs", touch: false, buildId: "test" }));
     db.exec("CREATE TRIGGER fail_end BEFORE INSERT ON events WHEN NEW.type = 'run_ended' BEGIN SELECT RAISE(FAIL, 'offline'); END;");
     expect(await manager.stop()).toBe(false); expect(messages.at(-1)).toMatchObject({ type: "server_restart", result: { save: "failed", reason: "restart" } });
@@ -120,7 +120,7 @@ test("failed start rolls back; finish recovers metadata; cache failure does not 
 });
 test("death, stale inputs, duplicate respawns, touch, disconnect and repeated shutdown save each life once", async () => {
   const db = openDb(":memory:"), manager = new RoomManager(db, "test", { seed: () => 1, wallNow: () => 1000 });
-  const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(s)), close() {}, getBufferedAmount: () => 0 }), id = crypto.randomUUID();
+  const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(String(s))), close() {}, getBufferedAmount: () => 0 }), id = crypto.randomUUID();
   const send = (m: object) => manager.message(c, JSON.stringify({ v: 1, ...m }));
   try {
     send({ type: "hello", playerId: id, name: "Pilot", team: "tabs", touch: false, buildId: "test" });
@@ -146,7 +146,7 @@ test("death, stale inputs, duplicate respawns, touch, disconnect and repeated sh
 
 test("the score in pending and saved life_over is the literal score persisted by the real writer", async () => {
   const db = openDb(":memory:"), manager = new RoomManager(db, "test", { seed: () => 1 });
-  const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(s)), close() {}, getBufferedAmount: () => 0 });
+  const messages: any[] = [], c = manager.open({ send: s => messages.push(JSON.parse(String(s))), close() {}, getBufferedAmount: () => 0 });
   const id = crypto.randomUUID();
   try {
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name: "Pilot", team: "tabs", touch: false, buildId: "test" }));

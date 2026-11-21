@@ -1,6 +1,7 @@
+import { GLOB_LIFETIME_MS } from "../../shared/arena/constants";
 import { INTERPOLATION_MS, MAX_SNAPSHOTS, STEP_MS, WORLD_WIDTH, WORLD_HEIGHT } from "../../shared/arena/constants";
 import type { Snapshot } from "../../shared/arena/protocol";
-import type { Player, Bug, Shot, CombatEvent } from "../../shared/arena/types";
+import type { Player, Bug, Shot, Glob, CombatEvent } from "../../shared/arena/types";
 import { BUGS } from "../../shared/arena/bugs/registry";
 import { boundaryTime, stopAtBoundary } from "../../shared/arena/motion";
 function advancePosition(bug: Bug, ms: number) {
@@ -40,12 +41,12 @@ export class Interpolation {
         facing: p.facing + Math.atan2(Math.sin(q.facing - p.facing), Math.cos(q.facing - p.facing)) * fraction };
     });
   }
-  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "events" | "pickups"> {
-    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], events: [], pickups: [] };
+  combat(now: number): Pick<Snapshot, "bugs" | "shots" | "events" | "pickups" | "globs"> {
+    const latest = this.samples.at(-1); if (!latest) return { bugs: [], shots: [], events: [], globs: [], pickups: [] };
     // One monotonic clock owns births, movement, removals and their kill effects.
     const target = this.combatTick = Math.max(this.combatTick,
       Math.min(latest.snapshot.tick, latest.snapshot.tick + (now - latest.at - INTERPOLATION_MS) / STEP_MS));
-    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [], pickups: [] };
+    if (target < this.samples[0]!.snapshot.tick) return { bugs: [], shots: [], events: [], globs: [], pickups: [] };
     let a = this.samples[0]!, b = a;
     for (const s of this.samples) { if (s.snapshot.tick <= target) a = s; b = s; if (s.snapshot.tick >= target) break; }
     const offset = target - a.snapshot.tick, events: CombatEvent[] = [];
@@ -55,10 +56,10 @@ export class Interpolation {
         events.push(event); this.lastEvent = event.id;
       }
     }
-    return { pickups: a.snapshot.pickups, bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
+    return { globs: this.entities("globs", a.snapshot, b.snapshot, offset), pickups: a.snapshot.pickups, bugs: this.entities("bugs", a.snapshot, b.snapshot, offset), shots: this.entities("shots", a.snapshot, b.snapshot, offset), events };
   }
-  private entities<K extends "bugs" | "shots">(kind: K, a: Snapshot, b: Snapshot, offset: number): Snapshot[K] {
-    const visible: (Bug | Shot)[] = [];
+  private entities<K extends "bugs" | "shots" | "globs">(kind: K, a: Snapshot, b: Snapshot, offset: number): Snapshot[K] {
+    const visible: (Bug | Shot | Glob)[] = [];
     for (const p of a[kind]) {
       const q = b[kind].find(q => q.id === p.id);
       const entity = { ...p }, target = (a.tick + offset) * STEP_MS;
@@ -77,7 +78,14 @@ export class Interpolation {
         }
       }
       // Even a one-snapshot shot travels until its removal tick, never to latest-only membership.
-      if (q && b.tick * STEP_MS > anchor) {
+      if (kind === "globs") {
+        const glob = entity as Glob;
+        if (target >= glob.born + GLOB_LIFETIME_MS) continue;
+        const until = target;
+        const travel = boundaryTime(glob.x, glob.y, glob.vx, glob.vy, Math.max(0, until - anchor) / 1000);
+        glob.x += glob.vx * travel; glob.y += glob.vy * travel;
+        if (glob.x <= 0 || glob.x >= WORLD_WIDTH || glob.y <= 0 || glob.y >= WORLD_HEIGHT) continue;
+      } else if (q && b.tick * STEP_MS > anchor) {
         const fraction = (target - anchor) / (b.tick * STEP_MS - anchor);
         entity.x += (q.x - entity.x) * fraction; entity.y += (q.y - entity.y) * fraction;
       } else if ("kind" in entity) {

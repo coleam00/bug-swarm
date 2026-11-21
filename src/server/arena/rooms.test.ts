@@ -3,6 +3,8 @@ import { openDb, hideName, startRun, countEvents, getRun, teamTotals } from "../
 import { RoomManager, type Transport } from "./rooms";
 import { parseServer } from "../../shared/arena/protocol";
 import { downPlayer } from "../../shared/arena/revive";
+import { createBug } from "../../shared/arena/bugs/registry";
+import { ServerDecoder } from "../../shared/arena/snapshot-codec";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
@@ -10,14 +12,30 @@ function fixture() {
     schedule: (fn, ms) => { expect(ms).toBe(50); const timer = { unref() {} } as any; callbacks.set(timer, fn); return timer; },
     cancel: timer => { cancelled++; callbacks.delete(timer); } });
   const join = (id = crypto.randomUUID(), name = "Robot", team = "tabs") => {
-    const messages: any[] = []; let buffered = 0, closed = false;
-    const transport: Transport = { send: raw => messages.push(JSON.parse(raw)), close: () => { closed = true; }, getBufferedAmount: () => buffered };
+    const messages: any[] = [], decoder = new ServerDecoder(); let buffered = 0, closed = false;
+    const transport: Transport = { send: raw => messages.push(decoder.read(raw)), close: () => { closed = true; }, getBufferedAmount: () => buffered };
     const c = manager.open(transport);
     manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name, team, touch: false, buildId: "test" }));
     return { c, messages, buffer: (n: number) => { buffered = n; }, closed: () => closed };
   };
   return { db, manager, join, at: (n: number) => { now = n; }, cancelled: () => cancelled, async close() { await manager.stop(); db.close(); } };
 }
+
+test("room broadcasts authoritative spitter phase, globs and independent pop scoring identically", async () => {
+  const f = fixture(); try {
+    const a = f.join(), b = f.join(), room = a.c.room!, p = room.state.players.get(a.c.id!)!;
+    Object.assign(p, { x: 1200, y: 1200 }); Object.assign(room.state.players.get(b.c.id!)!, { x: 1800, y: 1800 });
+    const bug = createBug("spitter", room.state.nextId++, 800, 1200); room.state.bugs = [bug];
+    Object.assign(bug, { phase: "swell", phaseUntil: 100 });
+    f.manager.tick(room); expect(a.messages.at(-1).bugs[0].phase).toBe("swell");
+    f.manager.tick(room); const glob = room.state.globs[0]!; expect(glob.born).toBe(100);
+    expect(a.messages.at(-1).globs).toEqual([glob]);
+    expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(parseServer(JSON.stringify(a.messages.at(-1)))).not.toBeNull();
+    room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: p.life, born: 100, x: glob.x + 20, y: glob.y, vx: -900, vy: 0 });
+    f.manager.tick(room); expect(a.messages.at(-1)).toEqual(b.messages.at(-1)); expect(a.messages.at(-1).events[0].type).toBe("glob-pop");
+    expect(p.score).toBe(5); expect(p.kills).toBe(0);
+  } finally { await f.close(); }
+});
 
 test("down/revive retains one run, clears held controls, rejects respawn and persists cross-team reward", async () => {
   const f = fixture(); try {
@@ -160,5 +178,54 @@ test("a delayed callback advances one fixed step; closed-room timing expires aft
     expect(room.state.tick).toBe(1); expect(f.manager.stats().schedulerLateness.p95Ms).toBe(950);
     f.manager.leave(c); expect(f.manager.stats().tick.samples).toBe(1);
     f.at(61000); expect(f.manager.stats().tick.samples).toBe(0);
+  } finally { await f.close(); }
+});
+
+
+test("shared deltas recover independently after skipped/rejected sends and preserve queued terminal messages", async () => {
+  const db = openDb(":memory:"); let now = 0;
+  const manager = new RoomManager(db, "test", { now: () => now, seed: () => 1, schedule: () => ({ unref() {} }) as any, cancel() {} });
+  const add = () => {
+    const decoder = new ServerDecoder(), decoded: any[] = [], frames: Uint8Array[] = [];
+    let buffer = 0, result = 1;
+    const c = manager.open({ getBufferedAmount: () => buffer, close() {}, send(data) {
+      if (data instanceof Uint8Array) { frames.push(data); if (!result) return 0; }
+      const value = decoder.read(data); if (value) decoded.push(value); return result;
+    } });
+    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: crypto.randomUUID(), name: "CodecPilot", team: "tabs", touch: false, buildId: "test", snapshotEncoding: "delta-v1" }));
+    return { c, decoded, frames, buffer(n: number) { buffer = n; }, result(n: number) { result = n; } };
+  };
+  try {
+    const a = add(), b = add(), room = a.c.room!;
+    now = 50; manager.tick(room);
+    expect(a.frames.at(-1)).toBe(b.frames.at(-1)); expect(a.frames.at(-1)![2]).toBe(1);
+    b.buffer(1); now = 100; manager.tick(room);
+    expect(a.c.snapshotTick).toBe(2); expect(b.c.snapshotTick).toBeUndefined();
+    b.buffer(0); now = 150; manager.tick(room);
+    expect(a.frames.at(-1)![2]).toBe(1); expect(b.frames.at(-1)![2]).toBe(0);
+    b.result(0); now = 200; manager.tick(room); expect(b.c.snapshotTick).toBeUndefined();
+    b.result(-1); now = 250; manager.tick(room); expect(b.frames.at(-1)![2]).toBe(0);
+    expect(b.c.snapshotTick).toBe(5);
+    const p = room.state.players.get(b.c.id!)!; p.status = "downed"; p.hits = 0; p.downedUntil = 300; p.spawnProtectedUntil = 0;
+    now = 300; manager.tick(room); manager.writer.flush();
+    expect(b.decoded.some(m => m.type === "life_over" && m.save === "saved")).toBe(true);
+    now = 350; manager.leave(b.c);
+    now = 400; const report = manager.stats({ sinceMs: 50, untilMs: 350, raw: true }).window!;
+    expect(report.complete).toBe(true); expect(report.traffic.skipped).toBe(1); expect(report.traffic.rejected).toBe(1);
+    expect(report.traffic.queued).toBeGreaterThan(0);
+    expect(report.snapshotBytes.keyframe!.samples).toBeGreaterThan(0);
+    manager.leave(a.c); now = 500;
+    expect(manager.stats({ sinceMs: 50, untilMs: 350 }).window!.arenas[0]!.tick.samples).toBe(6);
+    now = 181000; expect(manager.stats({ sinceMs: 50, untilMs: 350 }).window!.complete).toBe(false);
+  } finally { await manager.stop(); db.close(); }
+});
+test("a room closed before its first tick retains snapshot/traffic evidence for 180 seconds", async () => {
+  const f = fixture(); try {
+    const { c } = f.join(), id = c.room!.id; f.at(50); f.manager.leave(c); f.at(100);
+    const window = f.manager.stats({ sinceMs: 0, untilMs: 100 }).window!;
+    expect(window.complete).toBe(true); expect(window.arenas.map(a => a.id)).toContain(id);
+    expect(window.arenas[0]!.population.max).toBe(1); expect(window.tick.samples).toBe(0);
+    expect(window.snapshotBytes.json.samples).toBe(1); expect(window.traffic.bytesOut).toBeGreaterThan(0);
+    f.at(180100); expect(f.manager.stats({ sinceMs: 0, untilMs: 100 }).window!.complete).toBe(false);
   } finally { await f.close(); }
 });

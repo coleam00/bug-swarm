@@ -3,14 +3,14 @@ import { parseServer, serializeSnapshot, type Snapshot } from "../protocol";
 import { createArena, joinPlayer } from "../simulation";
 test.each([["shield", 20000], ["spread", 8000], ["rapid", 8000]] as const)("wire state accepts %s and bounds its duration independently", (kind, duration) => {
   const a = createArena(79), p = joinPlayer(a, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
-  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "kinds", tick: 10, wave: 1, bugs: [], shots: [], events: [],
+  const s: Snapshot = { globs: [], v: 1, type: "snapshot", arenaId: "kinds", tick: 10, wave: 1, bugs: [], shots: [], events: [],
     pickups: [{ id: 1, kind, x: 1000, y: 1000, expiresAt: 12500 }], players: [{ ...p, effects: { [kind]: 500 + duration }, ackSeq: 0 }] };
   expect(parseServer(serializeSnapshot(s))).not.toBeNull();
   s.players[0]!.effects[kind]!++; expect(parseServer(serializeSnapshot(s))).toBeNull();
 });
 test("snapshot parser bounds floor identities, kinds, locations, timers and active effect maps", () => {
   const arena = createArena(79), player = joinPlayer(arena, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
-  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 10, wave: 1, players: [{ ...player, effects: { shield: 20500 }, ackSeq: 0 }],
+  const s: Snapshot = { globs: [], v: 1, type: "snapshot", arenaId: "test", tick: 10, wave: 1, players: [{ ...player, effects: { shield: 20500 }, ackSeq: 0 }],
     pickups: [{ id: 1, kind: "shield", x: 0, y: 2400, expiresAt: 12500 }], bugs: [], shots: [], events: [] };
   const parse = (s: Snapshot) => parseServer(serializeSnapshot(s));
   expect(parse(s)).not.toBeNull();

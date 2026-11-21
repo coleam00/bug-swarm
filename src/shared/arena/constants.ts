@@ -47,6 +47,25 @@ export const DASHER_INITIAL_SHARE = 1 / 6;
 export const DASHER_FULL_SHARE = 1 / 4;
 export const DASHER_DODGE_CLEARANCE = 60;
 export const DASHER_DODGE_FORCE = 0.75;
+export const SPITTER_RADIUS = 18;
+export const SPITTER_HEALTH = 2;
+export const SPITTER_POINTS = 30;
+export const SPITTER_DISTANCE = 400;
+export const SPITTER_SPEED = 140;
+export const SPITTER_STRAFE_SPEED = 35;
+export const SPITTER_CADENCE_MS = 2200;
+export const SPITTER_SWELL_MS = 500;
+export const SPITTER_UNLOCK_WAVE = 4;
+export const SPITTER_SHARE = 1 / 8;
+export const MAX_SPITTERS = 12;
+export const GLOB_RADIUS = 9;
+export const GLOB_SPEED = 320;
+export const GLOB_LIFETIME_MS = 2000;
+export const GLOB_MUZZLE_OFFSET = 28;
+export const GLOB_POINTS = 5;
+// Lifetime < cadence AND first-shot delay: live globs have distinct sources
+// that were alive two seconds ago, even when dead spitters are replaced.
+export const MAX_GLOBS = MAX_SPITTERS;
 export const PLAYER_HITS = 3;
 export const IMMUNITY_MS = 1000;
 export const DOWNED_MS = 10000;
@@ -83,5 +102,5 @@ export const SHIELD_MS = 20000;
 export const PICKUP_SEEK_DISTANCE = 250;
 export const PICKUP_SAFE_DISTANCE = 200;
 export const PICKUP_ROUTE_CLEARANCE = 150;
-// Reserved rates do not introduce unimplemented bug kinds.
+// The beetle rate is reserved until that bug kind exists.
 export const PICKUP_DROP_CHANCE = { crawler: 0.02, dasher: 0.06, spitter: 0.06, beetle: 0.15 } as const;

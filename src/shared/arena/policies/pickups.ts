@@ -1,4 +1,4 @@
-import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_DODGE_CLEARANCE, PICKUP_ROUTE_CLEARANCE, PICKUP_SAFE_DISTANCE, PICKUP_SEEK_DISTANCE, PLAYER_SPEED, STEP_MS } from "../constants";
+import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_DODGE_CLEARANCE, PICKUP_ROUTE_CLEARANCE, PICKUP_SAFE_DISTANCE, PICKUP_SEEK_DISTANCE, PLAYER_SPEED, PLAYER_RADIUS, GLOB_RADIUS, GLOB_LIFETIME_MS, STEP_MS } from "../constants";
 import type { Pickup, Player } from "../types";
 import type { Observation } from "./index";
 function distanceToSegment(x: number, y: number, ax: number, ay: number, bx: number, by: number) {
@@ -21,6 +21,15 @@ export function safePickup(observation: Observation, p: Player): Pickup | undefi
   for (const pickup of observation.pickups) {
     const d = Math.hypot(pickup.x - p.x, pickup.y - p.y);
     if (d > nearest || d === nearest && best && pickup.id > best.id || pickup.expiresAt <= observation.tick * STEP_MS + d / PLAYER_SPEED * 1000 + STEP_MS) continue;
+    // Test the proposed pickup route, rather than the policy's previous heading.
+    if (observation.globs.some(g => {
+      const horizon = Math.min(d / PLAYER_SPEED + STEP_MS / 1000, (g.born + GLOB_LIFETIME_MS - observation.tick * STEP_MS) / 1000);
+      if (horizon <= 0) return false;
+      const dx = g.x - p.x, dy = g.y - p.y;
+      const vx = g.vx - (pickup.x - p.x) / (d || 1) * PLAYER_SPEED, vy = g.vy - (pickup.y - p.y) / (d || 1) * PLAYER_SPEED;
+      const t = Math.max(0, Math.min(horizon, -(dx * vx + dy * vy) / (vx * vx + vy * vy || 1)));
+      return Math.hypot(dx + vx * t, dy + vy * t) <= PLAYER_RADIUS + GLOB_RADIUS + 12;
+    })) continue;
     const unsafe = observation.bugs.some(b => {
       if (distanceToSegment(b.x, b.y, p.x, p.y, pickup.x, pickup.y) < PICKUP_ROUTE_CLEARANCE) return true;
       if (b.kind !== "dasher" || b.phase !== "windup" && b.phase !== "dash") return false;
