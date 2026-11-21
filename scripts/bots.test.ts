@@ -11,11 +11,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // Timing is synthetic in policy-only transport fixtures. Real reporting is
 // covered against the production server below.
-function policyStats(request: Request, id: string) {
+function policyStats(request: Request, id: string, playerId = "fixture") {
   const url = new URL(request.url), since = Number(url.searchParams.get("sinceMs")), until = Number(url.searchParams.get("untilMs"));
   const tick = { samples: 1, p50Ms: .1, p95Ms: .1, maxMs: .1, raw: [.1] };
   return Response.json({ serverNowMs: performance.now(), arenas: [{ id, players: 1 }], totalPlayers: 1,
-    window: { sinceMs: since, untilMs: until, complete: true, population: { min: 1, max: 1 }, traffic: emptyTraffic(), dropped: emptyTraffic(), perPlayer: [{ playerId: "fixture", arenaId: id, bytesOut: 0, peakSecondBytesOut: 0 }], tick, schedulerLateness: tick, snapshotBytes: {}, arenas: [{ id, population: { min: 1, max: 1 }, tick, schedulerLateness: tick }] } });
+    window: { sinceMs: since, untilMs: until, complete: true, population: { min: 1, max: 1 }, traffic: emptyTraffic(), dropped: emptyTraffic(), perPlayer: [{ playerId, arenaId: id, bytesOut: 0, peakSecondBytesOut: 0, in: 0, rateLimited: 0 }], tick, schedulerLateness: tick, snapshotBytes: {}, arenas: [{ id, population: { min: 1, max: 1 }, tick, schedulerLateness: tick }] } });
 }
 test("bots CLI defaults, optional separator, origin and bounded positive argument validation", () => {
   expect(parseBotArgs([])).toEqual({ url: "http://127.0.0.1:3000", count: 18, seconds: 60, policy: "aimer" });
@@ -25,16 +25,19 @@ test("bots CLI defaults, optional separator, origin and bounded positive argumen
   for (const args of [["--count", "0"], ["--seconds", "1.5"], ["--seconds", "2147484"], ["--count", "2", "--count", "3"], ["--url", "ws://swarm.test"], ["--url", "https://swarm.test/path"], ["--unknown", "1"], ["--count"]]) expect(() => parseBotArgs(args)).toThrow();
 });
 test("WebSocket bots actually send distinct mover and aimer inputs for the same observation", async () => {
-  const observed: InputMessage[] = [];
-  const server = Bun.serve<{}>({ hostname: "127.0.0.1", port: 0,
+  const observed = new Map<string, InputMessage[]>();
+  let currentPlayerId = "";
+  const server = Bun.serve<{ playerId?: string }>({ hostname: "127.0.0.1", port: 0,
     fetch(request, server) {
       if (new URL(request.url).pathname === "/ws" && server.upgrade(request, { data: {} })) return;
-      return policyStats(request, "policy-test");
+      return policyStats(request, "policy-test", currentPlayerId);
     },
     websocket: { message(socket, raw) {
       const message = parseClient(raw); if (!message) throw new Error("Invalid bot input");
-      if (message.type === "input") { observed.push(message); return; }
+      if (message.type === "input") { observed.get(socket.data.playerId!)!.push(message); return; }
       if (message.type !== "hello") return;
+      socket.data.playerId = message.playerId; observed.set(message.playerId, []);
+      currentPlayerId = message.playerId;
       socket.send(JSON.stringify({ v: VERSION, type: "welcome", playerId: message.playerId, arenaId: "policy-test", buildId: "test",
         world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } }));
       const snapshot: Snapshot = { v: VERSION, type: "snapshot", arenaId: "policy-test", tick: 1, wave: 1, events: [], shots: [],
@@ -46,8 +49,11 @@ test("WebSocket bots actually send distinct mover and aimer inputs for the same 
   try {
     const first: InputMessage[] = [];
     for (const policy of ["mover", "aimer"] as const) {
-      observed.length = 0; await runBots({ url: server.url.origin, count: 1, seconds: 1, policy });
-      expect(observed.length).toBeGreaterThan(0); first.push(observed[0]!);
+      const report = await runBots({ url: server.url.origin, count: 1, seconds: 1, policy });
+      // Peer close callbacks may trail client close. Attribute observations by
+      // identity so a previous policy's final packet cannot enter this cohort.
+      const inputs = observed.get(report.perPlayer.find(p => p.bot)!.playerId)!;
+      expect(inputs.length).toBeGreaterThan(0); first.push(inputs[0]!);
     }
     const [mover, aimer] = first as [InputMessage, InputMessage];
     expect(mover.fire).toBe(true); expect(mover.aim).toBeCloseTo(Math.atan2(mover.move.y, mover.move.x));
@@ -94,6 +100,17 @@ test("bot transport waits downed, resumes the same life after revival and reques
 test("production bot reporting uses the full window, server directions, payload totals and normal teardown; incomplete data fails with diagnostics", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "bot-report-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  // This checks reporting/transport, not wall-clock performance in a one-second
+  // fixture. Keep real timestamps/counts/traffic and supply deterministic costs;
+  // the production load harness is the performance assertion.
+  const readStats = app.arenas.stats.bind(app.arenas);
+  app.arenas.stats = query => {
+    const value = readStats(query);
+    if (value.window) for (const metric of [value.window.tick, ...value.window.arenas.map(a => a.tick)]) {
+      metric.raw = metric.raw?.map(() => .1); metric.p50Ms = metric.p95Ms = metric.maxMs = metric.samples ? .1 : null;
+    }
+    return value;
+  };
   try {
     const report = await runBots({ url: app.server.url.origin, count: 2, seconds: 1 });
     expect(report.untilMs - report.sinceMs).toBe(1000); expect(report.complete).toBe(true); expect(report.errors).toBe(0);

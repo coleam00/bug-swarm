@@ -61,7 +61,8 @@ export function createCohort(options: BotOptions, indexOffset: number, fail: (er
       // Admission and clock calibration must not queue inputs behind pending
       // hellos. Start every cohort at the same measured boundary, then keep a
       // full step between sends even after a delayed callback.
-      if (start !== Infinity && now() >= start) for (const work of workloads) work();
+      const epoch = now();
+      if (epoch >= start && epoch < end) for (const work of workloads) work();
       next = performance.now() + STEP_MS;
     }
     if (!disposed) timer = setTimeout(pump, Math.max(1, next - performance.now()));

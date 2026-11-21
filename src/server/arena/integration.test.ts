@@ -139,6 +139,16 @@ test("real server: clients see each other move, 21st player is isolated, refused
 test("real bot CLI wanders, reports required fields and cleans up, including cancellation", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-bots-")), home = join(scratch, "home"); mkdirSync(home);
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  // Exercise the real CLI/HTTP boundary with deterministic tick costs. CPU
+  // budgets belong to the dedicated production run, not this one-second test.
+  const readStats = app.arenas.stats.bind(app.arenas);
+  app.arenas.stats = query => {
+    const value = readStats(query);
+    if (value.window) for (const metric of [value.window.tick, ...value.window.arenas.map(a => a.tick)]) {
+      metric.raw = metric.raw?.map(() => .1); metric.p50Ms = metric.p95Ms = metric.maxMs = metric.samples ? .1 : null;
+    }
+    return value;
+  };
   const observer = client(`ws://127.0.0.1:${app.server.port}/ws`, 99, "Observer");
   let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
