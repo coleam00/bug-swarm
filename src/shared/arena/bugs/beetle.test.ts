@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { beetle, angleDifference, shellBlocks } from "./beetle";
 import { createBug } from "./registry";
 import { createArena, joinPlayer, stepArena } from "../simulation";
-import { BEETLE_SPEED, BEETLE_TURN_RATE, STEP_MS } from "../constants";
 import { fireAndAdvance } from "../combat";
 
 function fixture() {
@@ -12,11 +11,21 @@ function fixture() {
 }
 test("beetle tracks nearest active player with id ties, forward speed and one limited turn per step", () => {
   const { a, p, b } = fixture(), q = joinPlayer(a, { id: "b", name: "Other", team: "spaces" })!;
-  Object.assign(p, { x: 1200, y: 1300 }); Object.assign(q, { x: 1200, y: 1100 });
+  // The closer player wins in either insertion order, regardless of id.
+  Object.assign(p, { x: 1200, y: 1400 }); Object.assign(q, { x: 1200, y: 1100 });
+  for (const players of [[p, q], [q, p]]) {
+    a.players = new Map(players.map(player => [player.id, player]));
+    Object.assign(b, { x: 1200, y: 1200, facing: 0 });
+    stepArena(a, new Map());
+    expect(b.facing).toBeCloseTo(-Math.PI / 40); // 90 degrees/s over 50 ms.
+    expect(Math.hypot(b.vx, b.vy)).toBeCloseTo(84); // 0.6 * 140, independent of tuning imports.
+    expect(b.x).toBeCloseTo(1200 + Math.cos(Math.PI / 40) * 4.2);
+    expect(b.y).toBeCloseTo(1200 - Math.sin(Math.PI / 40) * 4.2);
+  }
+  // Equal distances choose the lower id even when it was inserted last.
+  Object.assign(b, { x: 1200, y: 1200, facing: 0 }); p.y = 1300;
   stepArena(a, new Map());
-  expect(b.facing).toBeCloseTo(BEETLE_TURN_RATE * STEP_MS / 1000);
-  expect(Math.hypot(b.vx, b.vy)).toBeCloseTo(BEETLE_SPEED);
-  expect(b.x).toBeCloseTo(1200 + Math.cos(b.facing) * BEETLE_SPEED * 0.05);
+  expect(b.facing).toBeCloseTo(Math.PI / 40);
   const facing = b.facing; beetle.move(b, a.players.values(), 50); expect(b.facing).toBe(facing);
   p.status = "downed"; beetle.move(b, a.players.values(), 50, 50); expect(b.facing).toBeCloseTo(0);
   q.status = "out"; beetle.move(b, a.players.values(), 100, 50);

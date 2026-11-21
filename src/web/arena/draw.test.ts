@@ -20,17 +20,35 @@ test("beetle plate follows facing, each lost HP cracks once, and pale bounces le
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("beetle", 1, 500, 500);
     b.facing = Math.PI / 2;
     const draw = (now = 0) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, new ArenaInput(), [b], [], 5, 0, now); return [...fixture.context.paints]; };
-    const cracks = (p: Paint[]) => p.filter(p => p.op === "stroke" && p.strokeStyle === "#38291f").length;
-    const intact = draw(), plate = intact.find(p => p.op === "stroke" && p.strokeStyle === "#fff0a5")!;
+    const intact = draw();
+    const body = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "ellipse"))!;
+    const plate = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[4]! - q.args[3]! < Math.PI))!;
+    expect(body).toBeDefined(); expect(plate).toBeDefined();
+    const ellipse = body.path.find(p => p.op === "ellipse")!;
+    const xScale = Math.hypot(body.transform[0]!, body.transform[1]!), yScale = Math.hypot(body.transform[2]!, body.transform[3]!);
+    expect(2 * ellipse.args[2]! * xScale).toBeGreaterThanOrEqual(44);
+    expect(2 * ellipse.args[3]! * yScale).toBeGreaterThanOrEqual(36);
     expect(Math.atan2(plate.transform[1]!, plate.transform[0]!)).toBeCloseTo(b.facing);
-    const arc = plate.path.find(p => p.op === "arc")!; expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
+    const arc = plate.path.find(p => p.op === "arc")!;
+    expect(arc.args[2]! * Math.min(Math.hypot(plate.transform[0]!, plate.transform[1]!), Math.hypot(plate.transform[2]!, plate.transform[3]!))).toBeGreaterThanOrEqual(20);
+    expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
+    expect(plate.globalAlpha).toBeGreaterThan(0.5); expect(plate.fillStyle).not.toEqual(body.fillStyle); expect(plate.strokeStyle).not.toEqual(body.strokeStyle);
+    const onBody = (p: Paint) => p.op === "stroke" && p.transform.every((value, i) => value === body.transform[i]);
+    const intactPaths = new Set(intact.filter(onBody).map(p => JSON.stringify(p.path)));
+    const cracks = (paints: Paint[]) => paints.filter(p => onBody(p) && !intactPaths.has(JSON.stringify(p.path))).length;
     for (let hp = 5; hp >= 1; hp--) { b.hp = hp; expect(cracks(draw())).toBe(5 - hp); }
+    const strokeKey = (p: Paint) => JSON.stringify([p.path, p.transform]);
+    const baseline = new Set(draw().filter(p => p.op === "stroke").map(strokeKey));
+    const effects = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && !baseline.has(strokeKey(p)));
     const cached = fixture.created, event = { id: 2, tick: 1, kind: "beetle" as const, type: "bounce" as const, x: 500, y: 522, points: 0 as const };
-    renderer.events([event], 0); const spark = draw(50);
-    expect(cracks(spark)).toBe(4); expect(spark.some(p => p.op === "stroke" && p.strokeStyle === "#e9f8ff")).toBe(true);
+    renderer.events([event], 0); const spark = draw(50), bounce = effects(spark);
+    expect(cracks(spark)).toBe(4); expect(bounce).toHaveLength(1); expect(bounce[0]!.globalAlpha).toBeGreaterThan(0);
     expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
-    renderer.events([event], 170); expect(draw(181).some(p => p.strokeStyle === "#e9f8ff")).toBe(false);
-    expect(fixture.created).toBe(cached); renderer.reset(); expect(draw().some(p => p.strokeStyle === "#e9f8ff")).toBe(false);
+    renderer.events([event], 170); expect(effects(draw(181))).toHaveLength(0);
+    expect(fixture.created).toBe(cached); renderer.reset(); expect(effects(draw())).toHaveLength(0);
+    renderer.events([{ ...event, type: "hit" }], 0);
+    expect(effects(draw(50))[0]!.strokeStyle).not.toEqual(bounce[0]!.strokeStyle);
+
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 

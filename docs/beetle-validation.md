@@ -60,16 +60,17 @@ placement, nine-to-ten admission, repeated capped choices, renewed eligibility
 and the global cap. JSON/keyframe/delta tests cover HP and motion validation,
 bounce validation, removals and missed-base recovery. The maximum phased-dasher
 fixture remains, with an additional mixed payload at all collection bounds
-below 64 KiB. Two real clients negotiate JSON and binary transport and agree on
-bounce, damage and lethal scoring. Renderer tests cover shell orientation,
+below 64 KiB. Two real clients negotiate JSON and binary transport and receive
+matching beetle identities and bounce events. Combat and scoring expectations
+remain in the pure simulation tests. Renderer tests cover shell orientation,
 successive cracks, pale sparks without score labels, delayed onset/removal,
 deduplication and reset. Policy tests include solo and teammate flank kills and
 retain the dasher-dodge and rescue regressions.
 
 ## Results on the factory machine (2026-11-21)
 
-`bun run check` passed: 434 tests, 28,952 assertions, no failures, and TypeScript
-passed. Focused combat/steering/spawn/policy, JSON/binary integration and renderer
+The original delivery's `bun run check` passed: 434 tests, 28,952 assertions,
+no failures, and TypeScript passed. Focused combat/steering/spawn/policy, JSON/binary integration and renderer
 runs also passed. `bun run build` produced production assets successfully.
 Check output and the recorded exit code are in
 `.evidence/83/check-final.{stdout,stderr}.log` and `check-final-exit.json`.
@@ -149,3 +150,21 @@ seconds at arena age 180. `.evidence/83/skill.json` retains all 65 cohort
 summaries, all **1,300 individual newcomer observations and censoring flags**,
 per-seed policy results and tuning constants. `skill-exit.json` records the
 process exit code. No seeds, coverage, thresholds or mover behavior were changed.
+
+## Review follow-up
+
+The existing movement test now checks literal 84-unit/s speed and 4.2-unit
+step displacement, nearest targets in both insertion orders and lower-id ties
+with the winning player inserted last. The renderer test checks transformed
+body/shell size and identifies shell, cracks and effects through geometry rather
+than exact palette strings. The real-server test is limited to matching JSON
+and binary beetle/bounce transport; combat rules stay in the pure simulation.
+
+All 52 focused tests passed, followed by `bun run check`: **434 tests, 28,969
+assertions**, TypeScript clean, exit zero. Eight mutation probes confirmed that
+speed, first/last-player targeting, turn rate, half-size rendering and scoring
+regressions fail their intended simulation/render tests. An equivalent shell
+color passes; changing points also passes the reduced wire test while failing
+the pure scoring test. Logs and results are in `.evidence/83/recheck/`.
+Production code is unchanged, so the original skill, Chrome and load evidence
+above is retained without rerunning those separate acceptance commands.
