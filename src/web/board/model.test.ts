@@ -1,7 +1,44 @@
 import { expect, test } from "bun:test";
-import { applyLeaders, applyTeams, displayScore, exactScore, expireHighlights, highlightDeadline, initialState, readLeaders, readTeams } from "./model";
+import { applyLeaders, applyStats, applyTeams, displayScore, exactScore, expireHighlights, highlightDeadline, initialState, readLeaders, readStats, readTeams } from "./model";
 
 const entry = (playerId: string, score = 42, name = "Robot") => ({ playerId, name, score });
+const populations = (players: number[]) => players.map((players, index) => ({ id: `room-${index}`, players }));
+
+test("activity distinguishes loading from zero and keeps the authoritative total, numbering before population sorting", () => {
+  expect(initialState().stats.data).toBeNull();
+  expect(applyStats(initialState(), { totalPlayers: 0, arenas: [] }).stats).toEqual({
+    data: { totalPlayers: 0, arenas: [], moreArenas: 0 }, failed: false,
+  });
+  const input = { totalPlayers: 1000, arenas: populations([7, 18, 18]) };
+  const original = structuredClone(input);
+  const activity = readStats(input);
+  expect(activity.totalPlayers).toBe(1000);
+  expect(activity.arenas.map(({ number, players }) => [number, players])).toEqual([[2, 18], [3, 18], [1, 7]]);
+  expect(input).toEqual(original);
+});
+
+test.each([0, 8, 9, 10])("activity caps %i arenas at eight after sorting and counts the omitted arenas", count => {
+  const input = { totalPlayers: count, arenas: populations(Array.from({ length: count }, (_, i) => i)) };
+  const activity = readStats(input);
+  expect(activity.arenas.map(arena => arena.number)).toEqual(Array.from({ length: Math.min(count, 8) }, (_, i) => count - i));
+  expect(activity.moreArenas).toBe(Math.max(0, count - 8));
+});
+
+test("activity rejects malformed counts and ids throughout the snapshot, including omitted arenas", () => {
+  const valid = { totalPlayers: 25, arenas: populations([20, 5]) };
+  for (const totalPlayers of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "25", null, undefined]) {
+    expect(() => readStats({ ...valid, totalPlayers })).toThrow();
+  }
+  for (const arena of [null, {}, { id: "", players: 1 }, { id: "  ", players: 1 }, { id: 42, players: 1 },
+    ...[-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, "1", null, undefined].map(players => ({ id: "bad", players }))]) {
+    expect(() => readStats({ ...valid, arenas: [...populations(Array(8).fill(20)), arena] })).toThrow();
+  }
+  for (const value of [null, [], {}, { ...valid, arenas: null }, { ...valid, arenas: {} },
+    { ...valid, arenas: [valid.arenas[0], valid.arenas[0]] }]) {
+    expect(() => readStats(value)).toThrow();
+  }
+  expect(readStats({ totalPlayers: Number.MAX_SAFE_INTEGER, arenas: [{ id: "room", players: 0 }], tick: {} }).totalPlayers).toBe(Number.MAX_SAFE_INTEGER);
+});
 test("mapping preserves server order, ties and duplicate names, caps at ten and ranks by position", () => {
   const input = Array.from({ length: 12 }, (_, i) => entry(String(i), i < 2 ? 50 : 90));
   const rows = applyLeaders(initialState(), input, 100).leaders.data!;
