@@ -88,6 +88,7 @@ export const HIVE_CLEARANCE = 600;
 export const HIVE_ARRIVAL_MS = 2000;
 export const HIVE_BROOD_MS = 4000;
 export const HIVE_RING_MS = 6000;
+export const HIVE_RING_TELL_MS = 1000;
 export const HIVE_GLOB_SPEED = 180;
 export const HIVE_REWARD_POOL = 300;
 export const HIVE_REWARD_BASE = 50;

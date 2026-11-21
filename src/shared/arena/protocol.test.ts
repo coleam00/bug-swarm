@@ -89,7 +89,7 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     globs: Array.from({ length: 24 }, (_, i) => ({ id: 500 + i, x: 1234.56789, y: 1234.56789, vx: i < 12 ? -226.27417 : -127.27922, vy: i < 12 ? 226.27417 : 127.27922, ...(i < 12 ? {} : { source: "hive" as const }), born: 499999949 })),
     events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 75, type: "kill" as const, kind: "dasher" as const })) };
   for (const entities of [snapshot.bugs, snapshot.shots, snapshot.globs, snapshot.events]) for (const e of entities) e.id += Number.MAX_SAFE_INTEGER - 10000;
-  snapshot.bugs[149] = { ...createBug("hive", snapshot.bugs[149]!.id, 1234.56789, 1234.56789), vx: -35.355339, vy: 35.355339 };
+  snapshot.bugs[149] = { ...createBug("hive", snapshot.bugs[149]!.id, 1234.56789, 1234.56789, snapshot.tick * 50), vx: -35.355339, vy: 35.355339 };
   snapshot.events[139] = { ...snapshot.events[139]!, type: "kill", kind: "hive", points: 0, rewards: players.map(p => ({ playerId: p.id, life: p.life, amount: 65, x: p.x, y: p.y })) };
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
   const encoder = new SnapshotEncoder(), decoder = new ServerDecoder();

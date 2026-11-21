@@ -1,4 +1,4 @@
-import { HIVE_RADIUS } from "../../../shared/arena/constants";
+import { HIVE_RADIUS, HIVE_RING_COUNT, HIVE_RING_TELL_MS } from "../../../shared/arena/constants";
 import type { Bug } from "../../../shared/arena/types";
 import { acidGlow } from "../globs";
 
@@ -19,6 +19,20 @@ export function createHiveDraw() {
     if (b.phase === "arrival") {
       c.strokeStyle = "#eaff8c"; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 58 * pulse, 0, Math.PI * 2); c.stroke();
       c.textAlign = "center"; c.font = "bold 18px system-ui"; c.fillStyle = "#eaff8c"; c.fillText("HIVE INCOMING", 0, -78); c.restore(); return;
+    }
+    const remaining = b.ringAt! - time;
+    if (remaining > 0 && remaining <= HIVE_RING_TELL_MS) {
+      const charge = 1 - remaining / HIVE_RING_TELL_MS;
+      // A contracting amber ring and twelve radial marks forecast the actual glob lanes.
+      // Use the delayed combat clock and server deadline, never the decorative pulse.
+      c.strokeStyle = "#ffd05a"; c.lineWidth = 4 + charge * 3;
+      c.beginPath(); c.arc(0, 0, 92 - charge * 30, 0, Math.PI * 2); c.stroke();
+      c.beginPath();
+      for (let i = 0; i < HIVE_RING_COUNT; i++) {
+        const a = i * Math.PI * 2 / HIVE_RING_COUNT, x = Math.cos(a), y = Math.sin(a);
+        c.moveTo(x * 54, y * 54); c.lineTo(x * (70 + charge * 28), y * (70 + charge * 28));
+      }
+      c.stroke(); c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillStyle = "#ffd05a"; c.fillText("RING INCOMING", 0, -96);
     }
     c.rotate(b.facing); c.strokeStyle = "#d3df86"; c.lineWidth = 4; c.beginPath();
     for (let i = -1; i <= 1; i++) { const stride = Math.sin(time / 190 + i) * 7; c.moveTo(i * 23, -24); c.lineTo(i * 28 - 12 + stride, -58); c.moveTo(i * 23, 24); c.lineTo(i * 28 - 12 - stride, 58); } c.stroke();

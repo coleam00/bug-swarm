@@ -120,13 +120,19 @@ try {
   room.state.bugs=[];room.state.shots=[];room.state.globs=[];room.state.hive=undefined;
   spawnHive(room.state,room.state.tick*50);const boss=room.state.bugs.find(b=>b.kind==='hive')!;
   Object.assign(boss,{x:900,y:1200,phase:'active'});delete boss.phaseUntil;
-  room.state.hive!.broodAt=room.state.tick*50+4000;room.state.hive!.ringAt=room.state.tick*50+1000;
+  room.state.hive!.broodAt=room.state.tick*50+4000;boss.ringAt=room.state.tick*50+2000;
   await pause(250);await shot(desktop.session,'controlled-boss-health-minimap');
   report.scenes.push({name:'boss',controlled:true,snapshot:await evaluate(desktop.session,'window.evidence.snap')});
   // Off-screen direction is visible in the separate browser's camera.
   Object.assign(scout,{x:2000,y:2000});await pause(250);await shot(phone.session,'controlled-edge-arrow');
+  await until(()=>boss.ringAt!-room.state.tick*50<=650);await pause(150);await shot(desktop.session,'controlled-ring-tell-first');
+  report.scenes.push({name:'ring-tell-first',controlled:true,snapshot:await evaluate(desktop.session,'window.evidence.snap')});
   await until(()=>room.state.globs.some(g=>g.source==='hive'));await pause(650);await shot(desktop.session,'controlled-ring');
   report.scenes.push({name:'ring',controlled:true,snapshot:await evaluate(desktop.session,'window.evidence.snap')});
+  await until(()=>boss.ringAt!-room.state.tick*50<=650);await pause(150);await shot(desktop.session,'controlled-ring-tell-second');
+  report.scenes.push({name:'ring-tell-second',controlled:true,snapshot:await evaluate(desktop.session,'window.evidence.snap')});
+  await until(()=>room.state.globs.some(g=>g.source==='hive'));await pause(150);await shot(desktop.session,'controlled-ring-second');
+  report.scenes.push({name:'ring-second',controlled:true,snapshot:await evaluate(desktop.session,'window.evidence.snap')});
   // Capture both mobile orientations during the boss, including two-point touch.
   for(const [width,height] of [[390,844],[844,390]]){
     await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true},phone.session);
@@ -135,7 +141,7 @@ try {
     await pause(250);await shot(phone.session,`${width}x${height}-boss-touch`);await touch(phone.session,'touchEnd',[]);
   }
   // Arrival and downed overlays share the same boss bar and phone layout.
-  boss.phase='arrival';boss.phaseUntil=room.state.tick*50+2000;boss.vx=boss.vy=0;
+  boss.phase='arrival';boss.phaseUntil=room.state.tick*50+2000;boss.ringAt=boss.phaseUntil+6000;boss.vx=boss.vy=0;
   Object.assign(pilot,{status:'downed',hits:0,downedUntil:room.state.tick*50+10000,reviveMs:500,reviving:false});
   for(const [width,height] of [[390,844],[844,390]]){
     await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true},desktop.session);
@@ -149,6 +155,8 @@ try {
   room.state.shots.push({id:room.state.nextId++,owner:id,life:pilot.life,x:boss.x,y:boss.y,vx:900,vy:0,born:room.state.tick*50});
   await until(()=>evaluate(desktop.session,'window.evidence.hiveKills.length>0'));
   await pause(180);await shot(desktop.session,'controlled-kill-banner');await shot(phone.session,'controlled-kill-banner-phone');
+  await pause(550);await shot(phone.session,'controlled-kill-banner-phone-800ms');
+  await pause(650);await shot(phone.session,'controlled-kill-banner-phone-1500ms');
   const kill=await evaluate(desktop.session,'window.evidence.hiveKills.at(-1)');
   const event=kill.events.find((e:any)=>e.type==='kill'&&e.kind==='hive');
   assert.equal(event.rewards.reduce((n:number,r:any)=>n+r.amount,0),400);

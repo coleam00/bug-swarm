@@ -79,7 +79,7 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
     for (const e of entities) {
       if (!object(e) || !integer(e.id) || entityIds.has(e.id) || ![e.x, e.y, e.vx, e.vy].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT || Math.hypot(e.vx, e.vy) > speed + 0.1) return null;
       if (entities === v.bugs) {
-        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || e.kind !== "hive" && e.maxHp !== undefined || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
+        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || e.kind !== "hive" && (e.maxHp !== undefined || e.ringAt !== undefined) || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
       } else {
         if (!finite(e.born) || e.born < 0 || e.born > v.tick * STEP_MS) return null;
         // The wire may reference the owner by its index in this full snapshot.
@@ -111,8 +111,12 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
       if (++hiveKills > 1 || !Array.isArray(e.rewards) || e.rewards.length < 1 || e.rewards.length > MAX_PLAYERS) return null;
       const recipients = new Set<string>(); let total = 0;
       for (const r of e.rewards) {
-        if (!object(r) || !ids.has(r.playerId) || recipients.has(r.playerId) || !integer(r.life) || r.life < 1 || r.life !== v.players.find((p: RecordValue) => p.id === r.playerId)?.life || !integer(r.amount) || r.amount < HIVE_REWARD_BASE || r.amount > HIVE_REWARD_BASE + HIVE_REWARD_POOL || ![r.x, r.y].every(finite) || r.x < 0 || r.x > WORLD_WIDTH || r.y < 0 || r.y > WORLD_HEIGHT) return null;
-        recipients.add(r.playerId); total += r.amount;
+        // Awards describe lives at the kill, not membership at this broadcast.
+        // Respawn/departure followed by admission can rebroadcast a retained event.
+        if (!object(r) || !isId(r.playerId)) return null;
+        const recipient = r.playerId.toLowerCase();
+        if (recipients.has(recipient) || !integer(r.life) || r.life < 1 || !integer(r.amount) || r.amount < HIVE_REWARD_BASE || r.amount > HIVE_REWARD_BASE + HIVE_REWARD_POOL || ![r.x, r.y].every(finite) || r.x < 0 || r.x > WORLD_WIDTH || r.y < 0 || r.y > WORLD_HEIGHT) return null;
+        recipients.add(recipient); total += r.amount;
       }
       if (total !== HIVE_REWARD_POOL + HIVE_REWARD_BASE * recipients.size) return null;
     } else if (e.rewards !== undefined) return null;

@@ -94,7 +94,7 @@ test("hive has cached pulsing art, authoritative health, edge arrow, minimap dia
     for (const [width, height] of [[1280, 720], [390, 844], [844, 390]] as const) {
       c.paints.length = 0;
       renderer.draw(width, height, { x: 0, y: 0 }, [p], p, input, [boss], [], 5, 100, 1000, 1, snapshot, 4900);
-      const label = c.paints.find(p => p.op === "fillText" && p.args[0] === "HIVE  660 / 1320"); expect(label).toBeDefined();
+      const label = c.paints.find(p => p.op === "fillText" && /660\s*\/\s*1320/.test(String(p.args[0]))); expect(label).toBeDefined();
       const bar = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#d9f278")!;
       expect(bar.args[2]).toBe((width - 32) / 2); expect(bar.transform).toEqual([1, 0, 0, 1, 0, 0]);
       expect(c.paints.some(p => p.op === "fillText" && p.args[0] === "Hive")).toBe(true);
@@ -113,6 +113,83 @@ test("hive has cached pulsing art, authoritative health, edge arrow, minimap dia
     expect(killed.some(p => p.op === "fillText" && p.args[0] === "+0")).toBe(false);
     expect(killed.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
     renderer.reset(); expect(draw(1200).some(p => p.op === "fillText" && ["Hive down!", "+350"].includes(String(p.args[0])))).toBe(false);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("hive edge arrows point at the boss on every side, including diagonals", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), camera = { x: 1000, y: 1000 };
+    for (const [x, y] of [[2300, 1300], [100, 1300], [1400, 100], [1400, 2300], [100, 100], [2300, 2300]] as const) {
+      c.paints.length = 0;
+      renderer.draw(800, 600, camera, [], null, new ArenaInput(), [createBug("hive", 1, x, y)]);
+      const arrow = c.paints.find(p => p.op === "fill" && p.fillStyle === "#d9f278" && p.path.some(q => q.op === "moveTo" && q.args[0] === 15))!;
+      expect(arrow).toBeDefined();
+      const [a, b, , , ax, ay] = arrow.transform as [number, number, number, number, number, number];
+      const dx = x - camera.x - ax, dy = y - camera.y - ay;
+      expect((a * dx + b * dy) / Math.hypot(dx, dy)).toBeCloseTo(1);
+      expect(ax).toBeGreaterThanOrEqual(0); expect(ax).toBeLessThanOrEqual(800);
+      expect(ay).toBeGreaterThanOrEqual(0); expect(ay).toBeLessThanOrEqual(600);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("each hive recipient gets its own world award; the banner avoids their full paths and expires without reset", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const rewards = [{ playerId: "local", life: 1, amount: 125, x: 1200, y: 1200 }, { playerId: "remote", life: 2, amount: 275, x: 1320, y: 1260 }];
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const event = { id: 1, type: "kill" as const, kind: "hive" as const, tick: 1, x: 1000, y: 1200, points: 0, rewards };
+    for (const [width, height] of [[844, 390], [390, 844], [1280, 720]] as const) {
+      const view = worldView(width, height), camera = cameraFor(local.x, local.y, view.width, view.height);
+      renderer.reset(); renderer.events([event], 1000);
+      const draw = (age: number) => { c.paints.length = 0; renderer.draw(width, height, camera, [local], local, input, [], [], 5, 100, 1000 + age, view.scale); return [...c.paints]; };
+      for (const age of [0, 180, 800, ...Array.from({ length: 32 }, (_, i) => i * 50)]) {
+        const paints = draw(age), panel = paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12dd")!;
+        expect(paints.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+        expect(panel).toBeDefined();
+        const [px, py, pw, ph] = panel.args.map(Number) as [number, number, number, number];
+        for (const r of rewards) {
+          const awards = paints.filter(p => p.op === "fillText" && p.args[0] === `+${r.amount}`); expect(awards).toHaveLength(1);
+          const award = awards[0]!, [a, , , d, e, f] = award.transform as [number, number, number, number, number, number];
+          expect(award.args[1]).toBe(r.x); expect(award.args[2]).toBeCloseTo(r.y - 65 - age / 35);
+          const x = a * r.x + e, y = d * Number(award.args[2]) + f, half = (c.measureText(`+${r.amount}`).width / 2 + 5) * view.scale;
+          expect(x + half <= px || x - half >= px + pw || y + 10 * view.scale <= py || y - 36 * view.scale >= py + ph).toBe(true);
+          expect(award.globalAlpha).toBeGreaterThan(0);
+        }
+      }
+      expect(draw(1999).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
+      expect(draw(2000).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(false);
+      expect(draw(4000).some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("hive forecasts successive rings on the combat clock, with twelve world-aligned lanes and no arrival warning", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), boss = createBug("hive", 1, 400, 300);
+    boss.facing = Math.PI / 3;
+    const draw = (combatTime: number) => { c.paints.length = 0; renderer.draw(800, 600, { x: 0, y: 0 }, [], null, new ArenaInput(), [boss], [], 5, 0, 123456, 1, undefined, combatTime); return [...c.paints]; };
+    const warned = (paints: Paint[]) => paints.some(p => p.op === "fillText" && p.args[0] === "RING INCOMING");
+    for (const deadline of [6000, 12000]) {
+      boss.ringAt = deadline;
+      expect(warned(draw(deadline - 1001))).toBe(false);
+      const early = draw(deadline - 1000), late = draw(deadline - 50);
+      expect(warned(early)).toBe(true); expect(warned(late)).toBe(true);
+      const ring = (paints: Paint[]) => paints.find(p => p.op === "stroke" && p.strokeStyle === "#ffd05a" && p.path.some(q => q.op === "arc"))!;
+      expect(ring(late).path[0]!.args[2]).toBeLessThan(ring(early).path[0]!.args[2] as number);
+      const lanes = late.find(p => p.op === "stroke" && p.strokeStyle === "#ffd05a" && p.path.filter(q => q.op === "lineTo").length === 12)!;
+      expect(lanes).toBeDefined(); expect(lanes.transform).toEqual([1, 0, 0, 1, boss.x, boss.y]);
+      for (const [i, end] of lanes.path.filter(q => q.op === "lineTo").entries()) expect(Math.atan2(end.args[1]!, end.args[0]!)).toBeCloseTo(Math.atan2(Math.sin(i * Math.PI / 6), Math.cos(i * Math.PI / 6)));
+      expect(warned(draw(deadline))).toBe(false); expect(warned(draw(deadline + 50))).toBe(false);
+    }
+    boss.phase = "arrival"; boss.phaseUntil = 11500;
+    expect(warned(draw(11500))).toBe(false);
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 

@@ -43,14 +43,31 @@ test("fifth-wave boundaries spawn exactly one hive, reserve capacity, consume su
 
 test("placement finds corners, edge bisectors and interior circumcenters deterministically, including degenerate sites", () => {
   expect(hivePlacement([])).toMatchObject({ x: 1200, y: 1200 });
-  expect(hivePlacement([{ x: 1200, y: 1200 }])).toMatchObject({ x: 48, y: 48 });
+  const single = hivePlacement([{ x: 1200, y: 1200 }]);
+  expect(single.x).toBeGreaterThanOrEqual(48); expect(single.x).toBeLessThanOrEqual(2352);
+  expect(single.y).toBeGreaterThanOrEqual(48); expect(single.y).toBeLessThanOrEqual(2352);
+  expect(single.clearance).toBeCloseTo(Math.hypot(1152, 1152));
   const corners = [{ x: 48, y: 48 }, { x: 2352, y: 48 }, { x: 48, y: 2352 }, { x: 2352, y: 2352 }];
   expect(hivePlacement(corners)).toMatchObject({ x: 1200, y: 1200 });
   expect(hivePlacement([...corners].reverse())).toEqual(hivePlacement(corners));
   expect(hivePlacement([...corners, corners[0]!])).toEqual(hivePlacement(corners));
   const edge = hivePlacement([{ x: 48, y: 1200 }, { x: 2352, y: 1200 }]);
-  expect(edge).toMatchObject({ x: 1200, y: 48 });
+  expect(edge.x).toBeCloseTo(1200); expect(Math.abs(edge.y - 1200)).toBeCloseTo(1152);
+  expect(hivePlacement([{ x: 2352, y: 1200 }, { x: 48, y: 1200 }])).toEqual(edge);
   expect(hivePlacement([{ x: 48, y: 48 }, { x: 1200, y: 48 }, { x: 2352, y: 48 }])).toMatchObject({ y: 2352 });
+});
+
+test("scheduled spawn clears active, downed and out players when a safe pocket exists", () => {
+  const s = setup(3), [active, downed, out] = [...s.players.values()];
+  Object.assign(active!, { x: 1200, y: 1200 });
+  // Put omitted statuses at the points an active-only (or living-only) search would select.
+  Object.assign(downed!, hivePlacement([active!])); downPlayer(s, downed!, 0);
+  Object.assign(out!, hivePlacement([active!, downed!])); endLife(s, out!.id);
+  expect(hivePlacement(s.players.values()).clearance).toBeGreaterThan(600);
+  s.tick = 4 * WAVE_MS / STEP_MS; s.wave = 4; stepArena(s, new Map());
+  const boss = s.bugs.find(b => b.kind === "hive")!;
+  expect(boss.phase).toBe("active");
+  for (const p of s.players.values()) expect(Math.hypot(boss.x - p.x, boss.y - p.y)).toBeGreaterThanOrEqual(600);
 });
 
 test("HP counts active/downed lives, excludes out, freezes at spawn, and permits zero or twenty", () => {
@@ -70,7 +87,7 @@ test("crowded arrival remains harmless for the entire warning and starts full at
   expect(hivePlacement(s.players.values()).clearance).toBeLessThan(600);
   spawnHive(s, 0); const b = s.bugs[0]!, p = s.players.get("0")!;
   Object.assign(p, { x: b.x, y: b.y, spawnProtectedUntil: 0 });
-  expect(b.phase).toBe("arrival"); expect(s.hive).toMatchObject({ broodAt: 6000, ringAt: 8000 });
+  expect(b.phase).toBe("arrival"); expect(s.hive).toMatchObject({ broodAt: 6000 }); expect(b.ringAt).toBe(8000);
   for (let n = 0; n < 40; n++) { hit(s, p); expect(p.hits).toBe(3); expect(b.hp).toBe(1080); expect(s.bugs).toHaveLength(1); expect(s.globs).toHaveLength(0); }
   expect(b.phase).toBe("active"); s.shots = []; hit(s, p); expect(p.hits).toBe(2); expect(b.hp).toBe(1079);
 });
@@ -97,14 +114,22 @@ test("exact 600 clearance activates immediately; densest cluster beats lone near
 
 test("three crawlers per four seconds, twelve radial slow globs per six, no movement emissions or cap debt", () => {
   const s = setup(); spawnHive(s, 0); const b = s.bugs[0]!;
+  s.players.get("0")!.immuneUntil = 100000;
   for (let i = 0; i < 79; i++) stepArena(s, new Map()); expect(s.bugs.filter(b => b.kind === "crawler")).toHaveLength(0);
   stepArena(s, new Map()); expect(s.bugs.filter(b => b.kind === "crawler")).toHaveLength(3);
-  for (let i = 0; i < 40; i++) stepArena(s, new Map()); expect(s.globs).toHaveLength(12);
+  for (let i = 0; i < 39; i++) stepArena(s, new Map()); expect(s.globs).toHaveLength(0); expect(b.ringAt).toBe(6000);
+  stepArena(s, new Map()); expect(s.globs).toHaveLength(12); expect(b.ringAt).toBe(12000);
   for (let i = 0; i < 12; i++) { const g = s.globs[i]!; expect(g.source).toBe("hive"); expect(g.born).toBe(6000); expect(Math.hypot(g.vx, g.vy)).toBeCloseTo(180); expect(g.vx).toBeCloseTo(Math.cos(i * Math.PI / 6) * 180); expect(g.vy).toBeCloseTo(Math.sin(i * Math.PI / 6) * 180); }
   hive.move(b, s.players.values(), 6000); hive.move(b, s.players.values(), 6000); expect(s.globs).toHaveLength(12);
+  for (let i = 0; i < 119; i++) stepArena(s, new Map());
+  expect(s.tick * STEP_MS).toBe(11950); expect(s.globs.filter(g => g.source === "hive")).toHaveLength(0); expect(b.ringAt).toBe(12000);
+  stepArena(s, new Map());
+  const repeated = s.globs.filter(g => g.source === "hive"); expect(repeated).toHaveLength(12); expect(b.ringAt).toBe(18000);
+  expect(repeated.every(g => g.born === 12000)).toBe(true);
+  s.bugs = [b];
   while (s.bugs.length < MAX_BUGS - 1) s.bugs.push(createBug("crawler", s.nextId++, 100, 100));
-  hive.attack!(b, s, 8000); expect(s.bugs).toHaveLength(MAX_BUGS); s.bugs = [b];
-  hive.attack!(b, s, 8050); expect(s.bugs).toHaveLength(1); hive.attack!(b, s, 12000); expect(s.bugs).toHaveLength(4);
+  hive.attack!(b, s, 16000); expect(s.bugs).toHaveLength(MAX_BUGS); s.bugs = [b];
+  hive.attack!(b, s, 16050); expect(s.bugs).toHaveLength(1); hive.attack!(b, s, 20000); expect(s.bugs).toHaveLength(4);
 });
 
 test("actual combat shares conserve 300 plus 50 each, bypass streak multiplier and retain downed credit", () => {
@@ -146,7 +171,7 @@ test("solo is allowed, lethal boundary suppresses attacks, surviving brood/globs
   const encounter = s.hive; pushBugsFromSpawn(s, { x: b.x, y: b.y }); expect(s.hive).toBe(encounter);
   // Return in bounds after explicit test displacement.
   b.x = b.y = 900; s.tick = 119;
-  s.hive!.broodAt = s.hive!.ringAt = 6000; b.hp = 1;
+  s.hive!.broodAt = b.ringAt = 6000; b.hp = 1;
   hit(s, p); expect(p.score).toBe(350); expect(s.globs).toHaveLength(0); expect(s.bugs).toHaveLength(0);
   const solo = setup(), player = solo.players.get("0")!; spawnHive(solo, 0); const boss = solo.bugs[0]!;
   player.immuneUntil = 100000;

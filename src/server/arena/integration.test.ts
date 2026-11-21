@@ -35,7 +35,7 @@ test("JSON and binary clients share hive, ring, life rewards and idempotent pers
     const room = app.arenas.active.get(a.id)!.room!, s = room.state, p = s.players.get(a.id)!, q = s.players.get(b.id)!;
     spawnHive(s, s.tick * 50); const boss = s.bugs.find(b => b.kind === "hive")!;
     for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "hive" && b.maxHp === 240));
-    s.hive!.ringAt = (s.tick + 1) * 50;
+    boss.ringAt = (s.tick + 1) * 50;
     for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.globs.filter(g => g.source === "hive").length === 12);
     contributeHive(s, boss, q, 1); boss.hp = 1;
     s.shots.push({ id: s.nextId++, owner: p.id, life: p.life, x: boss.x, y: boss.y, vx: 900, vy: 0, born: s.tick * 50 });

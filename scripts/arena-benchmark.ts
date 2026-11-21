@@ -17,7 +17,7 @@ const bugs = Array.from({ length: MAX_BUGS }, (_, i) => {
   if (b.kind === "spitter") { b.phase = "swell"; b.phaseUntil = 500; }
   return b;
 });
-if (hiveScene) bugs[bugs.length - 1] = createBug("hive", 149, 1100, 1100);
+if (hiveScene) bugs[bugs.length - 1] = { ...createBug("hive", 149, 1100, 1100), ringAt: 500 };
 const rescue = new URLSearchParams(location.search).has("revive");
 if (rescue) for (let i = 1; i < players.length; i++) {
   const p = players[i]!; p.status = "downed"; p.hits = 0; p.reviveMs = i % 4 * 500; p.reviving = i % 2 === 0;

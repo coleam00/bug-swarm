@@ -13,7 +13,8 @@ export function spawnHive(state: ArenaState, time: number) {
   bug.hp = bug.maxHp = HIVE_BASE_HEALTH + HIVE_PLAYER_HEALTH * living;
   const activation = time + (position.clearance + 1e-7 >= HIVE_CLEARANCE ? 0 : HIVE_ARRIVAL_MS);
   if (activation > time) { bug.phase = "arrival"; bug.phaseUntil = activation; }
-  state.hive = { id: bug.id, broodAt: activation + HIVE_BROOD_MS, ringAt: activation + HIVE_RING_MS, contributions: new Map() };
+  bug.ringAt = activation + HIVE_RING_MS;
+  state.hive = { id: bug.id, broodAt: activation + HIVE_BROOD_MS, contributions: new Map() };
   state.bugs.push(bug);
 }
 
@@ -47,7 +48,7 @@ export function rewardHive(state: ArenaState): HiveReward[] {
 const active: CombatPlayer[] = [];
 export const hive: BugDefinition = {
   radius: HIVE_RADIUS, health: HIVE_MAX_HEALTH, points: 0,
-  initialize(bug) { bug.maxHp = bug.hp; bug.phase = "active"; },
+  initialize(bug, time) { bug.maxHp = bug.hp; bug.phase = "active"; bug.ringAt = time + HIVE_RING_MS; },
   advancePhase(bug, time) { if (bug.phase === "arrival" && time >= bug.phaseUntil!) { bug.phase = "active"; delete bug.phaseUntil; } },
   committedPhases: ["arrival"],
   move(bug, players, time) {
@@ -78,13 +79,14 @@ export const hive: BugDefinition = {
         state.bugs.push(createBug("crawler", state.nextId++, Math.max(CRAWLER_RADIUS, Math.min(WORLD_WIDTH - CRAWLER_RADIUS, bug.x + Math.cos(angle) * offset)), Math.max(CRAWLER_RADIUS, Math.min(WORLD_HEIGHT - CRAWLER_RADIUS, bug.y + Math.sin(angle) * offset)), time));
       }
     }
-    if (time >= encounter.ringAt) {
-      encounter.ringAt = time + HIVE_RING_MS;
+    if (time >= bug.ringAt!) {
+      bug.ringAt = time + HIVE_RING_MS;
       for (let i = 0; i < HIVE_RING_COUNT; i++) { const angle = i * Math.PI / (HIVE_RING_COUNT / 2); state.globs.push({ id: state.nextId++, x: bug.x, y: bug.y, vx: Math.cos(angle) * HIVE_GLOB_SPEED, vy: Math.sin(angle) * HIVE_GLOB_SPEED, born: time, source: "hive" }); }
     }
   },
   valid(bug, time) {
     return Number.isSafeInteger(bug.maxHp) && bug.maxHp! >= HIVE_BASE_HEALTH && bug.maxHp! <= HIVE_MAX_HEALTH && (bug.maxHp! - HIVE_BASE_HEALTH) % HIVE_PLAYER_HEALTH === 0 && bug.hp <= bug.maxHp! &&
+      Number.isSafeInteger(bug.ringAt) && (bug.phase === "arrival" ? bug.ringAt === bug.phaseUntil! + HIVE_RING_MS : bug.ringAt! > time && bug.ringAt! <= time + HIVE_RING_MS) &&
       (bug.phase === "active" ? bug.phaseUntil === undefined && Math.hypot(bug.vx, bug.vy) <= HIVE_SPEED + 0.1 : bug.phase === "arrival" && Number.isSafeInteger(bug.phaseUntil) && bug.phaseUntil! > time && bug.phaseUntil! <= time + HIVE_ARRIVAL_MS && bug.vx === 0 && bug.vy === 0);
   },
 };

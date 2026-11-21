@@ -19,6 +19,33 @@ export class HiveHud {
       c.fillStyle = "#edff9c"; c.fillText(`+${r.amount}`, r.x, r.y - 65 - age / 35); c.restore();
     }
   }
+  private bannerPosition(width: number, height: number, camera: { x: number; y: number }, scale: number, now: number, panelWidth: number, awardHalf: number, top: number) {
+    const bottom = height - 66, preferred = height < 500 ? bottom : Math.max(top, height * 0.3 - 34);
+    // Try the centre, then either side. Reserve each award's entire 1.6-second
+    // trajectory so the banner stays clear without chasing the rising numbers.
+    for (let column = 0; column < 3; column++) {
+      const x = column === 0 ? (width - panelWidth) / 2 : column === 1 ? 8 : width - panelWidth - 8;
+      for (let candidate = -3; candidate < this.awards.length * 2; candidate++) {
+        const r = candidate >= 0 ? this.awards[Math.floor(candidate / 2)]! : undefined;
+        if (r && (now < r.at || now - r.at >= 2000)) continue;
+        let y = candidate === -3 ? preferred : candidate === -2 ? bottom : top;
+        if (r) {
+          const firstY = (r.y - camera.y - 65) * scale;
+          y = candidate % 2 ? firstY - (1600 / 35 + 36) * scale - 54 - 8 : firstY + 10 * scale + 8;
+        }
+        if (y < top || y + 54 > height - 8) continue;
+        let overlaps = false;
+        for (const a of this.awards) {
+          if (now < a.at || now - a.at >= 2000) continue;
+          const ax = (a.x - camera.x) * scale, firstY = (a.y - camera.y - 65) * scale;
+          if (ax + awardHalf * scale > x && ax - awardHalf * scale < x + panelWidth &&
+            firstY + 10 * scale + 8 > y && firstY - (1600 / 35 + 36) * scale - 8 < y + 54) { overlaps = true; break; }
+        }
+        if (!overlaps) return { x, y };
+      }
+    }
+    return { x: (width - panelWidth) / 2, y: bottom };
+  }
   draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, visible: Bug | undefined, now: number, arrowTop: number) {
     c.save();
     if (boss) {
@@ -38,9 +65,11 @@ export class HiveHud {
       }
     }
     if (now >= this.bannerAt && now - this.bannerAt < 2000) {
-      const y = Math.max(100, height * 0.3);
-      c.fillStyle = "#060b12dd"; c.fillRect(8, y - 34, width - 16, 54);
-      c.fillStyle = "#edff9c"; c.font = "bold 32px system-ui"; c.textAlign = "center"; c.fillText("Hive down!", width / 2, y + 4);
+      c.font = "bold 32px system-ui"; c.textAlign = "center";
+      const w = Math.min(width - 16, c.measureText("Hive down!").width + 32);
+      const { x, y } = this.bannerPosition(width, height, camera, scale, now, w, c.measureText("+350").width / 2 + 5, boss ? 94 : 46);
+      c.fillStyle = "#060b12dd"; c.fillRect(x, y, w, 54);
+      c.fillStyle = "#edff9c"; c.fillText("Hive down!", x + w / 2, y + 38);
     }
     c.restore();
   }

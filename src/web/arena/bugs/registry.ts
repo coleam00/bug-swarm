@@ -10,7 +10,7 @@ export const BUG_DRAW = {
   dasher: { create: createDasherDraw, extent: dasherExtent },
   beetle: { create: createBeetleDraw, extent: () => 48 },
   spitter: { create: createSpitterDraw, extent: () => 60 },
-  hive: { create: createHiveDraw, extent: () => 110 },
+  hive: { create: createHiveDraw, extent: () => 120 },
 } satisfies Record<BugKind, { create: () => BugDraw; extent: (b: Bug) => number }>;
 export function createBugDraws(): Record<BugKind, BugDraw> {
   return Object.fromEntries(Object.entries(BUG_DRAW).map(([kind, definition]) => [kind, definition.create()])) as Record<BugKind, BugDraw>;
