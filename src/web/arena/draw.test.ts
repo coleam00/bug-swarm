@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ArenaRenderer } from "./draw";
+import { ArenaRenderer, lifeClock } from "./draw";
 import { ArenaInput } from "./input";
 import { canvasFixture } from "../game/canvas-fixture.test-support";
 import { TEAM_COLOURS } from "../../shared/teams";
@@ -8,6 +8,47 @@ import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults } from "../../shared/arena/types";
 import { cameraFor } from "./camera";
 import type { Paint } from "../game/canvas-fixture.test-support";
+
+test("spawn shimmer animates on both robots, expires independently of damage flash, and scales only world drawing", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const remote = { ...local, id: "remote", x: 1300 };
+    input.down(1, 80, 400, 1280);
+    const draw = (tick: number) => {
+      fixture.context.paints.length = 0;
+      renderer.draw(1280, 800, { x: 750, y: 918.75 }, [local, remote], local, input, [], [], 17, tick, tick * 50, 1280 / 900);
+      return [...fixture.context.paints];
+    };
+    const shimmer = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && p.strokeStyle === "#b8efff");
+    const first = draw(0), next = draw(10);
+    expect(shimmer(first)).toHaveLength(2); expect(shimmer(next)).toHaveLength(2);
+    expect(shimmer(first)[0]!.path).not.toEqual(shimmer(next)[0]!.path);
+    expect(shimmer(first)[0]!.transform[0]).toBeCloseTo(1280 / 900);
+    const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes("Wave"))!;
+    expect(hud.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(first.some(p => p.op === "fillText" && String(p.args[0]).includes("hits left   0:00"))).toBe(true);
+    expect(draw(1260).some(p => p.op === "fillText" && String(p.args[0]).includes("hits left   1:03"))).toBe(true);
+    const stick = first.find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[2] === 60))!;
+    expect(stick.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    expect(shimmer(draw(39))).toHaveLength(2); expect(shimmer(draw(40))).toHaveLength(0);
+    local.spawnProtectedUntil = 0; remote.immuneUntil = 1000;
+    const afterFire = draw(2); expect(shimmer(afterFire)).toHaveLength(1);
+    expect(afterFire.some(p => p.path.some(c => c.op === "roundRect") && p.globalAlpha === 0.4)).toBe(true);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+
+test("life clock uses authoritative ticks, resets on a new life and freezes at the terminal duration", () => {
+  const p = { ...lifeDefaults(9600), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+  expect(lifeClock(p, 9600)).toBe("0:00"); expect(lifeClock(p, 10860)).toBe("1:03");
+  const dead = { ...p, hits: 0, result: { playerId: p.id, life: p.life, score: 37, kills: 3, seconds: 63.95, touch: false } };
+  expect(lifeClock(dead, 12000)).toBe("1:03");
+  expect(lifeClock({ ...p, ...lifeDefaults(12000, 2) }, 12020)).toBe("0:01");
+});
 
 test("renderer paints a grid, a distinguishing local ring, remote robots and complete names", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");

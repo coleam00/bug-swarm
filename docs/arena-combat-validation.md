@@ -1,4 +1,75 @@
-# Arena combat validation — issue #61
+# Drop-in fairness validation — issue #65
+
+The current spawn and pacing rules supersede the historical #61 results below. Evidence for #65 is kept locally under `.evidence/65/` (gitignored), including raw per-seed JSON, Chrome captures, the validation driver, scratch homes/profiles and databases. The pull request summarizes that evidence.
+
+## Rules and tuning
+
+Join and respawn searches use 64 seeded candidates and a 16×16 grid inside the 450-unit world inset, choosing the greatest nearest-bug distance without overlapping living robots. Crowded spawns push bugs inside 300 units straight outward to 300 without kills, lost bug state or points. Two seconds of pale rotating spawn shimmer prevent contact damage; an emitted shot ends it early. Overheat/cooldown-blocked fire does not end it, and firing preserves independent damage immunity.
+
+Each life accrues its own fractional spawn credits. The final piecewise-linear rate is **0.3/s at 0 s, 1.2/s at 60 s, 3/s at 120 s, 4/s at 240 s**, clamped thereafter. Starting values 0.4/1.2/2/3 produced 438.1 s fresh versus 253.7 s late aimer lives (57.9%), with some idle cohorts below 10 s. Lower opening pressure and stronger later pressure produced shorter fresh lives and the passing results below. Policies, seeds, populations and gates were unchanged.
+
+Bugs spawn 600–900 units from the requesting player, outside every living player's conservative view plus 64 units. They remain shared and chase the nearest living player. Failed or capped requests are discarded, retaining only fractional credit, with persistent round-robin allocation after the last successful room slot. The live cap remains 150. Waves retain their first-step/30-second clock for future kinds/events and add no volume. The HUD shows wave and life m:ss, reset on respawn and frozen on death.
+
+World drawing scales so the longest view dimension is at most 900 units; HUD and touch controls remain in CSS pixels and mouse aiming divides by the world scale. This permits enforceable off-screen placement without adding viewport reports to protocol v1. The 300-unit crowded fallback guarantees physical clearance, but cannot universally guarantee an empty screen.
+
+## Seeded measurements
+
+`bun run skill` retains the 20-seed, eight-bot, 180-second score benchmark:
+
+| Policy | Median score | Median life seconds | Lives | Deaths | Cutoffs |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mover | 242 | 75.1 | 346 | 186 | 160 |
+| aimer | 3472.5 | 145.55 | 246 | 86 | 160 |
+
+Aimer/mover score ratio: **14.349×**, above 2×.
+
+Newcomer trials pair seeds 0–19 and newcomer policy seeds, with one independent newcomer against eight continuously respawning aimers. Only the newcomer's first life enters the cohort. The common observation window is 600 seconds after joining. A cutoff is a censored lower bound, never a recorded death; both middle observations must be completed lives for an exact median. Inconclusive paired windows extend to 1200 then 1800 seconds and fail if still inconclusive. All medians below are exact; no extension was needed.
+
+| Newcomer | Arena age at join, seconds | Incumbents | Median first life, seconds | Deaths / cutoffs |
+| --- | ---: | ---: | ---: | ---: |
+| aimer | 0 | 8 | 205.525 | 17 / 3 |
+| aimer | 480 | 8 | 168.75 | 18 / 2 |
+| idle | 0 | 8 | 47.05 | 20 / 0 |
+| idle | 120 | 8 | 10.05 | 20 / 0 |
+| idle | 300 | 8 | 10.35 | 20 / 0 |
+| idle | 480 | 8 | 10.175 | 20 / 0 |
+| idle | 900 | 8 | 10.45 | 20 / 0 |
+| idle solo | 0 | 0 | 10.3 | 20 / 0 |
+| idle solo | 480 | 0 | 10.3 | 20 / 0 |
+
+Late/fresh survival: **82.107%**, above 80%. Every idle cohort exceeds 10 seconds. Raw observations and constants: `.evidence/65/skill-final.json`.
+
+## Regression and simulation guards
+
+The engine renderer mock records travelling shots and exact changing waves after interpolation delay. Independent mutations dropping shots and zeroing the wave both fail that test. A real RoomManager/LifeWriter/SQLite lifecycle stores literal score 37 and asserts 37 in pending/saved `life_over` and the database; a mutation storing 38 fails. Results are in `.evidence/65/mutation-results.json`.
+
+Deterministic simulation guards cover repeated join/respawn inset and clearance, clustered/crowded placement, coincident pushes without score/state loss, protection boundaries and blocked/emitted fire, independent damage immunity, threat knots/integration by life age, reset/removal, wave independence, annulus/off-screen placement, capacity fairness and exhausted placement. View, engine and recording-canvas tests cover containment, centred spawns, scaled aiming, resize/DPR, independent touch ownership, shimmer and life-clock reset/freeze.
+
+## Production Chrome, touch and capacity
+
+Validated on Windows with Bun 1.4.2 and installed Chrome/Chromium **156.0.8078.4**, using built production assets, a server started on an ephemeral loopback port, and scratch data/home/profile directories inside `.evidence/65/`. The driver never changes arena state to obtain an opening. Eight real WebSocket aimers ran for 555 wall seconds, continuously respawning. Chrome joined with fresh browser storage after **9,825 simulation ticks / 491.25 simulation seconds**, at wave 17, with exactly eight incumbents. No extra probe joined the room.
+
+Captures `spawn-0.png`, `spawn-0_5.png`, `spawn-1_5.png`, `spawn-5.png`, `spawn-10.png` and `spawn-30.png` show the opening and first 30 wall seconds. The initial robot is exactly at screen (640, 400) in 1280×800, with three hits, zero visible bugs and a visible shimmer. The next two captures, at life ages 0.8 and 1.8 seconds, still have no visible bugs and active shimmer. After the neutral opening, real CDP keyboard/mouse events move, aim and fire. The approximately 30-second capture is at authoritative life age 29.85 seconds, wave 18, **587 points and two hits remaining**. The opening, 30-second and touch captures were visually inspected.
+
+Separate fresh contexts at **390×844 portrait** and **844×390 landscape** join the same busy arena while the eight bots remain connected. Spawn and simultaneous two-point touch captures show centred robots, readable HUDs and both sticks; outgoing inputs contain independent movement, aimed fire and `touch:true`. Neither layout overflows, and no browser errors were recorded. Files: `portrait-spawn.png`, `portrait-twin-sticks.png`, `landscape-spawn.png`, `landscape-twin-sticks.png`.
+
+The existing developer fixture holds 20 players, 150 bugs, 140 travelling shots and 140 effect slots, using production rendering and the shared view helper with normal culling. Seven consecutive one-second windows per layout measured:
+
+| Full-arena view | FPS | Update/draw ms per frame |
+| --- | ---: | ---: |
+| 1280×800 desktop | 60.0 | 0.980–1.070 |
+| 390×844 portrait | 60.0 | 0.825–0.890 |
+| 844×390 landscape | 60.0 | 0.867–1.072 |
+
+Device scale factor was 1 with no CPU throttling. The readout measures CPU update/draw work, excluding later compositing. Browser flags include `--headless=new`, a scratch `--user-data-dir`, and disabled background timer/render throttling. Captures: `full-arena-desktop.png`, `full-arena-portrait.png`, `full-arena-landscape.png`.
+
+The real bot CLI ran **200 aimers for 120 seconds across 10 rooms**: 200/200 joins, zero errors, tick p50 **0.718 ms**, tick p95 **1.228 ms**, scheduler lateness p95 **1.852 ms**. The eight-bot run also had zero errors, with tick p95 0.757 ms. Tick cost includes simulation, serialization and socket enqueueing. All 244 lives in the scratch database were finished, and every owned server/browser/bot was stopped. Full raw observations, frame windows, input messages and load results are in `.evidence/65/production-report.json`; driver and logs are beside it.
+
+`bun run check` passed **573 tests, zero failures across 58 files**, including the real ephemeral-server integration tests. `bun run skill`, `bun run build`, targeted renderer/engine/SQLite/simulation tests, all three mutation probes and `git diff --check` passed. No dependency was added. The validation driver is `.evidence/65/validate.ts`, run with a scratch environment through `.evidence/65/run.ps1`; raw evidence remains gitignored under the repository's evidence policy. The bounded camera and conservative spawn rejection are the planned smallest implementation; viewport reports, spatial indexing, additional bug kinds and bosses remain outside this item.
+
+---
+
+# Historical arena combat validation — issue #61
 
 Validated on Windows on 2026-11-20 with Bun 1.4.2 and headless Chrome/Chromium 156.0.8078.4. Production play used the Vite build and `createServer({port:0, hostname:'127.0.0.1'})`, private SQLite/home/profile directories, and two independent browser storage contexts. No existing listener or operator database was used. Every owned server, browser and bot was closed before its scratch directory was removed.
 

@@ -82,7 +82,7 @@ test("crawler targets nearest living player with stable ties; contact persists, 
   // Farther "a" must not override nearer "b" simply because its id sorts first.
   p.x = 900; crawler.move(b, [q, p]); expect(b.vx).toBe(CRAWLER_SPEED); expect(b.vy).toBe(0); p.x = 1200;
   p.hits = 0; crawler.move(b, [p, q]); expect(b.vx).toBe(CRAWLER_SPEED); p.hits = 3;
-  a.tick = 21; p.immuneUntil = 0; a.bugs = [bug(5, 1200), bug(6, 1200)];
+  a.tick = 21; p.immuneUntil = 0; p.spawnProtectedUntil = 0; a.bugs = [bug(5, 1200), bug(6, 1200)];
   stepArena(a, new Map()); expect(p.hits).toBe(2); expect(a.bugs).toHaveLength(2); expect(p.score).toBe(0);
   for (let i = 0; i < 19; i++) stepArena(a, new Map()); expect(p.hits).toBe(2);
   stepArena(a, new Map()); expect(p.hits).toBe(1);
@@ -94,28 +94,18 @@ test("crawler targets nearest living player with stable ties; contact persists, 
   expect(respawnPlayer(a, p.id, old)).toBe(p); expect(p.life).toBe(old + 1); expect(p.hits).toBe(3); expect(p.heat).toBe(0);
   expect(Math.hypot(p.x - death.x, p.y - death.y)).toBeGreaterThanOrEqual(300);
   expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeGreaterThanOrEqual(28);
-  expect(respawnPlayer(a, p.id, old + 1)).toBeNull(); expect(p.immuneUntil).toBe(a.tick * STEP_MS + 1000);
+  expect(respawnPlayer(a, p.id, old + 1)).toBeNull(); expect(p.immuneUntil).toBe(0); expect(p.spawnProtectedUntil).toBe(a.tick * STEP_MS + 2000);
 });
-test("waves start at first step and every 30s, scale with living count, trickle, cap and keep spawn clearance", () => {
-  const { a, p } = fixture(); stepArena(a, new Map()); expect(a.wave).toBe(1); expect(a.bugs).toHaveLength(9);
-  expect(a.bugs.every(b => Math.hypot(b.x - p.x, b.y - p.y) >= 493)).toBe(true);
-  a.bugs = []; a.tick = 599; a.spawnCredit = 0; stepArena(a, new Map()); expect(a.wave).toBe(1); expect(a.bugs).toHaveLength(0);
-  stepArena(a, new Map()); expect(a.wave).toBe(2); expect(a.bugs).toHaveLength(12);
-  a.bugs = []; a.spawnCredit = 0.99; stepArena(a, new Map()); expect(a.bugs).toHaveLength(1);
-  a.bugs = []; for (let i = 0; i < 151; i++) spawnBug(a); expect(a.bugs).toHaveLength(MAX_BUGS);
-  const edge = (b: Bug) => b.x === 0 || b.x === 2400 || b.y === 0 || b.y === 2400;
-  expect(a.bugs.some(edge)).toBe(true); expect(a.bugs.some(b => !edge(b))).toBe(true);
-  expect(a.bugs.every(b => Math.hypot(b.x - p.x, b.y - p.y) >= 500)).toBe(true);
+test("waves start at first step and every 30s without spawn bursts; personal requests respect the cap", () => {
+  const { a, p } = fixture(); stepArena(a, new Map()); expect(a.wave).toBe(1); expect(a.bugs).toHaveLength(0);
+  a.tick = 599; a.spawnCredits.set(p.id, 0); stepArena(a, new Map()); expect(a.wave).toBe(1); expect(a.bugs).toHaveLength(0);
+  stepArena(a, new Map()); expect(a.wave).toBe(2); expect(a.bugs).toHaveLength(0);
+  a.spawnCredits.set(p.id, 0.99); stepArena(a, new Map()); expect(a.bugs).toHaveLength(1);
+  a.bugs = []; for (let i = 0; i < 151; i++) spawnBug(a, p); expect(a.bugs).toHaveLength(MAX_BUGS);
+  expect(a.bugs.every(b => Math.hypot(b.x - p.x, b.y - p.y) >= 600 - 1e-8)).toBe(true);
   const safe = safeSpawn(a); expect(Number.isFinite(safe.x)).toBe(true);
-  p.hits = 0; a.tick = 1200; a.bugs = []; a.spawnCredit = 0.9; stepArena(a, new Map()); expect(a.wave).toBe(3); expect(a.bugs).toHaveLength(0); expect(a.spawnCredit).toBe(0);
-  const scaled = createArena(5);
-  for (let i = 0; i < 3; i++) {
-    const q = joinPlayer(scaled, { id: String(i), name: `bot-${i}`, team: "tabs" })!;
-    q.x = 900 + i * 300; q.y = 1200; if (i === 2) q.hits = 0;
-  }
-  stepArena(scaled, new Map()); expect(scaled.bugs).toHaveLength((6 + 3) * 2);
-  scaled.tick = 600; scaled.bugs = []; scaled.spawnCredit = 0;
-  stepArena(scaled, new Map()); expect(scaled.wave).toBe(2); expect(scaled.bugs).toHaveLength((6 + 3 * 2) * 2);
+  endLife(a, p.id); a.tick = 1200; a.bugs = []; stepArena(a, new Map());
+  expect(a.wave).toBe(3); expect(a.bugs).toHaveLength(0); expect(a.spawnCredits.has(p.id)).toBe(false);
 });
 test("kills precede contact; terminal scores freeze and cancel shots while dead inputs do nothing", () => {
   const { a, p } = fixture(); a.tick = 21; p.immuneUntil = 0; p.hits = 1;
@@ -125,11 +115,17 @@ test("kills precede contact; terminal scores freeze and cancel shots while dead 
   const x = p.x; stepArena(a, new Map([[p.id, { move: { x: 1, y: 0 }, aim: 2, fire: true }]]));
   expect(p.x).toBe(x); expect(p.score).toBe(11); expect(a.ended).toHaveLength(0); expect(a.shots).toHaveLength(0);
 });
-test("trickle resolves exact seconds for fractional credits and exhausted spawn placement terminates", () => {
+test("separate life credits do not pool fractional requests; exhausted spawn placement terminates", () => {
   const a = createArena(3);
   for (let i = 0; i < 4; i++) joinPlayer(a, { id: String(i), name: `bot-${i}`, team: "tabs" });
-  a.tick = 1; for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(a.bugs).toHaveLength(2);
+  a.tick = 1; for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(a.bugs).toHaveLength(0);
+  for (const credit of a.spawnCredits.values()) expect(credit).toBeCloseTo(0.30825);
   const full = createArena(1);
   for (let i = 0; i < 20; i++) { const p = joinPlayer(full, { id: String(i), name: `bot-${i}`, team: "tabs" })!; p.x = 240 + i % 5 * 480; p.y = 300 + Math.floor(i / 5) * 600; }
-  expect(spawnBug(full)).toBe(false); expect(full.bugs).toHaveLength(0);
+  expect(spawnBug(full, full.players.get("0")!)).toBe(false); expect(full.bugs).toHaveLength(0);
+  for (const p of full.players.values()) full.spawnCredits.set(p.id, 0.99);
+  stepArena(full, new Map()); expect(full.bugs).toHaveLength(0); expect(full.spawnCursor).toBe(-1);
+  for (const credit of full.spawnCredits.values()) expect(credit).toBeLessThan(1);
+  for (const p of full.players.values()) if (p.id !== "0") endLife(full, p.id);
+  stepArena(full, new Map()); expect(full.bugs).toHaveLength(0);
 });

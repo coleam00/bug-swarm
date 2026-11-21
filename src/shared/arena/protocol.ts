@@ -53,7 +53,7 @@ export function parseServer(raw: unknown): ServerMessage | null {
       ![p.x, p.y, p.vx, p.vy, p.facing].every(finite) || p.x < PLAYER_RADIUS || p.x > WORLD_WIDTH - PLAYER_RADIUS || p.y < PLAYER_RADIUS || p.y > WORLD_HEIGHT - PLAYER_RADIUS) return null;
     if (!integer(p.life) || p.life < 1 || !integer(p.hits) || p.hits > 3 || !finite(p.heat) || p.heat < 0 || p.heat > HEAT_CAPACITY ||
       ![p.streak, p.points, p.score, p.kills, p.startedTick].every(integer) ||
-      ![p.overheatUntil, p.nextShotAt, p.immuneUntil, p.streak, p.points, p.score, p.kills, p.startedTick].every(n => finite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER) || typeof p.touch !== "boolean" ||
+      ![p.overheatUntil, p.nextShotAt, p.immuneUntil, p.spawnProtectedUntil, p.streak, p.points, p.score, p.kills, p.startedTick].every(n => finite(n) && n >= 0 && n <= Number.MAX_SAFE_INTEGER) || typeof p.touch !== "boolean" ||
       Math.hypot(p.vx, p.vy) > PLAYER_SPEED + 0.1 || Math.abs(p.facing) > Math.PI + 0.001 ||
       (p.result !== undefined && (!validResult(p.result) || p.result.life !== p.life || p.result.playerId !== p.id || p.hits !== 0))) return null;
     ids.add(p.id);

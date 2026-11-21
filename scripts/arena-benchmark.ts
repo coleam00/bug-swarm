@@ -3,6 +3,7 @@ import { ArenaRenderer } from "../src/web/arena/draw";
 import { ArenaInput } from "../src/web/arena/input";
 import { lifeDefaults } from "../src/shared/arena/types";
 import { MAX_BUGS, MAX_SHOTS, MAX_EVENTS } from "../src/shared/arena/constants";
+import { cameraFor, worldView } from "../src/shared/arena/view";
 const canvas = document.querySelector("canvas")!, ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx), input = new ArenaInput();
 const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot-${i}`, team: i % 2 ? "tabs" as const : "spaces" as const, x: 850 + i % 5 * 130, y: 900 + Math.floor(i / 5) * 130, vx: 0, vy: 0, facing: i }));
 const bugs = Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: "crawler" as const, x: 650 + i % 15 * 70, y: 750 + Math.floor(i / 15) * 65, vx: 140, vy: 0 }));
@@ -12,7 +13,8 @@ function frame(now: number) {
   const begin = performance.now(), width = canvas.clientWidth, height = canvas.clientHeight;
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
   if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, points: 11 })), now); lastBurst = now; }
-  renderer.draw(width, height, { x: 1200 - width / 2, y: 1200 - height / 2 }, players, players[0]!, input, bugs, shots, 6, now / 50, now);
+  const view = worldView(width, height);
+  renderer.draw(width, height, cameraFor(1200, 1200, view.width, view.height), players, players[0]!, input, bugs, shots, 6, now / 50, now, view.scale);
   cost += performance.now() - begin; count++;
   if (now - start >= 1000) { canvas.dataset.fps = (count * 1000 / (now - start)).toFixed(1); canvas.dataset.frameMs = (cost / count).toFixed(3); count = cost = 0; start = now; }
   requestAnimationFrame(frame);

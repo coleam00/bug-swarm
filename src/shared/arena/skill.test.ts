@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { skillSeed, skillMatrix, median, lifeMedians } from "./skill";
+import { skillSeed, skillMatrix, median, lifeMedians, newcomerTrial, newcomerComparison, survivalSummary, fairnessPassed, type NewcomerLife } from "./skill";
 test("fixed-seed combat and private policy randomness replay exactly", () => {
   expect(skillSeed(4, "aimer", 400)).toEqual(skillSeed(4, "aimer", 400));
   expect(median([3, 1, 4, 2])).toBe(2.5);
@@ -18,3 +18,34 @@ test("20 seeds × 8 bots × 180s: aimer median score is positive and at least tw
   }
   expect(mover!.medianScore).toBeGreaterThan(0); expect(aimer!.medianScore).toBeGreaterThanOrEqual(2 * mover!.medianScore);
 }, 30000);
+
+test("newcomer trials observe exactly the first life at the requested age and retain live cutoffs", () => {
+  const early = newcomerTrial(3, "idle", 0, 0, 0.5), late = newcomerTrial(3, "idle", 480, 0, 0.5);
+  expect(early).toEqual({ seed: 3, policy: "idle", joinSeconds: 0, incumbents: 0, seconds: 0.5, score: 0, cutoff: true });
+  expect(late).toEqual({ ...early, joinSeconds: 480 });
+  const death = newcomerTrial(3, "idle", 0, 0, 60);
+  expect(death.cutoff).toBe(false); expect(death.seconds).toBeGreaterThan(0); expect(death.seconds).toBeLessThan(60);
+  expect(newcomerTrial(3, "idle", 0, 0, 120)).toEqual(death);
+  const busy = newcomerTrial(3, "aimer", 1, 8, 0.5);
+  expect(busy).toMatchObject({ seed: 3, policy: "aimer", joinSeconds: 1, incumbents: 8, seconds: 0.5, cutoff: true });
+});
+
+test("survival gates distinguish deaths, censored lower bounds, missing cohorts and failed thresholds", () => {
+  const cohort = (policy: "aimer" | "idle", joinSeconds: number, incumbents: number, seconds: number): NewcomerLife[] =>
+    Array.from({ length: 20 }, (_, seed) => ({ seed, policy, joinSeconds, incumbents, seconds, score: 0, cutoff: false }));
+  const early = cohort("aimer", 0, 8, 100), late = cohort("aimer", 480, 8, 80);
+  expect(newcomerComparison(early, late)).toBe("pass");
+  expect(newcomerComparison(early, late.map(l => ({ ...l, seconds: 79.9 })))).toBe("fail");
+  const censored = late.map(l => ({ ...l, cutoff: true }));
+  expect(survivalSummary(censored)).toEqual({ count: 20, deaths: 0, cutoffs: 20, medianSeconds: 80, exact: false });
+  expect(newcomerComparison(early, censored)).toBe("pass");
+  expect(newcomerComparison(censored, late)).toBe("inconclusive");
+  expect(newcomerComparison(early, censored.map(l => ({ ...l, seconds: 79 })))).toBe("inconclusive");
+  const idle = [0, 120, 300, 480, 900].map(age => cohort("idle", age, 8, 10));
+  const cohorts = [early, late, ...idle, cohort("idle", 0, 0, 10), cohort("idle", 480, 0, 10)];
+  expect(fairnessPassed(cohorts)).toBe(true); expect(fairnessPassed(cohorts.slice(0, -1))).toBe(false);
+  const missing = structuredClone(cohorts); missing[0]!.pop(); expect(fairnessPassed(missing)).toBe(false);
+  const duplicate = structuredClone(cohorts); duplicate[1]![1]!.seed = 0; expect(fairnessPassed(duplicate)).toBe(false);
+  const wrongAge = structuredClone(cohorts); wrongAge[3]![0]!.joinSeconds = 0; expect(fairnessPassed(wrongAge)).toBe(false);
+  cohorts[2] = cohort("idle", 0, 8, 9.99); expect(fairnessPassed(cohorts)).toBe(false);
+});
