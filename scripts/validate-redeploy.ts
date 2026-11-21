@@ -28,7 +28,8 @@ function run(command: string[], cwd = root) {
 run(["git", "diff", "--exit-code", "HEAD"]);
 const originalCommit = run(["git", "rev-parse", "HEAD"]).trim();
 await Bun.write(join(evidence, "build.log"), run([process.execPath, "run", "build"]));
-run(["git", "clone", "--no-hardlinks", root, changed]);
+run(["git", "clone", "--no-hardlinks", "--no-checkout", "--config", "core.longpaths=true", root, changed]);
+run(["git", "checkout", "--detach", originalCommit], changed);
 symlinkSync(join(root, "node_modules"), join(changed, "node_modules"), process.platform === "win32" ? "junction" : "dir");
 appendFileSync(join(changed, "vite.config.ts"), "\n// Redeploy validation: distinct commit identity.\n");
 run(["git", "add", "vite.config.ts"], changed);
