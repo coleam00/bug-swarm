@@ -1,6 +1,7 @@
 import type { Identity } from "../../shared/api";
-import { parseServer, type InputMessage, type Respawn, type ServerMessage } from "../../shared/arena/protocol";
+import type { InputMessage, Respawn, ServerMessage } from "../../shared/arena/protocol";
 import { clearResume, resumeStore, type ResumeStore } from "./resume";
+import { ServerDecoder } from "../../shared/arena/snapshot-codec";
 declare const __ARENA_BUILD_ID__: string;
 type State = "connecting" | "connected" | "reconnecting" | "reloading" | "refused" | "disposed";
 interface Dependencies {
@@ -30,12 +31,14 @@ export function connectArena(identity: Identity, touch: boolean, receive: (messa
     const url = new URL("/ws", deps.href ?? location.href); url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
     let ws: WebSocket;
     try { ws = deps.socket(url); socket = ws; } catch (error) { console.error("Arena socket creation failed", error); retry(); return; }
+    const decoder = new ServerDecoder(); ws.binaryType = "arraybuffer";
     const current = () => socket === ws && active();
-    ws.onopen = () => { if (current()) ws.send(JSON.stringify({ v: 1, type: "hello", ...identity, touch, buildId })); };
+    ws.onopen = () => { if (current()) ws.send(JSON.stringify({ v: 1, type: "hello", ...identity, touch, buildId, snapshotEncoding: "delta-v1" })); };
     ws.onmessage = event => {
       if (!current()) return;
-      const message = parseServer(event.data);
-      if (!message) { console.error("Invalid arena server message"); return; }
+      let message: ServerMessage | null;
+      try { message = decoder.read(event.data); } catch (error) { console.error("Invalid arena server message", error); return; }
+      if (!message) { console.warn("Arena snapshot base missing; waiting for keyframe"); return; }
       if (message.type === "welcome") {
         const changed = message.buildId !== deps.pageBuild;
         const previous = deps.store.read();

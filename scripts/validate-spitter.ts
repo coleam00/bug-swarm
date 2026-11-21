@@ -21,9 +21,12 @@ let socket: WebSocket | undefined, botTask: Promise<any> | undefined, botAbort: 
 let serial = 0; const pending = new Map<number, any>();
 const pause = (ms: number) => Bun.sleep(ms);
 async function until(fn: () => any, timeout = 10000) { const end = performance.now() + timeout; while (performance.now() < end) { const v = await fn(); if (v) return v; await pause(50); } throw new Error('Condition timed out'); }
-function call(method: string, params: any = {}, sessionId?: string): Promise<any> { const id = ++serial; return new Promise((resolve, reject) => { const timer = setTimeout(() => { pending.delete(id); reject(new Error(method + ' timed out')); }, 10000); pending.set(id, { resolve, reject, timer }); socket!.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); }); }
+function call(method: string, params: any = {}, sessionId?: string): Promise<any> { const id = ++serial; return new Promise((resolve, reject) => { const timer = setTimeout(() => { pending.delete(id); reject(new Error(method + ' timed out')); }, method === 'Page.navigate' ? 30000 : 10000); pending.set(id, { resolve, reject, timer }); socket!.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); }); }
 async function evaluate(session: string, expression: string) { const r = await call('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, session); if (r.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails)); return r.result.value; }
 async function shot(session: string, name: string) { const r = await call('Page.captureScreenshot', { format: 'png' }, session); writeFileSync(join(evidence, name + '.png'), Buffer.from(r.data, 'base64')); }
+const decoderBuild = await Bun.build({ entrypoints: [join(import.meta.dir, "browser-decoder.ts")], target: "browser", format: "iife" });
+if (!decoderBuild.success) throw Error("Browser observer decoder build failed");
+const decoderSource = await decoderBuild.outputs[0]!.text();
 async function page(width: number, height: number, url: string, touch = false, setup = "") {
   const { browserContextId } = await call('Target.createBrowserContext'); const { targetId } = await call('Target.createTarget', { url: 'about:blank', browserContextId });
   const { sessionId } = await call('Target.attachToTarget', { targetId, flatten: true });
@@ -31,7 +34,8 @@ async function page(width: number, height: number, url: string, touch = false, s
   await call('Network.enable', {}, sessionId);
   await call('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: touch }, sessionId);
   if (touch) await call('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 2 }, sessionId);
-  await call('Page.addScriptToEvaluateOnNewDocument', { source: `window.evidence={snap:null,inputs:[],errors:[],kills:0,life:[],pops:[]}; const Native=WebSocket; window.WebSocket=class extends Native {constructor(...args){super(...args);window.gameSocket=this;this.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.type==='welcome')window.evidence.id=m.playerId;if(m.type==='snapshot'){window.evidence.snap=m;window.evidence.kills+=m.events.length;if(m.events.some(e=>e.type==='glob-pop'))window.evidence.pops.push(m);}if(m.type==='life_over')window.evidence.life.push(m);});}send(data){const m=JSON.parse(data); if(m.type!=='hello'){window.evidence.inputs.push(m); if(window.evidence.inputs.length>100)window.evidence.inputs.shift();}return super.send(data);}}; window.addEventListener('error',e=>window.evidence.errors.push(String(e.message))); const err=console.error;console.error=(...args)=>{window.evidence.errors.push(args.map(String).join(' '));err(...args);};` }, sessionId);
+  await call('Page.addScriptToEvaluateOnNewDocument', { source: `${decoderSource}
+window.evidence={snap:null,inputs:[],errors:[],kills:0,life:[],pops:[]}; const Native=WebSocket; window.WebSocket=class extends Native {constructor(...args){super(...args);if(new URL(args[0],location.href).pathname!=='/ws')return;const decoder=new window.ArenaSnapshotDecoder();window.gameSocket=this;this.addEventListener('message',e=>{const m=decoder.read(e.data);if(!m)return;if(m.type==='welcome')window.evidence.id=m.playerId;if(m.type==='snapshot'){window.evidence.snap=m;window.evidence.kills+=m.events.length;if(m.events.some(e=>e.type==='glob-pop'))window.evidence.pops.push(m);}if(m.type==='life_over')window.evidence.life.push(m);});}send(data){if(this!==window.gameSocket)return super.send(data);const m=JSON.parse(data); if(m.type!=='hello'){window.evidence.inputs.push(m); if(window.evidence.inputs.length>100)window.evidence.inputs.shift();}return super.send(data);}}; window.addEventListener('error',e=>window.evidence.errors.push(String(e.message))); const err=console.error;console.error=(...args)=>{window.evidence.errors.push(args.map(String).join(' '));err(...args);};` }, sessionId);
   if (setup) await call('Page.addScriptToEvaluateOnNewDocument', { source: setup }, sessionId);
   await call('Page.navigate', { url }, sessionId); return { session: sessionId, targetId, browserContextId };
 }
@@ -106,7 +110,7 @@ try {
   writeFileSync(join(evidence,'scenes.json'),JSON.stringify(report.scenes,null,2));
   // Full collection rendering fixture through an owned Vite server.
   const {createServer:createVite}=await import('vite');
-  const vite=await createVite({configFile:false,cacheDir:join(evidence,'vite-cache'),server:{host:'127.0.0.1',port:0,strictPort:false}});await vite.listen();
+  const vite=await createVite({configFile:false,cacheDir:join(evidence,'vite-cache'),optimizeDeps:{entries:['scripts/arena-benchmark.html']},server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/.evidence/**']}}});await vite.listen();
   try{
     const address=vite.httpServer!.address() as {port:number};
     for(const [width,height] of [[1280,720],[390,844],[844,390]]){

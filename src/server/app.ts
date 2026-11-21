@@ -11,7 +11,7 @@ export const PLAYER_START_LIMIT = 40;
 export const START_WINDOW_MS = 10 * 60 * 1000;
 export interface AppOptions {
   scoreCacheHook?: (invalidate: () => void) => void;
-  arenaStats?: () => unknown;
+  arenaStats?: (query?: { sinceMs: number; untilMs: number; raw?: boolean }) => unknown;
   startLimit?: number;
   now?: () => number;
   clientIp?: (request: Request) => string;
@@ -86,7 +86,12 @@ export function createApp(db: Database, options: AppOptions = {}) {
     await next();
   });
   app.get("/api/events/count", (c) => c.json(countEvents(db)));
-  app.get("/api/arena/stats", (c) => c.json(options.arenaStats?.() ?? { arenas: [], totalPlayers: 0 }));
+  app.get("/api/arena/stats", (c) => {
+    const since = c.req.query("sinceMs"), until = c.req.query("untilMs"), raw = c.req.query("raw");
+    if (since === undefined && until === undefined && raw === undefined) return c.json(options.arenaStats?.() ?? { arenas: [], totalPlayers: 0 });
+    if (!since || !until || !/^\d+$/.test(since) || !/^\d+$/.test(until) || !Number.isSafeInteger(+since) || !Number.isSafeInteger(+until) || +since % 50 || +until % 50 || +until <= +since || +until - +since > 180000 || raw !== undefined && raw !== "1") return c.json({ error: "Use aligned sinceMs/untilMs within 180 seconds and optional raw=1" }, 400);
+    return c.json(options.arenaStats?.({ sinceMs: +since, untilMs: +until, raw: raw === "1" }) ?? { error: "Stats unavailable" });
+  });
   app.post("/api/runs", async (c) => {
     const time = now();
     for (const budget of [buckets, playerBuckets]) {
