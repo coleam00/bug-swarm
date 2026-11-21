@@ -17,11 +17,14 @@ export class TickMetrics {
   private times: Float64Array;
   private values: Float64Array;
   private cursor = 0; private count = 0;
+  private lostThrough = -Infinity;
   constructor(private now = () => performance.now(), private capacity = SLOTS) { this.times = new Float64Array(capacity); this.values = new Float64Array(capacity); }
   add(ms: number) {
+    if (this.count === this.capacity) this.lostThrough = this.times[this.cursor]!;
     this.times[this.cursor] = this.now(); this.values[this.cursor] = ms;
     this.cursor = (this.cursor + 1) % this.capacity; this.count = Math.min(this.capacity, this.count + 1);
   }
+  retains(since: number) { return since > this.lostThrough; }
   samples(since?: number, until = Infinity) {
     const cutoff = since ?? this.now() - METRIC_WINDOW_MS;
     const values: number[] = [];

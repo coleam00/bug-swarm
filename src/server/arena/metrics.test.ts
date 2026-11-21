@@ -3,6 +3,11 @@ import { TickMetrics, TrafficMetrics, HISTORY_MS, byteDistribution } from "./met
 test("snapshot sizes merge weighted histograms rather than percentiles", () => {
   expect(byteDistribution([[100, 99], [1000, 1], [1000, 1]])).toMatchObject({ samples: 101, p50: 100, p95: 100, max: 1000 });
 });
+test("capacity overruns explicitly invalidate older windows", () => {
+  let now = 0; const m = new TickMetrics(() => now, 2);
+  m.add(1); now = 50; m.add(2); expect(m.retains(0)).toBe(true);
+  now = 100; m.add(3); expect(m.retains(0)).toBe(false); expect(m.retains(50)).toBe(true);
+});
 test("aligned half-open timing windows, maxima and pooled unequal-room percentiles", () => {
   let now = 0; const a = new TickMetrics(() => now), b = new TickMetrics(() => now);
   a.add(99); now = 50; a.add(4); for (let i = 0; i < 99; i++) b.add(1);

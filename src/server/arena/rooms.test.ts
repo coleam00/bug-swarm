@@ -202,3 +202,13 @@ test("shared deltas recover independently after skipped/rejected sends and prese
     now = 181000; expect(manager.stats({ sinceMs: 50, untilMs: 350 }).window!.complete).toBe(false);
   } finally { await manager.stop(); db.close(); }
 });
+test("a room closed before its first tick retains snapshot/traffic evidence for 180 seconds", async () => {
+  const f = fixture(); try {
+    const { c } = f.join(), id = c.room!.id; f.at(50); f.manager.leave(c); f.at(100);
+    const window = f.manager.stats({ sinceMs: 0, untilMs: 100 }).window!;
+    expect(window.complete).toBe(true); expect(window.arenas.map(a => a.id)).toContain(id);
+    expect(window.arenas[0]!.population.max).toBe(1); expect(window.tick.samples).toBe(0);
+    expect(window.snapshotBytes.json.samples).toBe(1); expect(window.traffic.bytesOut).toBeGreaterThan(0);
+    f.at(180100); expect(f.manager.stats({ sinceMs: 0, untilMs: 100 }).window!.complete).toBe(false);
+  } finally { await f.close(); }
+});

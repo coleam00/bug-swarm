@@ -43,7 +43,7 @@ export class RoomManager {
   get accepting() { return !this.stopped; }
   private wallNow; readonly writer: LifeWriter;
   // Retain closed-room samples until their window expires, without retaining players/sockets.
-  private metrics = new Map<string, { tick: TickMetrics; lateness: TickMetrics; sizes: Sizes }>();
+  private metrics = new Map<string, { tick: TickMetrics; lateness: TickMetrics; sizes: Sizes; closedAt?: number }>();
   constructor(private db: Database, readonly buildId: string, options: Options = {}) {
     this.wallNow = options.wallNow ?? Date.now; this.writer = new LifeWriter(db, options.invalidate);
     this.now = options.now ?? (() => performance.now()); this.schedule = options.schedule ?? ((fn: () => void, ms: number) => setInterval(fn, ms)); this.cancel = options.cancel ?? clearInterval;
@@ -201,7 +201,7 @@ export class RoomManager {
     for (const record of this.history.values()) if (record.traffic === c.traffic) record.leftAt = this.now();
     if (c.id && this.active.get(c.id) === c) this.active.delete(c.id);
     const room = c.room;
-    if (room) { room.members.delete(c); leavePlayer(room.state, c.id!); if (!room.members.size) { this.cancel(room.timer); this.rooms.delete(room.id); } }
+    if (room) { room.members.delete(c); leavePlayer(room.state, c.id!); if (!room.members.size) { this.cancel(room.timer); this.rooms.delete(room.id); this.metrics.get(room.id)!.closedAt = this.now(); } }
     c.pending = undefined; c.held = neutralInput(); c.room = undefined;
   }
   private hidden(): Set<string> { return new Set((this.db.query("SELECT name_key FROM hidden_names").all() as { name_key: string }[]).map(r => r.name_key)); }
@@ -211,7 +211,7 @@ export class RoomManager {
     for (const c of this.active.values()) if (hidden.has(nameKey(c.room!.state.players.get(c.id!)!.name))) this.refuse(c, "name-hidden", HIDDEN_IDENTITY_MESSAGE);
   }
   private expireMetrics() {
-    for (const [id, metric] of this.metrics) if (!this.rooms.has(id) && metric.tick.samples(this.now() - HISTORY_MS).length === 0) this.metrics.delete(id);
+    for (const [id, metric] of this.metrics) if (metric.closedAt !== undefined && metric.closedAt < this.now() - HISTORY_MS) this.metrics.delete(id);
     for (const [id, record] of this.history) if (record.leftAt !== undefined && record.leftAt < this.now() - HISTORY_MS) this.history.delete(id);
     this.rateLimitExamples = this.rateLimitExamples.filter(e => e.at >= this.now() - HISTORY_MS);
   }
@@ -237,7 +237,8 @@ export class RoomManager {
         for (const change of changes) { current += change.n; min = Math.min(min, current); max = Math.max(max, current); }
         return { min, max };
       };
-      return { sinceMs: since, untilMs: until, complete: since >= this.startedAt && since >= now - HISTORY_MS && until <= Math.floor(now / STEP_MS) * STEP_MS,
+      const retained = [...this.metrics.values()].every(m => m.tick.retains(since) && m.lateness.retains(since) && Object.values(m.sizes).every(s => s.retains(since)));
+      return { sinceMs: since, untilMs: until, complete: retained && since >= this.startedAt && since >= now - HISTORY_MS && until <= Math.floor(now / STEP_MS) * STEP_MS,
         traffic, perPlayer, population: population(participants), dropped: this.drops.totals(since, until), rateLimitExamples: this.rateLimitExamples.filter(e => e.at >= since && e.at < until),
         snapshotBytes: Object.fromEntries(["all", "keyframe", "delta", "json"].map(key => [key, this.snapshotSizes(key as keyof Sizes, since, until)])) as Record<keyof Sizes, ReturnType<typeof byteDistribution>>,
         tick: TickMetrics.combine([...this.metrics.values()].map(m => m.tick), since, until, raw),
