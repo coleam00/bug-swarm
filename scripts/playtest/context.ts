@@ -9,7 +9,7 @@ import { runBots } from "../bots";
 import type { ArenaFrame } from "../../src/web/arena/observation";
 import type { ServerObservation, ScenarioReport } from "./types";
 import type { Leader, Standing, Best } from "../../src/shared/api";
-import { requireMeasurements } from "./report";
+import { requireMeasurements, requireScreenshots } from "./report";
 import { TEAMS } from "../../src/shared/teams";
 
 export class Context {
@@ -164,8 +164,8 @@ export class Context {
     if (browserErrors.length) this.report.checks.push({ name: "No browser errors", pass: false, detail: browserErrors });
     if (this.report.cleanupErrors.length || browserErrors.length) this.report.status = "fail";
     if (this.report.status === "running") {
-      try { requireMeasurements(this.report); this.report.checks.push({ name: "Continuously advancing rendered state and complete performance evidence", pass: true }); this.report.status = "pass"; }
-      catch (error) { this.report.status = "fail"; this.report.error = String(error); this.report.checks.push({ name: "Complete performance evidence", pass: false, detail: String(error) }); }
+      try { requireMeasurements(this.report); requireScreenshots(this.root, this.report); this.report.checks.push({ name: "Continuously advancing rendered state and complete performance/screenshot evidence", pass: true }); this.report.status = "pass"; }
+      catch (error) { this.report.status = "fail"; this.report.error = String(error); this.report.checks.push({ name: "Complete report evidence", pass: false, detail: String(error) }); }
     }
     this.report.elapsedMs = performance.now() - this.start;
     writeFileSync(join(this.root, "samples.json"), JSON.stringify(this.samples));

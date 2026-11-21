@@ -48,3 +48,11 @@ A separate failed rescue development run captured an authoritative player heat o
 Harness fixtures cover viewport membership, interpolation/tolerance boundaries, status/life/score, effects, freshness, restart generations, incomplete history, saved results and ordered boards. Startup/path/warm-up tests remain in place. Normal production assets exclude observation code; actual production-client exclusion is exercised by `bun run check` in addition to bundle inspection.
 
 `bun run check` passed **487 tests** across 66 files (138.53 seconds), including type checking. `bun run build` passed; emitted JavaScript contains none of `__arenaDebug`, `reviveRing`, `receivedAt` or `observedAt`, and the normal build manifest has no playtest marker. Logs are in `.evidence/86/returned/check/` and `.evidence/86/returned/build/`.
+
+## Screenshot evidence follow-up
+
+Scenario completion now requires a screenshot reference for every arena player and verifies that **every referenced capture**, including board pages and later key moments, is a nonempty regular file. Missing evidence fails the report after cleanup. Existing performance checks and the explicit boss skip are preserved.
+
+The screenshot fixture fakes only the CDP response and exercises the actual browser capture writer. It accepts complete captures and rejects missing player coverage, missing files, zero-byte files and directory paths. Removing only the screenshot file write fails both this fixture and the real `together` scenario with `Missing screenshot file`; the mutated scenario lists eight captures but produces zero PNGs. Restoring the writer passes `together` in 22.1 scenario seconds with all eight nonempty PNGs, and `boss` still skips explicitly. Evidence is in `.evidence/86/ssfix/` (`unit-errors.log`, `mutant/`, `passing/`, `boss/`). The shared-movement screenshot was visually inspected.
+
+For this follow-up, `bun run check` passed **488 tests** across 66 files, including type checking (184.24 seconds), and `bun run build` passed. Logs are in `.evidence/86/ssfix/check/` and `.evidence/86/ssfix/build/`. The full browser suite remains the factory's check; this correction ran the relevant focused scenarios.
