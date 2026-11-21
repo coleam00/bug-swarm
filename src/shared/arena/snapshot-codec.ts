@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SERVER_MESSAGE_BYTES } from "./constants";
+import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_GLOBS, SERVER_MESSAGE_BYTES } from "./constants";
 import { validateServer, type Snapshot, type ServerMessage } from "./protocol";
 // delta-v1: typed fields and baseline-index references; append-only extension cell
 // retains future bug-kind payloads without encoding their behaviour here.
@@ -12,9 +12,10 @@ const schemas: Field[][] = [
   [["id","n"],...motion,["facing","n",2048],["hp","n"],["kind","s"],["phase","s"],["phaseUntil","n"],["__extra","s"]],
   [["id","n"],["owner","s"],["life","n"],...motion,["born","n",1000],["__extra","s"]],
   [["id","n"],["tick","n"],["x","n",8],["y","n",8],["points","n",1000],["kind","s"],["type","s"],["__extra","s"]],
+  [["id","n"],...motion,["born","n",1000],["__extra","s"]],
 ];
-const groups = ["players","bugs","shots","events"] as const;
-const caps = [MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS];
+const groups = ["players","bugs","shots","events","globs"] as const;
+const caps = [MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_GLOBS];
 const knownFields = schemas.map(schema => new Set(schema.map(f => f[0])));
 const encoder = new TextEncoder(), decoder = new TextDecoder("utf-8", { fatal: true });
 const MAX = Number.MAX_SAFE_INTEGER;

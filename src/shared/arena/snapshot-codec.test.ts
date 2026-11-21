@@ -2,16 +2,42 @@ import { expect, test } from "bun:test";
 import { SnapshotEncoder, ServerDecoder } from "./snapshot-codec";
 import { createArena, joinPlayer, stepArena, endLife, respawnPlayer } from "./simulation";
 import { lifeDefaults } from "./types";
-import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS } from "./constants";
+import { MAX_PLAYERS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_GLOBS } from "./constants";
 import type { Snapshot } from "./protocol";
 import { createBug } from "./bugs/registry";
 function fixture() {
   const state = createArena(77), id = crypto.randomUUID();
   joinPlayer(state, { id, name: "Pilot", team: "tabs" });
   const value = (): Snapshot => ({ v: 1, type: "snapshot", arenaId: "codec-test", tick: state.tick, wave: state.wave,
-    players: [...state.players.values()].map(p => ({ ...p, ackSeq: state.tick })), bugs: state.bugs, shots: state.shots, events: state.events });
+    players: [...state.players.values()].map(p => ({ ...p, ackSeq: state.tick })), bugs: state.bugs, shots: state.shots, globs: state.globs, events: state.events });
   return { state, id, value };
 }
+
+test("compact spitter history retains swell, glob birth/travel/removal and the independent pop event", () => {
+  const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
+  const p = f.state.players.get(f.id)!; p.x = p.y = 1200;
+  const bug = createBug("spitter", f.state.nextId++, 800, 1200); f.state.bugs = [bug];
+  let swelling = false, globId = 0, previousX = 0;
+  for (let i = 0; i < 46; i++) {
+    stepArena(f.state, new Map());
+    const decoded = decoder.read(encoder.encode(f.value()).delta) as Snapshot;
+    expect(decoded.bugs[0]!.phase).toBe(bug.phase);
+    expect(decoded.bugs[0]!.phaseUntil).toBe(bug.phaseUntil);
+    swelling ||= decoded.bugs[0]!.phase === "swell";
+    if (decoded.globs.length) {
+      const g = decoded.globs[0]!; expect(g.born).toBe(2200);
+      if (globId) { expect(g.id).toBe(globId); expect(g.x).toBeGreaterThan(previousX); }
+      globId = g.id; previousX = g.x;
+    }
+  }
+  expect(swelling).toBe(true); expect(globId).toBeGreaterThan(0);
+  const g = f.state.globs[0]!;
+  f.state.shots.push({ id: f.state.nextId++, owner: p.id, life: p.life, born: f.state.tick * 50, x: g.x + 20, y: g.y, vx: -900, vy: 0 });
+  stepArena(f.state, new Map());
+  const popped = decoder.read(encoder.encode(f.value()).delta) as Snapshot;
+  expect(popped.globs).toHaveLength(0); expect(popped.events).toMatchObject([{ type: "glob-pop", points: 5 }]);
+  expect(popped.events[0]!.kind).toBeUndefined(); expect(popped.players[0]).toMatchObject({ score: 5, kills: 0 });
+});
 test("compact snapshots preserve independent history, births/removals, life transitions and safe integers", () => {
   const f = fixture(), encoder = new SnapshotEncoder(), decoder = new ServerDecoder(), p = f.state.players.get(f.id)!;
   p.score = Number.MAX_SAFE_INTEGER; p.kills = 2 ** 35; p.x = 1200.066; p.overheatUntil = Number.MAX_SAFE_INTEGER;
@@ -59,17 +85,24 @@ test("missing/damaged bases do not mutate state; keyframes and reconnect reset r
 test("maximum supported collections, extension payloads and large ticks round trip", () => {
   const f = fixture(); f.state.players.clear(); f.state.tick = 2 ** 36;
   for (let i = 0; i < MAX_PLAYERS; i++) { const id = crypto.randomUUID(); f.state.players.set(id, { id, name: "Pilot" + i, team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: Math.PI, ...lifeDefaults() }); }
-  f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ ...createBug("dasher", id, 500, 500), phase: "windup", phaseUntil: f.state.tick * 50 + 700, tell: { time: 1.123456 } }));
+  f.state.bugs = Array.from({ length: MAX_BUGS }, (_, id) => ({ ...createBug(id < 12 ? "spitter" : "dasher", id, 500, 500), phase: id < 12 ? "swell" : "windup", phaseUntil: f.state.tick * 50 + (id < 12 ? 500 : 700), tell: { time: 1.123456 } }));
   f.state.shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: [...f.state.players.keys()][i % MAX_PLAYERS]!, life: 1, x: 600, y: 600, vx: 900, vy: 0, born: 0 }));
-  f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
+  f.state.globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 500 + i, x: 600, y: 600, vx: Math.cos(i) * 320, vy: Math.sin(i) * 320, born: f.state.tick * 50 - 50 }));
+  f.state.events = Array.from({ length: MAX_EVENTS }, (_, id) => ({ id: 1000 + id, tick: f.state.tick, x: 700, y: 700, kind: "dasher" as const,
     ...(id % 2 ? { type: "hit" as const, points: 0 as const } : { type: "kill" as const, points: 27.5 }) }));
   const encoder = new SnapshotEncoder(), frame = encoder.encode(f.value()).keyframe, decoded = new ServerDecoder().read(frame) as Snapshot;
   expect(decoded.tick).toBe(2 ** 36); expect(decoded.players).toHaveLength(MAX_PLAYERS);
   expect(decoded.bugs).toHaveLength(MAX_BUGS); expect(decoded.shots).toHaveLength(MAX_SHOTS); expect(decoded.events).toHaveLength(MAX_EVENTS);
   expect((decoded.bugs[0] as any).tell).toEqual({ time: 1.123 });
-  expect(decoded.events[0]!.points).toBe(27.5); expect(decoded.bugs[0]!.phase).toBe("windup");
+  expect(decoded.events[0]!.points).toBe(27.5); expect(decoded.bugs[0]!.phase).toBe("swell");
   expect(decoded.events[1]!).toMatchObject({ type: "hit", points: 0, kind: "dasher" });
+  expect(decoded.globs).toHaveLength(MAX_GLOBS);
   expect(frame.length).toBeLessThan(65536);
+  for (const all of [false, true]) {
+    const value = f.value(); value.events = value.events.map((e, i) => all || i % 2 ? { id: e.id, tick: e.tick, x: e.x, y: e.y, type: "glob-pop", points: 5 } : e);
+    const wire = new SnapshotEncoder().encode(value).keyframe, roundTrip = new ServerDecoder().read(wire) as Snapshot;
+    expect(wire.length).toBeLessThan(65536); expect(roundTrip.events).toEqual(value.events);
+  }
 });
 test("seeded full room combat survives hundreds of deltas without losing events or acknowledgements", () => {
   const f = fixture(); for (let i = 1; i < 20; i++) joinPlayer(f.state, { id: crypto.randomUUID(), name: "Pilot" + i, team: "spaces" });
