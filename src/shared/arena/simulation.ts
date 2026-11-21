@@ -8,6 +8,7 @@ import { fireAndAdvance, circleEntry } from "./combat";
 import { motionFor, stopAtBoundary } from "./motion";
 import { resolveRevives } from "./revive";
 import { advanceGlobs } from "./globs";
+import { arrivingHive, spawnHive } from "./bugs/hive";
 import { nextRandom } from "./random";
 import { cleanupPickups, collectPickups } from "./pickups/lifecycle";
 import { damagePlayer } from "./damage";
@@ -23,6 +24,7 @@ export function endLife(state: ArenaState, id: string): LifeResult | null {
   const p = state.players.get(id); if (!p || p.status === "out") return null;
   p.effects = {}; p.status = "out"; p.downedUntil = p.reviveMs = 0; p.reviving = false;
   p.hits = 0; p.vx = p.vy = 0; state.spawnCredits.delete(id);
+  state.hive?.contributions.delete(id);
   const result = { playerId: id, life: p.life, score: p.score, kills: p.kills, seconds: (state.tick - p.startedTick) * STEP_MS / 1000, touch: p.touch };
   state.shots = state.shots.filter(s => s.owner !== id || s.life !== p.life); state.ended.push(result); return result;
 }
@@ -45,7 +47,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
     state.spawnCredits.set(id, credit); requested ||= credit >= 1 - 1e-9;
   }
   collectPickups(state, time);
-  if (state.tick % (WAVE_MS / STEP_MS) === 0) state.wave++;
+  if (state.tick % (WAVE_MS / STEP_MS) === 0) { state.wave++; if (state.wave % 5 === 0) spawnHive(state, time); }
   if (requested) {
     const start = state.spawnCursor + 1;
     for (let offset = 0; offset < MAX_PLAYERS; offset++) {
@@ -68,6 +70,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
   for (const p of state.players.values()) {
     if (p.status !== "active" || p.immuneUntil > time || p.spawnProtectedUntil > time) continue;
     for (const b of state.bugs) {
+      if (arrivingHive(b)) continue;
       const m = motionFor(b), dt = STEP_MS / 1000, px = p.x - p.vx * dt, py = p.y - p.vy * dt, radius = PLAYER_RADIUS + BUGS[b.kind].radius;
       const moving = circleEntry(px - m.x, py - m.y, (p.vx - m.vx) * m.stop, (p.vy - m.vy) * m.stop, radius);
       const stopped = circleEntry(px + p.vx * m.stop - b.x, py + p.vy * m.stop - b.y, p.vx * (dt - m.stop), p.vy * (dt - m.stop), radius);

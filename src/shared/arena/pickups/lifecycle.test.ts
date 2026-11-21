@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { createArena, joinPlayer, stepArena } from "../simulation";
 import { createBug } from "../bugs/registry";
+import { spawnHive } from "../bugs/hive";
 import { nextRandom } from "../random";
 import { collectPickups, dropPickup } from "./lifecycle";
 import { MAX_PICKUPS } from "../constants";
@@ -74,6 +75,18 @@ test("armour bounces do not roll drops, while a lethal rear hit on a beetle does
   expect(b.hp).toBe(5); expect(a.events[0]!.type).toBe("bounce"); expect(a.pickups).toEqual([]); expect(a.pickupRandom).toBe(random);
   b.hp = 1; shot(-1); stepArena(a, new Map());
   expect(a.events[0]!.type).toBe("kill"); expect(a.pickups).toHaveLength(1); expect(a.pickupRandom).not.toBe(random);
+});
+
+test("a lethal hive hit keeps shared rewards and leaves the ordinary-bug pickup stream untouched", () => {
+  const a = createArena(79), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;
+  spawnHive(a, 0); const b = a.bugs[0]!; b.hp = 1;
+  a.pickupRandom = beforeRoll(0); const random = a.pickupRandom;
+  a.shots.push({ id: a.nextId++, owner: p.id, life: p.life, x: b.x, y: b.y, vx: 900, vy: 0, born: 0 });
+  stepArena(a, new Map());
+  expect(a.bugs).toEqual([]); expect(a.hive).toBeUndefined();
+  expect(p.score).toBe(350); expect(p.kills).toBe(1);
+  expect(a.events[0]).toMatchObject({ type: "kill", kind: "hive", points: 0, rewards: [{ playerId: p.id, life: p.life, amount: 350 }] });
+  expect(a.pickupRandom).toBe(random); expect(a.pickups).toEqual([]);
 });
 test("a moving bug drops at the swept impact rather than either end of its step", () => {
   const a = createArena(79), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;

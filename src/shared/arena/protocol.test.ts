@@ -3,6 +3,7 @@ import { parseClient, parseServer, serializeSnapshot, type Hello, type InputMess
 import { createArena, joinPlayer } from "./simulation";
 import { MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "./constants";
 import { MAX_BUGS, MAX_SHOTS, MAX_EVENTS, MAX_PICKUPS, SERVER_MESSAGE_BYTES } from "./constants";
+import { SnapshotEncoder, ServerDecoder } from "./snapshot-codec";
 import { createBug } from "./bugs/registry";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
@@ -104,11 +105,21 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
   const snapshot: Snapshot = { v: 1, type: "snapshot", pickups: Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 1234.56789, y: 1234.56789, expiresAt: 500011950 })), arenaId: "r".repeat(128), tick: 9999999, wave: 9999, players,
     bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: i < 12 ? "spitter" : "dasher", hp: 2, facing: 2.356, phase: i < 12 ? "move" : "recovery", phaseUntil: 500000950, x: 1234.56789, y: 1234.56789, vx: -24.748737, vy: 24.748737 })),
     shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
-    globs: Array.from({ length: 12 }, (_, i) => ({ id: 1800 + i, x: 1234.56789, y: 1234.56789, vx: -226.27417, vy: 226.27417, born: 499999949 })),
+    globs: Array.from({ length: 24 }, (_, i) => ({ id: 1800 + i, x: 1234.56789, y: 1234.56789, vx: i < 12 ? -226.27417 : -127.27922, vy: i < 12 ? 226.27417 : 127.27922, ...(i < 12 ? {} : { source: "hive" as const }), born: 499999949 })),
     events: [] };
   const offset = Number.MAX_SAFE_INTEGER - 10000;
   for (const entities of [snapshot.bugs, snapshot.shots, snapshot.globs, snapshot.events, snapshot.pickups]) for (const e of entities) e.id += offset;
+  snapshot.bugs[149] = { ...createBug("hive", snapshot.bugs[149]!.id, 1234.56789, 1234.56789, snapshot.tick * 50), vx: -35.355339, vy: 35.355339 };
+  snapshot.shots.pop();
+  snapshot.events = [{ id: offset + 3000, tick: snapshot.tick, x: 1234.56789, y: 1234.56789, type: "kill", kind: "hive", points: 0, rewards: players.map(p => ({ playerId: p.id, life: p.life, amount: 65, x: p.x, y: p.y })) }];
   const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  const encoder = new SnapshotEncoder(), decoder = new ServerDecoder();
+  const frame = encoder.encode(snapshot); expect(frame.keyframe.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES);
+  const expectedAwards = (parseServer(raw) as Snapshot).events[0] as Extract<Snapshot["events"][number], { type: "kill" }>;
+  expect((decoder.read(frame.keyframe) as Snapshot).events[0]).toMatchObject({ rewards: expectedAwards.rewards, kind: "hive", points: 0 });
+  const next = structuredClone(snapshot); next.tick++; next.bugs.filter(b => b.kind === "spitter").forEach(b => b.phaseUntil! += 50);
+  const delta = encoder.encode(next); expect(delta.delta.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES);
+  expect((decoder.read(delta.delta) as Snapshot).events[0]).toMatchObject({ rewards: expectedAwards.rewards, kind: "hive", points: 0 });
   const parsed = parseServer(raw) as Snapshot;
   expect(parsed.shots.map(s => s.owner)).toEqual(snapshot.shots.map(s => s.owner));
   expect(parsed.shots.map(s => s.id)).toEqual(snapshot.shots.map(s => s.id));
@@ -119,19 +130,21 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
   for (const owner of [-1, 0.5, snapshot.players.length, null]) {
     const bad = JSON.parse(raw); bad.shots[0][1] = owner; expect(parseServer(JSON.stringify(bad))).toBeNull();
   }
-  // Every split of the shared shot/impact budget, including simultaneous boosts.
+  // Shared shot/impact extremes, with the twenty-recipient hive award retained.
   for (const impacts of [0, MAX_EVENTS]) {
     const armoured = structuredClone(snapshot);
     for (let i = 0; i < 10; i++) { const b = armoured.bugs[i]!; armoured.bugs[i] = createBug("beetle", b.id, b.x, b.y); }
     if (impacts) {
       armoured.shots = [];
       armoured.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: armoured.tick, x: 1234.56789, y: 1234.56789, points: 0, type: "bounce", kind: "beetle" }));
+      armoured.events[0] = snapshot.events[0]!;
     }
     const wire = serializeSnapshot(armoured); expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
   }
   for (const impacts of [1, 60, 330, 600, MAX_EVENTS]) {
-    const mix = structuredClone(snapshot); mix.shots = mix.shots.slice(impacts);
+    const mix = structuredClone(snapshot); mix.shots = mix.shots.slice(impacts - 1);
     mix.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: mix.tick, x: 1234.56789, y: 1234.56789, points: 75, type: "kill", kind: "dasher" }));
+    mix.events[0] = snapshot.events[0]!;
     const wire = serializeSnapshot(mix); expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
     for (const all of [false, true]) {
       const pops = structuredClone(mix);
@@ -152,6 +165,8 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     for (const impacts of [0, MAX_EVENTS]) {
       const variant = structuredClone(split);
       if (impacts) { variant.shots = []; variant.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: variant.tick, x: 1234.56789, y: 1234.56789, kind: "dasher", type: "kill", points: 75 })); }
+      variant.events[0] = snapshot.events[0]!;
+      const binary = new SnapshotEncoder().encode(variant).keyframe; expect(binary.byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(new ServerDecoder().read(binary)).not.toBeNull();
       const wire = serializeSnapshot(variant);
       expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
     }

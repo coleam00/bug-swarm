@@ -1,4 +1,4 @@
-import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS } from "./constants";
+import { MAX_GLOBS, MAX_SPITTERS, GLOB_SPEED, GLOB_LIFETIME_MS, HIVE_GLOB_SPEED, HIVE_RING_COUNT, HIVE_REWARD_BASE, HIVE_REWARD_POOL } from "./constants";
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
 import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS, MAX_PICKUPS, PICKUP_LIFETIME_MS } from "./constants";
@@ -83,7 +83,7 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
     for (const e of entities) {
       if (!object(e) || !integer(e.id) || entityIds.has(e.id) || ![e.x, e.y, e.vx, e.vy].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT || Math.hypot(e.vx, e.vy) > speed + 0.1) return null;
       if (entities === v.bugs) {
-        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
+        if (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || e.kind !== "hive" && (e.maxHp !== undefined || e.ringAt !== undefined) || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * STEP_MS)) return null;
       } else {
         if (!finite(e.born) || e.born < 0 || e.born > v.tick * STEP_MS) return null;
         // The wire may reference the owner by its index in this full snapshot.
@@ -92,7 +92,7 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
           if (e.owner >= v.players.length) return null;
           e.owner = v.players[e.owner].id;
         }
-        if (entities === v.globs ? e.born + GLOB_LIFETIME_MS <= v.tick * STEP_MS || Math.abs(Math.hypot(e.vx, e.vy) - GLOB_SPEED) > 0.1 : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life) return null;
+        if (entities === v.globs ? e.source !== undefined && e.source !== "hive" || e.born + GLOB_LIFETIME_MS <= v.tick * STEP_MS || Math.abs(Math.hypot(e.vx, e.vy) - (e.source === "hive" ? HIVE_GLOB_SPEED : GLOB_SPEED)) > 0.1 : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life) return null;
       }
       entityIds.add(e.id);
     }
@@ -103,11 +103,27 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
     entityIds.add(p.id);
   }
   if (v.bugs.filter((b: Bug) => b.kind === "spitter").length > MAX_SPITTERS) return null;
+  if (v.bugs.filter((b: Bug) => b.kind === "hive").length > 1 || v.globs.filter((g: Glob) => g.source === "hive").length > HIVE_RING_COUNT || v.globs.filter((g: Glob) => g.source === undefined).length > MAX_SPITTERS) return null;
   if (!Array.isArray(v.events) || v.events.length > MAX_EVENTS) return null;
   const events = new Set<number>();
-  for (const e of v.events) {
+  let hiveKills = 0;
+  for (let index = 0; index < v.events.length; index++) {
+    const e = v.events[index];
     if (!object(e) || !integer(e.id) || events.has(e.id) || entityIds.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT) return null;
     if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "bounce" ? e.points !== 0 || !BUGS[e.kind].blocksShot : e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
+    if (e.type === "kill" && e.kind === "hive") {
+      if (++hiveKills > 1 || !Array.isArray(e.rewards) || e.rewards.length < 1 || e.rewards.length > MAX_PLAYERS) return null;
+      const recipients = new Set<string>(); let total = 0;
+      for (const r of e.rewards) {
+        // Awards describe lives at the kill, not membership at this broadcast.
+        // Respawn/departure followed by admission can rebroadcast a retained event.
+        if (!object(r) || !isId(r.playerId)) return null;
+        const recipient = r.playerId.toLowerCase();
+        if (recipients.has(recipient) || !integer(r.life) || r.life < 1 || !integer(r.amount) || r.amount < HIVE_REWARD_BASE || r.amount > HIVE_REWARD_BASE + HIVE_REWARD_POOL || ![r.x, r.y].every(finite) || r.x < 0 || r.x > WORLD_WIDTH || r.y < 0 || r.y > WORLD_HEIGHT) return null;
+        recipients.add(recipient); total += r.amount;
+      }
+      if (total !== HIVE_REWARD_POOL + HIVE_REWARD_BASE * recipients.size) return null;
+    } else if (e.rewards !== undefined) return null;
     events.add(e.id);
   }
   return v as Snapshot;
@@ -121,11 +137,11 @@ export function serializeSnapshot(snapshot: Snapshot): string {
   const idBase = largestId > 999999 ? largestId : 0;
   const wire = { ...snapshot,
     ...(idBase ? { idBase } : {}),
-    bugs: snapshot.bugs.map(b => b.phase === undefined && b.phaseUntil === undefined ?
+    bugs: snapshot.bugs.map(b => b.maxHp !== undefined || b.ringAt !== undefined ? { ...b, id: b.id - idBase } : b.phase === undefined && b.phaseUntil === undefined ?
       [b.id - idBase, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing] :
       [b.id - idBase, b.kind, b.x, b.y, b.vx, b.vy, b.hp, b.facing, b.phase, b.phaseUntil]),
     shots: snapshot.shots.map(s => [s.id - idBase, snapshot.players.findIndex(p => p.id === s.owner), s.life, s.x, s.y, s.vx, s.vy, time - s.born]),
-    events: snapshot.events.map(e => [e.id - idBase, snapshot.tick - e.tick, e.x, e.y, e.kind, e.type, e.points]),
+    events: snapshot.events.map(e => [e.id - idBase, snapshot.tick - e.tick, e.x, e.y, e.kind, e.type, e.points, ...("rewards" in e && e.rewards ? [e.rewards] : [])]),
     globs: snapshot.globs.map(g => ({ ...g, id: g.id - idBase })),
     pickups: snapshot.pickups.map(p => ({ ...p, id: p.id - idBase })),
   };
@@ -150,8 +166,11 @@ function expandCombat(v: RecordValue): boolean {
   }
   for (let i = 0; i < v.events.length; i++) {
     const e = v.events[i]; if (!Array.isArray(e)) continue;
-    if (e.length !== 7 || !integer(e[1])) return false;
-    v.events[i] = { id: e[0], tick: v.tick - e[1], x: e[2], y: e[3], ...(e[4] === null ? {} : { kind: e[4] }), type: e[5], points: e[6] };
+    if ((e.length !== 7 && e.length !== 8) || !integer(e[1])) return false;
+    // Also accept main's absolute-tick event rows during coordinated deployment.
+    const legacy = ["hit", "kill", "bounce", "glob-pop"].includes(e[4]);
+    const kind = legacy ? e[5] : e[4];
+    v.events[i] = { id: e[0], tick: legacy ? e[1] : v.tick - e[1], x: e[2], y: e[3], ...(kind === null ? {} : { kind }), type: legacy ? e[4] : e[5], points: e[6], ...(e.length === 8 ? { rewards: e[7] } : {}) };
   }
   if (v.idBase !== undefined) {
     if (!integer(v.idBase) || !Array.isArray(v.globs) || v.globs.length > MAX_GLOBS || !Array.isArray(v.pickups) || v.pickups.length > MAX_PICKUPS) return false;

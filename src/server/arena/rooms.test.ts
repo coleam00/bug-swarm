@@ -5,21 +5,62 @@ import { parseServer } from "../../shared/arena/protocol";
 import { downPlayer } from "../../shared/arena/revive";
 import { createBug } from "../../shared/arena/bugs/registry";
 import { ServerDecoder } from "../../shared/arena/snapshot-codec";
+import { spawnHive, contributeHive } from "../../shared/arena/bugs/hive";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
   const manager = new RoomManager(db, "test", { now: () => now, seed: () => 1,
     schedule: (fn, ms) => { expect(ms).toBe(50); const timer = { unref() {} } as any; callbacks.set(timer, fn); return timer; },
     cancel: timer => { cancelled++; callbacks.delete(timer); } });
-  const join = (id = crypto.randomUUID(), name = "Robot", team = "tabs") => {
-    const messages: any[] = [], decoder = new ServerDecoder(); let buffered = 0, closed = false;
-    const transport: Transport = { send: raw => messages.push(decoder.read(raw)), close: () => { closed = true; }, getBufferedAmount: () => buffered };
+  const join = (id = crypto.randomUUID(), name = "Robot", team = "tabs", compact = false) => {
+    const messages: any[] = [], errors: unknown[] = [], decoder = new ServerDecoder(); let buffered = 0, closed = false;
+    const transport: Transport = { send: raw => { try { messages.push(decoder.read(raw)); } catch (error) { errors.push(error); } }, close: () => { closed = true; }, getBufferedAmount: () => buffered };
     const c = manager.open(transport);
-    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name, team, touch: false, buildId: "test" }));
-    return { c, messages, buffer: (n: number) => { buffered = n; }, closed: () => closed };
+    manager.message(c, JSON.stringify({ v: 1, type: "hello", playerId: id, name, team, touch: false, buildId: "test", ...(compact ? { snapshotEncoding: "delta-v1" } : {}) }));
+    return { c, messages, errors, decoder, buffer: (n: number) => { buffered = n; }, closed: () => closed };
   };
   return { db, manager, join, at: (n: number) => { now = n; }, cancelled: () => cancelled, async close() { await manager.stop(); db.close(); } };
 }
+
+test.each([false, true])("historical hive awards survive departure/respawn and admission before the next tick (binary=%s)", async compact => {
+  for (const transition of ["departure", "respawn"] as const) {
+    const f = fixture(); try {
+      const a = f.join(crypto.randomUUID(), "Pilot", "tabs", compact), b = f.join(crypto.randomUUID(), "Scout", "spaces", compact);
+      const room = a.c.room!, s = room.state, p = s.players.get(a.c.id!)!, q = s.players.get(b.c.id!)!;
+      Object.assign(p, { x: 1200, y: 1200, immuneUntil: 100000 }); Object.assign(q, { x: 1800, y: 1800, immuneUntil: 100000 });
+      spawnHive(s, 0); const boss = s.bugs[0]!;
+      contributeHive(s, boss, q, 1); boss.hp = 1;
+      if (transition === "respawn") { downPlayer(s, q, 0); q.downedUntil = 50; }
+      s.shots.push({ id: s.nextId++, owner: p.id, life: p.life, x: boss.x, y: boss.y, vx: 900, vy: 0, born: 0 });
+      f.manager.tick(room);
+      const kill = structuredClone(s.events.find(e => e.type === "kill" && e.kind === "hive")!);
+      expect(kill).toMatchObject({ rewards: [{ amount: 200, life: 1 }, { amount: 200, life: 1 }] });
+      expect(p.score).toBe(200); expect(q.score).toBe(200);
+      if (transition === "departure") f.manager.leave(b.c);
+      else {
+        expect(q.status).toBe("out");
+        f.manager.message(b.c, JSON.stringify({ v: 1, type: "respawn", life: 1, touch: false }));
+        expect(q.life).toBe(2); expect(q.score).toBe(0);
+      }
+      const newcomer = f.join(crypto.randomUUID(), "Newcomer", "tabs", compact);
+      // Admission broadcasts the retained kill at tick 1 with changed membership/life.
+      const clients = [a, newcomer, ...(transition === "respawn" ? [b] : [])];
+      for (const c of clients) {
+        expect(c.errors).toEqual([]); expect(c.messages.at(-1)).toMatchObject({ type: "snapshot", tick: 1, events: [kill] });
+        expect(c.messages.at(-1).players.find((player: any) => player.id === q.id)?.life).toBe(transition === "respawn" ? 2 : undefined);
+      }
+      // The rejected rebroadcast used to break all deltas until the periodic keyframe.
+      for (let tick = 2; tick <= 20; tick++) {
+        f.manager.tick(room);
+        for (const c of clients) expect(c.messages.at(-1)).toMatchObject({ type: "snapshot", tick });
+      }
+      for (const c of clients) { expect(c.errors).toEqual([]); expect(c.decoder.missingBases).toBe(0); }
+      expect(p.score).toBe(200); expect(s.players.get(newcomer.c.id!)!.score).toBe(0);
+      f.manager.writer.flush();
+      expect(teamTotals(f.db).spaces).toBe(200);
+    } finally { await f.close(); }
+  }
+});
 
 test("room broadcasts authoritative spitter phase, globs and independent pop scoring identically", async () => {
   const f = fixture(); try {

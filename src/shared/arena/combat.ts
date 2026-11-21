@@ -8,6 +8,7 @@ const SINGLE_SHOT = [0] as const;
 import { prepareGlobs, globMotion } from "./globs";
 import { GLOB_RADIUS, GLOB_POINTS } from "./constants";
 import { damagePlayer } from "./damage";
+import { arrivingHive, contributeHive, rewardHive } from "./bugs/hive";
 // First entry of a relative segment into a circle, including initial overlap.
 export function circleEntry(x: number, y: number, dx: number, dy: number, radius: number): number | null {
   const c = x * x + y * y - radius * radius; if (c <= 0) return 0;
@@ -74,6 +75,7 @@ function advanceShots(state: ArenaState, start: number, end: number, time: numbe
     let victim = -1, first = Infinity;
     for (let i = 0; i < state.bugs.length; i++) {
       const b = state.bugs[i]!, m = motionFor(b), offset = (from - time) / 1000;
+      if (arrivingHive(b)) continue;
       // A bug may reach the wall partway through this shot's active interval.
       for (let segment = 0; segment < 2; segment++) {
         const start = segment ? Math.max(0, m.stop - offset) : 0;
@@ -115,10 +117,12 @@ function advanceShots(state: ArenaState, start: number, end: number, time: numbe
         state.events.push({ ...event, type: "bounce", points: 0 }); continue;
       }
       const multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;
+      if (b.kind === "hive") contributeHive(state, b, owner, 1);
+      const rewards = killed && b.kind === "hive" ? rewardHive(state) : undefined;
       const points = killed ? BUGS[b.kind].points * multiplier : 0;
       if (killed) { owner.points += points; owner.score = Math.round(owner.points / 10); owner.kills++; }
-      state.events.push(killed ? { ...event, type: "kill", points: points / 10 } : { ...event, type: "hit", points: 0 });
-      if (killed) { dropPickup(state, b.kind, event.x, event.y, time); state.bugs.splice(victim, 1); }
+      state.events.push(killed ? { ...event, type: "kill", points: points / 10, ...(rewards ? { rewards } : {}) } : { ...event, type: "hit", points: 0 });
+      if (killed) { if (b.kind !== "hive") dropPickup(state, b.kind, event.x, event.y, time); state.bugs.splice(victim, 1); }
       continue;
     }
     s.x += s.vx * boundary; s.y += s.vy * boundary;

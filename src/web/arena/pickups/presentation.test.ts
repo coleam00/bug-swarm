@@ -10,6 +10,7 @@ import { PLAYER_RADIUS } from "../../../shared/arena/constants";
 import type { PickupKind } from "../../../shared/arena/types";
 import { PICKUPS } from "../../../shared/arena/pickups/registry";
 import { canvasFixture } from "../../test-support/canvas-fixture.test-support";
+import { createBug } from "../../../shared/arena/bugs/registry";
 test("floor pickups share delayed combat birth/removal, while blink and HUD obey exact deadlines", () => {
   const snapshot = (tick: number, visible: boolean): Snapshot => ({ globs: [], v: 1, type: "snapshot", arenaId: "test", tick, wave: 1, players: [], bugs: [], shots: [], events: [],
     pickups: visible ? [{ id: 1, kind: "shield", x: 500, y: 500, expiresAt: 12500 }] : [] });
@@ -89,6 +90,32 @@ test("each pickup paints a fading floor glow and shares its distinct colour with
       c.paints.length = 0;
       draws[kind].robot(c as unknown as CanvasRenderingContext2D, { id: "a", name: "Pilot", team: "tabs", x: 0, y: 0, vx: 0, vy: 0, facing: 0.7 });
       expect(c.paints).toHaveLength(1); expect(c.paints[0]!.op).toBe("drawImage");
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("all three draining HUD icons stay below the hive bar and clear of the minimap on every layout", () => {
+  const f = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => f.factory() } });
+  try {
+    const c = f.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), id: "a", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0, effects: { shield: 20000, spread: 8000, rapid: 8000 } };
+    const boss = createBug("hive", 1, 1500, 1500);
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 1, wave: 5, players: [p], bugs: [boss], pickups: [], shots: [], globs: [], events: [] };
+    for (const [width, height] of [[1280, 800], [390, 844], [844, 390]] as const) {
+      c.paints.length = 0;
+      renderer.draw(width, height, { x: 800, y: 800 }, [p], p, input, [boss], [], 5, 1, 50, 1, snapshot);
+      const map = c.paints.find(p => p.op === "strokeRect" && p.strokeStyle === "#66849baa")!;
+      const bossPanel = c.paints.find(p => p.op === "fillRect" && p.fillStyle === "#060b12ee")!;
+      const rings = c.paints.filter(p => p.op === "stroke" && p.path.some(q => q.op === "arc" && q.args[0]! < 160 && q.args[2] === 18));
+      expect(rings).toHaveLength(3);
+      for (const ring of rings) {
+        const [x, y] = ring.path.find(q => q.op === "arc")!.args as [number, number];
+        expect(y - 22).toBeGreaterThan(Number(bossPanel.args[1]) + Number(bossPanel.args[3]));
+        expect(x + 22).toBeLessThan(Number(map.args[0]));
+        expect(y + 22).toBeLessThan(height);
+        expect(ring.path[0]!.args[4]! - ring.path[0]!.args[3]!).toBeGreaterThan(0);
+      }
     }
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });

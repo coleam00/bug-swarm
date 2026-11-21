@@ -7,6 +7,7 @@ import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot
 import { runBots, BotFailure } from "../../../scripts/bots";
 import { ServerDecoder } from "../../shared/arena/snapshot-codec";
 import { createBug } from "../../shared/arena/bugs/registry";
+import { spawnHive, contributeHive } from "../../shared/arena/bugs/hive";
 function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID(), compact = false) {
   const socket = new WebSocket(url), messages: ServerMessage[] = [];
   const decoder = new ServerDecoder(); socket.binaryType = "arraybuffer";
@@ -24,6 +25,29 @@ function client(url: string, index: number, name = `bot-${index}`, id = crypto.r
   }
   return { id, socket, messages, wait };
 }
+
+test("JSON and binary clients share hive, ring, life rewards and idempotent persisted team scores", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "hive-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2, "bot-2", crypto.randomUUID(), true);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, s = room.state, p = s.players.get(a.id)!, q = s.players.get(b.id)!;
+    spawnHive(s, s.tick * 50); const boss = s.bugs.find(b => b.kind === "hive")!;
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.bugs.some(b => b.kind === "hive" && b.maxHp === 240));
+    boss.ringAt = (s.tick + 1) * 50;
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.globs.filter(g => g.source === "hive").length === 12);
+    contributeHive(s, boss, q, 1); boss.hp = 1;
+    s.shots.push({ id: s.nextId++, owner: p.id, life: p.life, x: boss.x, y: boss.y, vx: 900, vy: 0, born: s.tick * 50 });
+    for (const c of [a, b]) await c.wait(m => m.type === "snapshot" && m.events.some(e => e.type === "kill" && e.kind === "hive" && e.rewards?.length === 2) && m.players.every(p => p.score === 200));
+    expect(p.kills).toBe(1); expect(q.kills).toBe(0);
+    await app.arenas.stop(); await app.arenas.stop();
+    const rows = app.db.query("SELECT score, team FROM runs WHERE ended_at_ms IS NOT NULL ORDER BY team").all();
+    expect(rows).toEqual([{ score: 200, team: "spaces" }, { score: 200, team: "tabs" }]);
+    expect((app.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_ended'").get() as any).n).toBe(2);
+    expect(await (await fetch(app.server.url.origin + "/api/teams")).json()).toEqual({ tabs: 200, spaces: 200 });
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
 
 test.each([false, true])("two real clients collect all three kinds and receive the combined boosted fan (compact=%s)", async compact => {
   const scratch = mkdtempSync(join(tmpdir(), "weapon-pickup-wire-"));
