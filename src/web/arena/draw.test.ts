@@ -87,9 +87,9 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const p = { ...lifeDefaults(), status: "downed" as const, hits: 0, downedUntil: 10000, reviveMs: 1000, reviving: true,
       id: "victim", name: "Victim", team: "tabs" as const, x: 200, y: 300, vx: 0, vy: 0, facing: 0 };
     const q = { ...p, id: "remote", name: "Teammate", team: "spaces" as const, x: 1200 };
-    const draw = (local: CombatPlayer, remote: CombatPlayer[] = [q], now = 0) => {
+    const draw = (local: CombatPlayer, remote: CombatPlayer[] = [q], now = 0, width = 390, height = 844) => {
       fixture.context.paints.length = 0;
-      renderer.draw(390, 844, { x: 0, y: 0 }, [local, ...remote], local, input, [], [], 1, 40, now);
+      renderer.draw(width, height, { x: 0, y: 0 }, [local, ...remote], local, input, [], [], 1, 40, now);
       return [...fixture.context.paints];
     };
     const body = (paints: Paint[], target: Pick<CombatPlayer, "x" | "y"> = p) => paints.find(paint => paint.op === "stroke" && paint.path.some(c => c.op === "roundRect") &&
@@ -102,13 +102,26 @@ test("downed robots remain visible with countdown/progress, local copy and remot
       const x = Math.hypot(a, b), y = Math.hypot(c, d); return Math.min(x, y) / Math.max(x, y);
     };
     const arrows = (paints: Paint[]) => paints.filter(paint => paint.op === "fill" && paint.path[0]?.op === "moveTo" && paint.path.some(c => c.op === "lineTo"));
-    const overlay = (paints: Paint[]) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > 390 / 2 &&
+    const overlay = (paints: Paint[], width = 390) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > width / 2 &&
       Number(paint.args[1]) > 78 && Number(paint.args[1]) + Number(paint.args[3]) < p.y);
-    const paints = draw(p), panel = overlay(paints);
-    expect(panel).toBeDefined();
-    expect(paints.filter(paint => paint.op === "fillText" && Number(paint.args[2]) > Number(panel!.args[1]) &&
-      Number(paint.args[2]) < Number(panel!.args[1]) + Number(panel!.args[3])).length).toBeGreaterThanOrEqual(2);
-    expect(paints.some(paint => paint.op === "fillText" && paint.args[0] === "8s")).toBe(true);
+    // Require the explanation separately from the countdown in both banner
+    // layouts, without pinning the wording of either explanation line.
+    for (const [width, height, lines] of [[390, 844, 2], [844, 390, 1]] as const) {
+      const frame = draw(p, [], 0, width, height), panel = overlay(frame, width);
+      expect(panel).toBeDefined();
+      const text = frame.filter(paint => paint.op === "fillText" && Number(paint.args[1]) > Number(panel!.args[0]) &&
+        Number(paint.args[1]) < Number(panel!.args[0]) + Number(panel!.args[2]) &&
+        Number(paint.args[2]) > Number(panel!.args[1]) && Number(paint.args[2]) < Number(panel!.args[1]) + Number(panel!.args[3]));
+      const explanation = text.filter(paint => /\p{L}{2,}/u.test(String(paint.args[0])));
+      expect(explanation).toHaveLength(lines);
+      expect(text.filter(paint => paint.args[0] === "8s")).toHaveLength(1);
+      for (const paint of text) {
+        expect(paint.globalAlpha).toBeGreaterThan(0);
+        expect(paint.transform).toEqual([1, 0, 0, 1, 0, 0]);
+        expect(Number(paint.args[2])).toBeLessThan(height);
+      }
+    }
+    const paints = draw(p);
     const rings = paints.filter(p => p.op === "stroke").flatMap(p => p.path.filter(c => c.op === "arc"));
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI) < 1e-8)).toBe(true);
     expect(rings.some(c => Math.abs(Number(c.args[4]) - Number(c.args[3]) - Math.PI * 1.6) < 1e-8)).toBe(true);

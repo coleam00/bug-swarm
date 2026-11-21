@@ -129,3 +129,11 @@ The final renderer was measured once more after the complete check finished, wit
 | 1280 x 800 | 60.0..60.0 | 0.863..1.338 |
 
 The portrait fixture's later frame cadence fell below 60 despite sub-millisecond update/draw work; these are raw factory scheduling observations, not a claim of sustained 60 FPS for that synthetic maximum-effects scene. The earlier concurrent sample in `boundary-browser-x0Td6Q/` ranged 45..60 FPS with update/draw at most 1.466 ms and is also retained. The live full-room readings above are separate. Every owned server, bot task, Chrome process and database handle has closed. All evidence remains inside this checkout.
+
+## Explanation coverage repair
+
+The returned test check identified a layout-branch coverage gap: deleting only the one-line explanation passed the existing renderer test. The same test's wrapped-layout text count could also pass with either explanation line missing, because it counted the countdown as explanatory text. The existing recording-canvas test now exercises 390 x 844 and 844 x 390, requires both wrapped lines or the single wide line independently of the countdown, and verifies their visible screen-space paint. It does not match the explanation's wording. Adjacent HUD, Help/edge-marker, countdown, revival-removal and layout-boundary coverage was inspected; both owner-requested verdict guards remain intact.
+
+Isolated source-copy mutations reproduce the old test's missed wide-layout deletion. The repaired test rejects that deletion and deletion of either wrapped line; a wording-only change passes. Countdown/name overlap and frozen 50% revive fill still fail their intended guards. All eight observations are in `.evidence/72/explanation-mutations-csme7E/results.json`, with per-case logs. The focused renderer run passes nine tests (`explanation-focused.log`). This repair changes test coverage only; existing production Chrome, frame/tick and full skill measurements above remain applicable.
+
+`bun run check` passes TypeScript and all 382 tests / 24,280 assertions with zero failures after this repair (`.evidence/72/explanation-check.log`, exit 0). No additional browser, build, load or skill run was needed for this recording-canvas test-only change.
