@@ -25,7 +25,7 @@ process.env.TEMP = process.env.TMP = temp; process.env.DATA_DIR = join(root, 'da
 const evidence = root; console.log(`Evidence: ${evidence}`);
 const app = createServer({ port: 0, hostname: '127.0.0.1', dataDir: join(root, 'data'), env: { NODE_ENV: 'production' } });
 const origin = app.server.url.origin, report: any = { origin, samples: {}, assertions: [] };
-const chrome = Bun.spawn([chromePath,'--headless=new','--no-sandbox','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${join(root,'profile').replaceAll('\\', '/')}`,'--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','--disable-gpu','about:blank'], { stdout: 'ignore', stderr: Bun.file(join(root, 'chrome.log')), env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'CHROME_CRASHPAD_PIPE_NAME')) });
+const chrome = Bun.spawn([chromePath,'--headless=new','--no-sandbox','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${join(root,'profile').replaceAll('\\', '/')}`,'--disable-background-timer-throttling','--disable-renderer-backgrounding','--disable-backgrounding-occluded-windows','about:blank'], { stdout: 'ignore', stderr: Bun.file(join(root, 'chrome.log')), env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== 'CHROME_CRASHPAD_PIPE_NAME')) });
 let interrupted = false;
 const interrupt = () => { interrupted = true; botAbort?.abort(); };
 process.once("SIGINT", interrupt); process.once("SIGTERM", interrupt);

@@ -48,3 +48,11 @@ test("pickup routes avoid crossing acid globs and reconsider after passage or ex
   o.globs = [{ ...glob, x: 1360 }]; expect(safePickup(o, player)).toBe(pickup);
   o.globs = [glob]; o.tick = 40; expect(safePickup(o, player)).toBe(pickup);
 });
+
+test("seeking keeps clearance from approaching bugs while still collecting on an open route", () => {
+  const o = observation(); o.bugs = [createBug("crawler", 3, 1610, 1200)];
+  o.pickups = [{ ...pickup, x: 1400, y: 1200 }];
+  expect(safePickup(o, player)).toBeUndefined(); // A short detour would close to 210 units.
+  o.pickups = [{ ...pickup, x: 1000, y: 1200 }];
+  expect(safePickup(o, player)).toBe(o.pickups[0]);
+});

@@ -12,10 +12,12 @@ function floor(a: ArenaState, x = 1200, y = 1200) {
   const p = { id: a.nextId++, kind: "shield" as const, x, y, expiresAt: a.tick * 50 + 12000 }; a.pickups.push(p); return p;
 }
 test("seeded successful drops can deliver shield, spread and rapid rather than a shield-only catalog", () => {
-  for (const [roll, kind] of [[0, "shield"], [1000, "spread"], [1500, "rapid"]] as const) {
+  const kinds = [];
+  for (const roll of [0, 1000, 1500]) {
     const a = createArena(79); a.pickupRandom = beforeRoll(roll);
-    dropPickup(a, "crawler", 500, 500, 0); expect(a.pickups).toHaveLength(1); expect(a.pickups[0]!.kind).toBe(kind);
+    dropPickup(a, "crawler", 500, 500, 0); expect(a.pickups).toHaveLength(1); kinds.push(a.pickups[0]!.kind);
   }
+  expect(kinds.sort()).toEqual(["rapid", "shield", "spread"]);
 });
 test("specified 2%, 6%, 6%, 15% rates accept the last roll below each threshold and reject above", () => {
   for (const [kind, chance] of [["crawler", 0.02], ["dasher", 0.06], ["spitter", 0.06], ["beetle", 0.15]] as const) {

@@ -100,7 +100,7 @@ export const PICKUP_BLINK_MS = 3000;
 export const PICKUP_RADIUS = 16;
 export const SHIELD_MS = 20000;
 export const PICKUP_SEEK_DISTANCE = 250;
-export const PICKUP_SAFE_DISTANCE = 200;
-export const PICKUP_ROUTE_CLEARANCE = 150;
+export const PICKUP_SAFE_DISTANCE = 350;
+export const PICKUP_ROUTE_CLEARANCE = 300;
 // The beetle rate is reserved until that bug kind exists.
 export const PICKUP_DROP_CHANCE = { crawler: 0.02, dasher: 0.06, spitter: 0.06, beetle: 0.15 } as const;

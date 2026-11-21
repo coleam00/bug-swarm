@@ -24,7 +24,7 @@ test("fractional heat at rapid expiry and a final spread volley clamp to capacit
     p.heat = 17.5; p.effects = { rapid: 0, ...(spread ? { spread: 8000 } : {}) };
     stepArena(a, new Map([[p.id, { ...neutralInput(), fire: true }]]));
     expect(p.overheatUntil).toBe(1500); expect(p.heat).toBeLessThanOrEqual(18);
-    expect(parseServer(serializeSnapshot({ globs: [], v: 1, type: "snapshot", arenaId: "heat", tick: a.tick, wave: a.wave,
+    expect(parseServer(serializeSnapshot({ globs: a.globs, v: 1, type: "snapshot", arenaId: "heat", tick: a.tick, wave: a.wave,
       players: [{ ...p, ackSeq: 0 }], bugs: a.bugs, shots: a.shots, events: a.events, pickups: a.pickups }))).not.toBeNull();
   }
 });
@@ -51,7 +51,7 @@ test("twenty combined boosted guns respect the shared projectile/impact budget a
   for (let tick = 0; tick < 180; tick++) {
     a.bugs = []; stepArena(a, inputs); peak = Math.max(peak, a.shots.length);
     expect(a.shots.length + a.events.length).toBeLessThanOrEqual(MAX_SHOTS);
-    expect(parseServer(serializeSnapshot({ globs: [], v: 1, type: "snapshot", arenaId: "boosted", tick: a.tick, wave: a.wave, pickups: a.pickups,
+    expect(parseServer(serializeSnapshot({ globs: a.globs, v: 1, type: "snapshot", arenaId: "boosted", tick: a.tick, wave: a.wave, pickups: a.pickups,
       bugs: a.bugs, shots: a.shots, events: a.events, players: [...a.players.values()].map(p => ({ ...p, ackSeq: 0 })) }))).not.toBeNull();
   }
   expect(peak).toBeGreaterThanOrEqual(540);

@@ -57,7 +57,7 @@ test("release/repress preserves the six-per-second cooldown and full-room snapsh
     const next = a.nextId; fireAndAdvance(a, inputs, time); a.tick++;
     for (const shot of a.shots) if (shot.owner === owner && shot.id >= next) births.push(shot.born);
     expect(a.shots.length).toBeLessThanOrEqual(MAX_SHOTS);
-    expect(parseServer(serializeSnapshot({ globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: a.tick, wave: a.wave,
+    expect(parseServer(serializeSnapshot({ globs: a.globs, v: 1, type: "snapshot", pickups: a.pickups, arenaId: "room", tick: a.tick, wave: a.wave,
       bugs: a.bugs, shots: a.shots, events: a.events, players: [...a.players.values()].map(p => ({ ...p, ackSeq: 0 })) }))).not.toBeNull();
   }
   expect(births.length).toBeLessThanOrEqual(SHOT_RATE);

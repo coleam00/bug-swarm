@@ -97,7 +97,7 @@ function cells(snapshot: Snapshot): State {
   })) };
 }
 function snapshot(state: State, knownNames: ReadonlySet<string>): Snapshot {
-  const result: Record<string, unknown> = { pickups: [], globs: [], v: 1, type: "snapshot", arenaId: state.arenaId, tick: state.tick, wave: state.wave };
+  const result: Record<string, unknown> = { v: 1, type: "snapshot", arenaId: state.arenaId, tick: state.tick, wave: state.wave };
   for (let g = 0; g < groups.length; g++) result[groups[g]!] = state.groups[g]!.map(row => {
     const record: Record<string, unknown> = {};
     schemas[g]!.forEach(([key], i) => { const cell = row[i]; if (cell === null) return; if (key === "__extra") { const extra = JSON.parse(cell as string); if (!extra || Array.isArray(extra) || typeof extra !== "object") throw Error("Invalid extension"); for (const k of Object.keys(extra)) { if (schemas[g]!.some(f => f[0] === k) || ["__proto__","constructor","prototype"].includes(k)) throw Error("Invalid extension key"); record[k] = extra[k]; } } else record[key] = key === "result" ? JSON.parse(cell as string) : cell; });
