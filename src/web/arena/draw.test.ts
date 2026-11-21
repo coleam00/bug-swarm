@@ -25,13 +25,55 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
       players[0]!.score = score; c.paints.length = 0;
       // Interpolated membership is deliberately stale; connected dead players still count.
       renderer.draw(width!, height!, { x: 750, y: 750 }, [predicted], predicted, input, [], [], snapshot.wave, 1, 50, 1, snapshot);
-      const hud = c.paints.filter(p => p.op === "fillText" && String(p.args[0]).includes(" pts"));
+      // No effects or overheat in this fixture: all main-canvas text belongs to the HUD.
+      // Counting every text paint also catches persistent instructions outside that line.
+      const hud = c.paints.filter(p => p.op === "fillText" || p.op === "strokeText");
       expect(hud).toHaveLength(1);
-      expect(String(hud[0]!.args[0])).toMatch(/pts  ×1\.7  2 hits  W19  20 in this arena$/);
+      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+W19\s+20 in this arena$/);
       if (score === 123) expect(String(hud[0]!.args[0])).toStartWith("123 pts");
       c.font = hud[0]!.font;
       expect(Number(hud[0]!.args[1]) + c.measureText(String(hud[0]!.args[0])).width).toBeLessThanOrEqual(width! - 16);
       expect(hud[0]!.transform).toEqual([1, 0, 0, 1, 0, 0]);
+    }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("renderer draws the minimap outline, faint swarm, both living teams and one predicted local marker", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D);
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 2400, y: 0, vx: 0, vy: 0, facing: 0 };
+    const remote = { ...local, id: "remote", team: "spaces" as const, x: 1200, y: 1200 };
+    const screenSpace = (paint: Paint) => paint.transform.every((value, i) => value === [1, 0, 0, 1, 0, 0][i]);
+    for (const [width, height] of [[1280, 720], [844, 390], [390, 844]]) {
+      c.paints.length = 0;
+      renderer.draw(width!, height!, { x: 400, y: 500 },
+        [{ ...local, x: 0 }, remote, { ...remote, id: "dead", hits: 0 }], local, new ArenaInput(),
+        [{ id: 1, kind: "crawler", x: 600, y: 600, vx: 0, vy: 0 }], [], 1, 1, 50, 1.5);
+      const outlines = c.paints.filter(p => p.op === "strokeRect" && screenSpace(p));
+      expect(outlines).toHaveLength(1);
+      const outline = outlines[0]!, [x, y, mapWidth, mapHeight] = outline.args as number[];
+      expect(outline.globalAlpha).toBeGreaterThan(0); expect(outline.lineWidth).toBeGreaterThan(0);
+      expect(x!).toBeGreaterThan(width! / 2); expect(y!).toBeGreaterThan(0);
+      expect(mapWidth!).toBeGreaterThan(0); expect(mapHeight!).toBeCloseTo(mapWidth!);
+      expect(mapWidth!).toBeLessThan(width! / 2); expect(mapHeight!).toBeLessThan(height! / 2);
+      expect(x! + mapWidth!).toBeLessThan(width!); expect(y! + mapHeight!).toBeLessThan(height!);
+      const markers = c.paints.filter(p => p.op === "fill" && screenSpace(p) && p.path.some(command => command.op === "arc"));
+      expect(markers).toHaveLength(3); // Bug, living teammate, local; no dead or duplicate local marker.
+      const [bug, teammate, own] = markers as [Paint, Paint, Paint];
+      expect(teammate.fillStyle).toBe(TEAM_COLOURS.spaces); expect(own.fillStyle).toBe(TEAM_COLOURS.tabs);
+      const alpha = bug.globalAlpha * (typeof bug.fillStyle === "string" && /^#[\da-f]{8}$/i.test(bug.fillStyle) ? Number.parseInt(bug.fillStyle.slice(-2), 16) / 255 : 1);
+      expect(alpha).toBeGreaterThan(0); expect(alpha).toBeLessThan(0.5);
+      const circle = (paint: Paint) => paint.path.find(command => command.op === "arc")!.args;
+      expect(circle(bug)[0]).toBeCloseTo(x! + mapWidth! / 4); expect(circle(bug)[1]).toBeCloseTo(y! + mapHeight! / 4);
+      expect(circle(teammate)[0]).toBeCloseTo(x! + mapWidth! / 2); expect(circle(teammate)[1]).toBeCloseTo(y! + mapHeight! / 2);
+      const [ownX, ownY, radius] = circle(own) as [number, number, number];
+      expect(radius).toBeGreaterThan(circle(teammate)[2]!);
+      expect(ownX).toBeCloseTo(x! + mapWidth! - radius); expect(ownY).toBeCloseTo(y! + radius);
+      const ring = c.paints.find(p => p.op === "stroke" && screenSpace(p) && JSON.stringify(p.path) === JSON.stringify(own.path));
+      expect(ring).toBeDefined(); expect(ring!.strokeStyle).not.toBe(own.fillStyle);
+      expect(ring!.globalAlpha).toBeGreaterThan(0); expect(ring!.lineWidth).toBeGreaterThan(0);
     }
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });

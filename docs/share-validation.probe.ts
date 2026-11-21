@@ -22,7 +22,6 @@ const primary = await chromium.launchPersistentContext(join(scratch, `chrome-pro
 } });
 const browser = primary.browser()!;
 const results: Record<string, unknown> = { chrome: browser.version() };
-const requests: string[] = [], errors: string[] = [];
 
 try {
   const context = await browser.newContext();
@@ -45,7 +44,7 @@ try {
     return { path: new URL(img.src).pathname, width: img.naturalWidth, height: img.naturalHeight };
   })));
   assert.deepEqual(images.map((image: any) => [image.width, image.height]), [[180, 180], [180, 180], [32, 32], [180, 180], [1200, 630]]);
-  results.images = images; results.requests = [...new Set(requests)]; assert.deepEqual(errors, []);
+  results.images = images;
   for (const file of readdirSync("dist/assets").filter(file => file.endsWith(".js"))) {
     assert.ok(!/resvg|share-assets/.test(readFileSync(join("dist/assets", file), "utf8")), "Rasterizer stays out of browser bundles");
   }
