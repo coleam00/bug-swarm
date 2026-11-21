@@ -218,8 +218,12 @@ export class ArenaRenderer {
       c.arc(p.x, p.y, r + 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, combat.downedUntil - this.time) / DOWNED_MS); c.stroke();
       c.strokeStyle = combat.reviving ? "#7be7ca" : "#7be7ca88"; c.lineWidth = combat.reviving ? 5 : 3; c.beginPath();
       c.arc(p.x, p.y, r + 19, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * combat.reviveMs / REVIVE_MS); c.stroke();
-      c.globalAlpha = 0.75 + Math.sin(this.animationTime / 180) * 0.25;
-      c.textAlign = "center"; c.font = "bold 18px system-ui"; c.fillStyle = "#ffe09a"; c.fillText("Help", p.x, p.y + 60); c.globalAlpha = 1;
+      // The local panel and off-screen edge markers already explain Help.
+      // Keep this world label only for an on-screen teammate a rescuer can reach.
+      if (!local && p.x >= camera.x && p.x <= camera.x + width && p.y >= camera.y && p.y <= camera.y + height) {
+        c.globalAlpha = 0.75 + Math.sin(this.animationTime / 180) * 0.25;
+        c.textAlign = "center"; c.font = "bold 18px system-ui"; c.fillStyle = "#ffe09a"; c.fillText("Help", p.x, p.y + 60); c.globalAlpha = 1;
+      }
       return;
     }
     if (combat.heat !== undefined) {

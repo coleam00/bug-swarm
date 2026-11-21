@@ -32,6 +32,7 @@ if (crowdedEdges) {
   for (let i = 1; i < players.length; i++) Object.assign(players[i]!, { status: "downed", hits: 0, x: 2300, y: 1200 });
   if (hiveScene) Object.assign(bugs[bugs.length - 1]!, { x: 2300, y: 1200 });
 }
+if (localDown && new URLSearchParams(location.search).has("ten-players")) players.length = 10;
 if (localDown) Object.assign(players[0]!, { x: 1200, y: 1200, status: "downed", hits: 0 });
 if (panelReview) {
   players.length = 2;

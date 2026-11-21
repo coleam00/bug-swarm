@@ -134,7 +134,7 @@ try {
   await shot(desktop.session,'controlled-active-no-warning');
   await dispose(desktop);await dispose(phone);
   }
-  // Full collection bounds: 20 players, 150 bugs, 140 shots, 24 globs and crowded markers.
+  // Full collection bounds: 20 players, 150 bugs, 660 shots, 24 globs and crowded markers.
   const {createServer:createVite}=await import('vite');
   const vite=await createVite({configFile:false,cacheDir:join(evidence,'vite-cache'),optimizeDeps:{entries:['scripts/arena-benchmark.html']},server:{host:'127.0.0.1',port:0,strictPort:false,watch:{ignored:['**/.evidence/**']}}});await vite.listen();
   try{
@@ -169,6 +169,11 @@ try {
       await pause(200);assert.equal((await evaluate(p.session,'window.evidence.errors')).length,0);
       await shot(p.session,`${width}x${height}-controlled-downed-crowded-arrows`);
     }
+    await call('Page.navigate',{url:`http://127.0.0.1:${address.port}/scripts/arena-benchmark.html?hive&revive&edges&quiet&local-down&ten-players`},p.session);
+    await call('Emulation.setDeviceMetricsOverride',{width:568,height:280,deviceScaleFactor:1,mobile:true},p.session);
+    await until(()=>evaluate(p.session,`!!document.querySelector('canvas')?.dataset.frameMs`));
+    assert.equal((await evaluate(p.session,'window.evidence.errors')).length,0);
+    await shot(p.session,'568x280-controlled-ten-player-downed-arrows');
     await dispose(p);
   }finally{await vite.close();}
   console.log('Completed issue 91 Chrome validation',evidence);
