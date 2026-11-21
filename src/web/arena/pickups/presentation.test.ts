@@ -33,14 +33,15 @@ test.each(["shield", "spread", "rapid"] as const)("%s paints floor and HUD glyph
       pickups: [{ id: 1, kind, x: 500, y: 400, expiresAt: 12000 }] };
     const draw = (remaining = 2000) => { c.paints.length = 0; renderer.draw(390, 844, { x: 200, y: 200 }, [p, remote], p, input, [], [], 1, 200, 10000, 1, snapshot, 12000 - remaining, [], snapshot.pickups); return [...c.paints]; };
     const paint = draw(); const count = f.created; draw(); expect(f.created).toBe(count);
+    const expanded = expandSprites(f, paint);
     const ring = paint.filter(p => p.op === "stroke" && p.path.some(q => q.op === "arc" && q.args[0] === 32 && q.args[1] === 70)).at(-1)!;
     expect(ring.path[0]!.args[4]! - ring.path[0]!.args[3]!).toBeCloseTo(Math.PI);
-    expect(paint.some(p => glyphPaint(p, 500, 400))).toBe(true);
-    expect(paint.some(p => glyphPaint(p, 32, 70))).toBe(true);
+    expect(expanded.some(p => glyphPaint(p, 300, 200))).toBe(true);
+    expect(expanded.some(p => glyphPaint(p, 32, 70))).toBe(true);
     const visible = draw(), effects = remote.effects;
     remote.effects = {};
     const bare = draw(); remote.effects = effects;
-    robotPresentation(kind, addedPaints(visible, bare), { x: remote.x - 200, y: remote.y - 200, facing: remote.facing });
+    robotPresentation(kind, addedPaints(expandSprites(f, visible), expandSprites(f, bare)), { x: remote.x - 200, y: remote.y - 200, facing: remote.facing });
     expect(paint.some(p => p.op === "drawImage" && p.globalAlpha === 0.25)).toBe(true);
     expect(draw(1999).some(p => p.op === "drawImage" && p.globalAlpha === 0.25)).toBe(false);
     snapshot.players[0]!.effects[kind] = 10000 + PICKUPS[kind].duration;
@@ -58,9 +59,12 @@ test("each pickup paints a fading floor glow and shares its distinct colour with
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => f.factory() } });
   try {
     const draws = createPickupDraws(), c = f.context, hues: number[] = [];
+    for (const context of [c, ...f.surfaces.map(s => s.context)])
+      context.createRadialGradient = () => { throw new Error("Pickup gradients must be baked before drawing"); };
     for (const kind of ["shield", "spread", "rapid"] as const) {
       c.paints.length = 0; draws[kind].floor(c as unknown as CanvasRenderingContext2D, 0, 0);
       const floor = [...c.paints], image = floor.find(p => p.op === "drawImage")!;
+      expect(floor).toHaveLength(1); // The glow and glyph are baked into this one sprite.
       expect(image).toBeDefined(); expect(image.globalAlpha).toBeGreaterThan(0);
       // Inspect paint on the surface actually used by the floor, not just gradient creation.
       const glow = f.source(image).paints.find(p => p.op === "fillRect" && typeof p.fillStyle !== "string")!;
@@ -76,12 +80,15 @@ test("each pickup paints a fading floor glow and shares its distinct colour with
       expect(colour(stops[0]!.colour).alpha).toBeGreaterThan(colour(stops.at(-1)!.colour).alpha);
       c.paints.length = 0; draws[kind].hud(c as unknown as CanvasRenderingContext2D, 0, 0, 0.5);
       const accent = colour(c.paints.filter(p => p.op === "stroke").at(-1)!.strokeStyle as string);
-      const glyph = floor.filter(p => p.op === "stroke" || p.op === "fill").at(-1)!;
+      const glyph = expandSprites(f, floor).filter(p => glyphPaint(p, 0, 0)).at(-1)!;
       expect(hueGap(accent.hue, colour((glyph.op === "stroke" ? glyph.strokeStyle : glyph.fillStyle) as string).hue)).toBeLessThan(10);
       expect(hueGap(accent.hue, colour(stops[0]!.colour).hue)).toBeLessThan(10);
       // Shade changes are welcome; the kinds must remain visually different colours.
       for (const other of hues) expect(hueGap(accent.hue, other)).toBeGreaterThan(25);
       hues.push(accent.hue);
+      c.paints.length = 0;
+      draws[kind].robot(c as unknown as CanvasRenderingContext2D, { id: "a", name: "Pilot", team: "tabs", x: 0, y: 0, vx: 0, vy: 0, facing: 0.7 });
+      expect(c.paints).toHaveLength(1); expect(c.paints[0]!.op).toBe("drawImage");
     }
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
@@ -138,15 +145,31 @@ function robotPresentation(kind: PickupKind, paints: Paint[], robot: { x: number
 function colour(value: string) {
   const hex = value.slice(1), rgb = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
   const [r, g, b] = rgb as [number, number, number], max = Math.max(...rgb), min = Math.min(...rgb), delta = max - min;
-  expect(delta).toBeGreaterThan(0); // A grey substitute cannot distinguish the pickup kinds.
-  const hue = ((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60 + 360) % 360;
-  return { hue, alpha: hex.length === 8 ? parseInt(hex.slice(6), 16) / 255 : 1 };
+  const alpha = hex.length === 8 ? parseInt(hex.slice(6), 16) / 255 : 1;
+  if (alpha > 0) expect(delta).toBeGreaterThan(0); // Visible grey cannot distinguish kinds; transparent endpoints have no hue.
+  const hue = delta ? ((max === r ? (g - b) / delta : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4) * 60 + 360) % 360 : 0;
+  return { hue, alpha };
 }
 function hueGap(a: number, b: number) { return Math.abs(((a - b + 540) % 360) - 180); }
 
 function glyphPaint(p: Paint, x: number, y: number) {
   return (p.op === "stroke" || p.op === "fill") && p.path.length > 0 && p.path.every(q => {
-    const dx = q.args[0]! - x, dy = q.args[1]! - y;
+    const world = point(p, q.args[0]!, q.args[1]!);
+    const dx = world.x - x, dy = world.y - y;
     return Math.hypot(dx, dy) + (q.op === "arc" ? q.args[2]! : 0) <= 16;
+  });
+}
+
+/** Inspect the paint actually blitted, preserving sprite placement, rotation and blink opacity. */
+function expandSprites(f: ReturnType<typeof canvasFixture>, paints: Paint[]): Paint[] {
+  return paints.flatMap(p => {
+    if (p.op !== "drawImage") return [p];
+    const [a, b, c, d, e, g] = p.transform as [number, number, number, number, number, number];
+    const x = p.args[1] as number, y = p.args[2] as number;
+    return expandSprites(f, f.source(p).paints).map(child => {
+      const [u, v, w, z, tx, ty] = child.transform as [number, number, number, number, number, number];
+      return { ...child, globalAlpha: p.globalAlpha * child.globalAlpha,
+        transform: [a * u + c * v, b * u + d * v, a * w + c * z, b * w + d * z, e + a * (x + tx) + c * (y + ty), g + b * (x + tx) + d * (y + ty)] };
+    });
   });
 }

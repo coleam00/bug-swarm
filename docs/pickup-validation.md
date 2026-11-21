@@ -4,6 +4,18 @@ This delivery includes **spread, rapid and shield**. Spread fires three shots in
 
 All evidence, scratch homes, temporary files, databases and browser profiles stay under `.evidence/79/`. Run `bun run build` then `bun scripts/validate-pickups.ts` (`CHROME_PATH` can select Chrome). The driver starts its own ephemeral loopback production server and closes all owned clients, servers and processes. It exposes no debug endpoint.
 
+## Owner send-back: current main and cached artwork
+
+Merged current main (`afeaba9`) in `7c637f6`, preserving the existing beetle, spitter and compact-snapshot integration, personal-level HUD, copy polish and console views. The import conflict retained both pickup drawing and personal levels; the new main HUD fixture now supplies the required pickup collection. No shared arena simulation, policy, timing, drop chance or transport code changed in this return, so the complete skill/fairness observations below remain applicable.
+
+The repeated desktop slowdown prompted caching the **complete** artwork, rather than only its glow. `pickups/assets.ts` creates three small canvases per kind at renderer construction: combined floor glow/glyph, robot overlay, and static HUD icon/background. Frame hooks blit them and draw only the changing HUD timer arc. Spread/rapid rotate their cached overlay with facing; shield remains world-aligned. No pickup frame hook creates gradients or retraces static glyph/barrel/bubble paths.
+
+Appearance tests inspect the paint inside the sprites actually blitted, including world transforms and blink opacity. Existing distinct-colour, per-kind geometry, glyph-presence, glow, timer and culling guards remain; floor/robot hooks must produce a single blit and attempts to create gradients after initialization fail. Fully transparent gradient endpoints may be achromatic; visible grey still fails the colour guard. `bun run check` passed TypeScript and all **521 tests across 67 files** (`send-back/check.log`); final focused renderer tests passed 19 tests (`send-back/focused-final.log`), and the production build passed (`send-back/build.log`).
+
+Fresh production Chrome evidence is `production-ACXoWx/`: two independent contexts plus eighteen bots, all three floor and active effects, refresh/expiry, shield consumption, portrait/landscape and simultaneous touch input. The merged HUD displays personal levels. Screenshots were inspected for readable cached glyphs, correct barrel facing, bubbles and HUD rings. The initial room samples included cold-start 53.3 FPS desktop / 57.4 portrait; all seven subsequent samples were 60 FPS, with update/draw cost 0.223–0.696 ms desktop and 0.237–0.567 ms portrait. The warmed maximum-arena comparisons below are the desktop performance gate.
+
+After those scenes closed, the actual 200-bot CLI ran for 120 seconds on the owned server: **200 players throughout, ten arenas, zero errors, p50/p95 tick 1.399/2.881 ms**, scheduler lateness p95 2.851 ms. The busiest client averaged **34.975 KB/s**, below the unchanged 40 KB/s gate; byte cross-check difference was about 0.0011%. See `production-ACXoWx/bots.json` and `report.json`. All owned browsers, sockets, servers and databases closed. Earlier measurements and full skill observations are retained below; the new warmed results supersede earlier desktop performance claims.
+
 ## Returned findings and coverage
 
 The original shield-only scope was incomplete; both missing kinds now have their own shared definition, procedural drawing factory and simulation tests. The acceptance test requires all three catalog entries, and seeded successful drops must be able to deliver all three. Shared collection, cleanup, parser and bot tests exercise every kind. The audit followed each catalog entry through collection, expiry, both transports, delayed interpolation, robot drawing, HUD and policy observations; these paths deliver all three kinds. The drop-rate oracle specifies the required 2%, 6%, 6%, 15% independently of production configuration.
@@ -43,19 +55,20 @@ Controlled visual stages clear nearby threats and move the evidence bots away be
 
 ## Full-arena rendering cost
 
-The expanded fixture includes twenty robots with all three effects, 150 bugs (including twelve swelling spitters and ten armoured beetles), twelve globs, 660 shots, a 660-slot cosmetic pool and six mixed floor pickups. The corrected grid keeps all 660 shot/effect positions inside the world and desktop view. Earlier combat/revive/spitter reports retain their original fixture measurements; this report supersedes those capacity measurements for the current renderer. Four one-second samples per viewport compared the same fixture with pickup effects off/on:
+The fixture retains twenty robots with all three effects, 150 bugs (including twelve swelling spitters and ten armoured beetles), twelve globs, 660 shots, a 660-slot cosmetic pool and six mixed floor pickups. The grid keeps all 660 shot/effect positions inside the world and desktop view. `bun scripts/validate-pickup-frames.ts` now makes this comparison reproducible: one 1280×800 renderer warms for twelve seconds, then runs off/on/on/off twice with four seconds to settle each transition and five fresh one-second samples per block. It asserts populations and rejects **any** measured sample below 59 FPS. It does not reload the page or run competing fixtures. Every raw sample and one screenshot per block are retained.
 
-| Viewport | Baseline FPS | All pickups FPS | Baseline ms/frame | All pickups ms/frame |
-| --- | --- | --- | --- | --- |
-| 1280×800 | 60 | 60–61.3 | 1.939–2.107 | 2.005–2.693 |
-| 390×844 | 60 | 60 | 1.563–1.832 | 2.070–2.498 |
-| 844×390 | 60 | 60 | 1.792–2.487 | 2.318–3.118 |
+| Independent Chrome launch | Pickups | Samples | FPS, every sample | Draw ms, range | Median ms |
+| --- | --- | --- | --- | --- | --- |
+| `frames-kLkZUz` | Off | 20 | 60 | 1.810–2.569 | 2.031 |
+| `frames-kLkZUz` | On | 20 | 60 | 1.973–2.390 | 2.148 |
+| `frames-48f3jF` | Off | 20 | 60 | 1.962–3.438 | 2.688 |
+| `frames-48f3jF` | On | 20 | 60 | 2.697–4.207 | 3.062 |
 
-Every final sample met the nominal 60 FPS target while the full skill computation continued. Approximate median additions were 0.27 ms desktop, 0.40 ms portrait and 0.72 ms landscape. Floor glows are cached and robot strokes/fills remain bounded. Raw samples and inspected screenshots are in `production-SBqUxQ/report.json`. Chrome uses its normal rendering configuration, matching the other arena drivers; the driver no longer forces software rendering. An independent corrected-grid repeat in `.evidence/79/renderer-final-F6LzMY/` also held 60 FPS in every sample (pickup draw cost 1.761–2.490 ms/frame). The initial software-only pass with the earlier grid remains in `production-AgmAIs/report.json` (about 50 FPS desktop for both baseline and pickups, 60 FPS on phones).
+Both complete comparisons passed: **all 80 samples held 60 FPS**, forty with pickups and forty without. Median added draw cost was about 0.117 ms and 0.375 ms respectively; variation between launches is retained rather than averaged away. Normal Chrome rendering configuration is used, with no forced software rendering and no concurrent validation jobs. Full reports are `.evidence/79/frames-kLkZUz/report.json` and `frames-48f3jF/report.json`; aggregate data is `send-back/frame-summary.json`. An initial launcher attempt failed before opening its debugging port and produced no frame measurements; its log is retained in `send-back/frames-first.log`. The profile layout was corrected to match the working production driver.
 
-Review observed desktop measurement variability; its final warmed, alternating effects-enabled/disabled comparison held 60 FPS in all sixteen samples. Future comparisons should warm up and alternate the two fixtures.
+The fresh production driver also measured all three viewport sizes at 60 FPS in every maximum-fixture sample: desktop pickups-on 1.875–2.192 ms/frame, portrait 1.523–1.922, landscape 1.782–1.995. Earlier `production-SBqUxQ/`, `renderer-final-F6LzMY/` and software-only `production-AgmAIs/` reports remain historical evidence; their optimistic desktop claims were superseded after review reproduced drops.
 
-## Server load
+## Previous server load (retained)
 
 After visual clients and renderer fixtures closed, the driver ran the actual CLI in a separate process:
 

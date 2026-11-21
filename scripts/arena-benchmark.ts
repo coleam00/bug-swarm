@@ -27,8 +27,19 @@ const impactPosition = (i: number) => ({ x: 800 + i % 33 * 25, y: 950 + Math.flo
 const shots = Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: 500 + i, owner: String(i % 20), life: 1, born: 0, ...impactPosition(i), vx: 900, vy: 0 }));
 const globs = Array.from({ length: MAX_GLOBS }, (_, i) => ({ id: 1800 + i, born: 0, x: 850 + i % 4 * 160, y: 950 + Math.floor(i / 4) * 130, vx: -320, vy: 0 }));
 const pickups = Array.from({ length: MAX_PICKUPS }, (_, i) => ({ id: 2000 + i, kind: (["shield", "spread", "rapid"] as const)[i % 3]!, x: 900 + i * 90, y: 1100, expiresAt: 0 }));
-const baseline = new URLSearchParams(location.search).has("baseline");
+let baseline = new URLSearchParams(location.search).has("baseline");
 let count = 0, start = performance.now(), cost = 0, lastBurst = 0, eventId = 1;
+let samples = 0;
+// Evidence can alternate the same warmed renderer without reloading or running two arenas at once.
+Object.assign(window, { arenaBenchmark: {
+  setPickups(enabled: boolean) {
+    baseline = !enabled;
+    for (const p of players) p.effects = {};
+    count = cost = 0; start = performance.now();
+  },
+  population() { return { players: players.length, bugs: bugs.length, globs: globs.length, shots: shots.length,
+    impactSlots: MAX_EVENTS, pickups: baseline ? 0 : pickups.length, effects: baseline ? 0 : players.length * 3 }; },
+} });
 function frame(now: number) {
   const begin = performance.now(), width = canvas.clientWidth, height = canvas.clientHeight;
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
@@ -39,7 +50,7 @@ function frame(now: number) {
   for (const p of pickups) p.expiresAt = now + 12000;
   renderer.draw(width, height, cameraFor(1200, 1200, view.width, view.height), players, players[0]!, input, bugs, shots, 6, now / 50, now, view.scale, undefined, now % 500, globs, baseline ? [] : pickups);
   cost += performance.now() - begin; count++;
-  if (now - start >= 1000) { canvas.dataset.fps = (count * 1000 / (now - start)).toFixed(1); canvas.dataset.frameMs = (cost / count).toFixed(3); count = cost = 0; start = now; }
+  if (now - start >= 1000) { canvas.dataset.fps = (count * 1000 / (now - start)).toFixed(1); canvas.dataset.frameMs = (cost / count).toFixed(3); canvas.dataset.sample = String(++samples); count = cost = 0; start = now; }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
