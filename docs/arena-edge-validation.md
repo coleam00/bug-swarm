@@ -24,4 +24,4 @@ Earlier attempts with browser rate-limit bursts and a CDP context-creation timeo
 
 ## Automated validation
 
-`bun run check`: 493 tests pass, including geometry, warning boundaries, renderer, engine callback lifecycle and React Life over coverage. Existing health, awards, ring, projection and canvas-state tests pass. `bun run build` passes. Full skill results are recorded after completion in the pull request and `.evidence/91/skill.log`.
+`bun run check`: 493 tests pass, including geometry, warning boundaries, renderer, engine callback lifecycle and React Life over coverage. Existing health, awards, ring, projection and canvas-state tests pass. `bun run build` passes. `bun run skill` passes: mover median 204 points, aimer 2133 points, ratio 10.456x. Fresh newcomer median is 156.225s; eight-minute joins reach a censored lower bound of 540.825s (at least 346.18% of fresh survival). All 63 idle cohorts pass, with a minimum median of 18.625s. The 65 cohorts retain all 1,300 observations and censoring in `.evidence/91/skill.log`; `.evidence/91/skill-summary.json` contains the summary. The full skill command prints its combined report only at completion.
