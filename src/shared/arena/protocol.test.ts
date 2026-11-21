@@ -8,6 +8,22 @@ import { createBug } from "./bugs/registry";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
 const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
 
+test("beetle HP/facing/forward motion and zero-point shell bounces are validated", () => {
+  const b = createBug("beetle", 1, 1200, 1200);
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [], globs: [], events: [] };
+  const parse = () => parseServer(serializeSnapshot(s));
+  for (let hp = 1; hp <= 5; hp++) { b.hp = hp; expect(parse()).not.toBeNull(); }
+  const valid = { ...b, facing: 0.70049, vx: Math.cos(0.70049) * 84, vy: Math.sin(0.70049) * 84 };
+  s.bugs[0] = valid; expect(parse()).not.toBeNull();
+  for (const fields of [{ hp: 0 }, { hp: 6 }, { hp: 1.5 }, { facing: 4 }, { facing: null }, { vx: 85 }, { vx: -84, vy: 0 }, { phase: "approach" }, { phaseUntil: 0 }]) {
+    s.bugs[0] = { ...valid, ...fields } as any; expect(parse()).toBeNull();
+  }
+  s.bugs[0] = valid;
+  s.events = [{ id: 2, tick: 1, kind: "beetle", type: "bounce", x: 1222, y: 1200, points: 0 }]; expect(parse()).not.toBeNull();
+  s.events[0] = { ...s.events[0]!, points: 1 } as any; expect(parse()).toBeNull();
+  s.events[0] = { ...s.events[0]!, type: "bounce", points: 0, kind: "crawler" }; expect(parse()).toBeNull();
+});
+
 test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
   const bug = createBug("crawler", 1, 1200, 1200);
   const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], globs: [], events: [] };

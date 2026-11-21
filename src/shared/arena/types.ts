@@ -20,7 +20,7 @@ export interface Glob { id: number; x: number; y: number; vx: number; vy: number
 export interface HiveReward { playerId: string; life: number; amount: number; x: number; y: number }
 export interface HiveEncounter { id: number; broodAt: number; ringAt: number; contributions: Map<string, { life: number; damage: number }> }
 export type CombatEvent = { id: number; tick: number; x: number; y: number } &
-  ({ type: "hit"; kind: BugKind; points: 0 } | { type: "kill"; kind: BugKind; points: number; rewards?: HiveReward[] } | { type: "glob-pop"; points: 5; kind?: never });
+  ({ type: "hit" | "bounce"; kind: BugKind; points: 0 } | { type: "kill"; kind: BugKind; points: number; rewards?: HiveReward[] } | { type: "glob-pop"; points: 5; kind?: never });
 export interface LifeResult { playerId: string; life: number; score: number; kills: number; seconds: number; touch: boolean }
 export interface ArenaState { tick: number; random: number; players: Map<string, CombatPlayer>; slots: Map<string, number>;
   wave: number; bugs: Bug[]; shots: Shot[]; globs: Glob[]; events: CombatEvent[]; ended: LifeResult[]; nextId: number; spawnCredits: Map<string, number>; spawnCursor: number; hive?: HiveEncounter }

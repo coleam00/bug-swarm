@@ -106,7 +106,7 @@ export function validateServer(value: unknown, knownNames?: ReadonlySet<string>)
       e = v.events[index] = { id: e[0], tick: e[1], x: e[2], y: e[3], type: e[4], ...(e[5] === null ? {} : { kind: e[5] }), points: e[6], ...(e.length === 8 ? { rewards: e[7] } : {}) };
     }
     if (!object(e) || !integer(e.id) || events.has(e.id) || entityIds.has(e.id) || !integer(e.tick) || e.tick > v.tick || ![e.x, e.y, e.points].every(finite) || e.x < 0 || e.x > WORLD_WIDTH || e.y < 0 || e.y > WORLD_HEIGHT) return null;
-    if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
+    if (e.type === "glob-pop" ? e.points !== 5 || e.kind !== undefined : !isBugKind(e.kind) || (e.type === "bounce" ? e.points !== 0 || !BUGS[e.kind].blocksShot : e.type === "hit" ? e.points !== 0 : e.type !== "kill" || e.points < BUGS[e.kind].points * 11 / 10 || e.points > BUGS[e.kind].points * 3)) return null;
     if (e.type === "kill" && e.kind === "hive") {
       if (++hiveKills > 1 || !Array.isArray(e.rewards) || e.rewards.length < 1 || e.rewards.length > MAX_PLAYERS) return null;
       const recipients = new Set<string>(); let total = 0;

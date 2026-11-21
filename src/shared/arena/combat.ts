@@ -93,13 +93,24 @@ function advanceShots(state: ArenaState, start: number, end: number, time: numbe
       state.globs.splice(glob, 1); continue;
     }
     if (victim >= 0) {
-      const b = state.bugs[victim]!, m = motionFor(b), multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;
+      const b = state.bugs[victim]!, m = motionFor(b);
+      const impact = Math.min(m.stop, (from - time) / 1000 + first);
+      const event = { id: state.nextId++, tick: state.tick + 1, kind: b.kind, x: m.x + m.vx * impact, y: m.y + m.vy * impact };
+      let cx = s.x + s.vx * first - event.x, cy = s.y + s.vy * first - event.y;
+      let length = Math.hypot(cx, cy);
+      if (!length) { cx = -s.vx; cy = -s.vy; length = Math.hypot(cx, cy) || 1; }
+      cx /= length; cy /= length;
+      if (BUGS[b.kind].blocksShot?.(b, cx, cy)) {
+        owner.streak = 0;
+        event.x = Math.max(0, Math.min(WORLD_WIDTH, event.x + cx * BUGS[b.kind].radius));
+        event.y = Math.max(0, Math.min(WORLD_HEIGHT, event.y + cy * BUGS[b.kind].radius));
+        state.events.push({ ...event, type: "bounce", points: 0 }); continue;
+      }
+      const multiplier = Math.min(30, 10 + ++owner.streak), killed = --b.hp === 0;
       if (b.kind === "hive") contributeHive(state, b, owner, 1);
       const rewards = killed && b.kind === "hive" ? rewardHive(state) : undefined;
       const points = killed ? BUGS[b.kind].points * multiplier : 0;
       if (killed) { owner.points += points; owner.score = Math.round(owner.points / 10); owner.kills++; }
-      const impact = Math.min(m.stop, (from - time) / 1000 + first);
-      const event = { id: state.nextId++, tick: state.tick + 1, kind: b.kind, x: m.x + m.vx * impact, y: m.y + m.vy * impact };
       state.events.push(killed ? { ...event, type: "kill", points: points / 10, ...(rewards ? { rewards } : {}) } : { ...event, type: "hit", points: 0 });
       if (killed) state.bugs.splice(victim, 1);
       continue;

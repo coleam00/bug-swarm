@@ -58,7 +58,7 @@ export function stepArena(state: ArenaState, inputs: ReadonlyMap<string, Input>)
       }
     }
   }
-  for (const bug of state.bugs) { BUGS[bug.kind].move(bug, state.players.values(), time); stopAtBoundary(bug); }
+  for (const bug of state.bugs) { BUGS[bug.kind].move(bug, state.players.values(), time, STEP_MS); stopAtBoundary(bug); }
   fireAndAdvance(state, inputs, time);
   for (const b of state.bugs) { const m = motionFor(b); b.x = m.x + m.vx * m.stop; b.y = m.y + m.vy * m.stop; }
   state.tick++;

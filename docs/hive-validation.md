@@ -48,4 +48,19 @@ The owned production server then ran **200 aimer bots for 145 seconds**, long en
 
 `bun install --frozen-lockfile`, `bun run check` and `bun run build` passed. The check runs strict TypeScript and 463 tests, including the real-server JSON/binary hive encounter and idempotent persistence/team totals. Focused simulation, protocol, codec and renderer checks also passed. `bun run skill` passed with exit code 0 (`.evidence/84/skill-80.json`, plus its `.exit.json` record). The twenty-seed/eight-bot/180-second score matrix measured mover median 213 points and aimer median 2,631 points: **12.35x**, above the unchanged 2x gate. Fresh aimer newcomers had an exact median **159.7 seconds** (18 deaths / 2 cutoffs). Eight-minute joins reached a **600-second censored lower bound** (9 deaths / 11 cutoffs), at least **375.70%** of fresh survival versus the required 80%. All **63 idle cohorts** passed, covering every 15-second arena age from 0 through 900 seconds plus solo controls. The minimum idle median was **18.625 seconds**, above the 10-second gate. All 65 cohorts contain twenty seeds: **1,300 raw newcomer observations** with censoring retained.
 
-The implementation was validated from the worktree based on `61ab6b7` and committed as `2a69014`; GitHub CI for that commit also passed on Linux and Windows. No gameplay changed after the tuned production campaign and full skill run.
+The implementation was validated from the worktree based on `61ab6b7` and committed as `2a69014`; GitHub CI for that commit also passed on Linux and Windows. That complete sweep describes the hive before the later armoured-beetle merge; combined validation follows.
+
+
+## Integration with armoured beetles
+
+Main advanced to `833a996` (armoured beetles and flanking aimers) while the tuned full sweep was running. Merged it into the same hive branch. Both registered kinds, beetle shell blocking, zero-point bounces, elapsed-time steering and the flanking policy are preserved. Hive damage credit runs only after the shell-blocking hook accepts damage; JSON event rows carry both bounces and hive rewards. The benchmark now includes ten visible beetles alongside the hive, twelve spitters and 24 globs.
+
+The combined `bun run check` passed **478 tests / 29,956 assertions**, with TypeScript clean. Production build passed. The focused twenty-seed newcomer comparison passes at the same 80-unit/s hive speed: fresh median **156.225 seconds** (18 deaths / 2 cutoffs), eight-minute median **at least 540.825 seconds** (10 deaths / 10 cutoffs).
+
+Fresh production evidence is `.evidence/84/chrome-IjEuZO/`, including the same body/bar/ring/arrow/minimap/kill, downed arrival and touch screenshots listed above. Two isolated Chrome identities plus fifteen aimers again reached natural wave five at tick 2401, with seventeen connected / fifteen living players and 1,020 hive HP. Its measured 18-second boss window contains 352 ticks: tick p50/p95/max **1.58 / 3.46 / 7.04 ms**, scheduler lateness p95/max **2.34 / 12.56 ms**.
+
+Seven full-arena samples per viewport again held **60.0 FPS**. Average update/draw ranges were **1.023-1.438 ms** desktop, **0.852-1.436 ms** portrait and **1.055-1.705 ms** landscape. The full bounds include both boss award effects and beetle bounces. No browser console errors occurred.
+
+The repeated **200-aimer / ten-room / 145-second** workload passes all gates: tick p50/p95/max **1.39 / 2.52 / 9.32 ms** over 28,364 ticks; scheduler lateness p95/max **2.47 / 58.94 ms**; maximum player mean output **36.09 KB/s**. Population stayed exactly 200; all connections closed normally, with zero errors or drops. Live globs reached the complete **24-glob bound**, with natural hive rings observed.
+
+The complete combined skill/fairness command is running; its raw results will be recorded before delivery.

@@ -11,6 +11,77 @@ import { worldView } from "../../shared/arena/view";
 import type { Paint } from "../test-support/canvas-fixture.test-support";
 import { createBug } from "../../shared/arena/bugs/registry";
 import type { Snapshot } from "../../shared/arena/protocol";
+import { Interpolation } from "./interpolation";
+
+test("beetle plate follows facing, each lost HP cracks once, and pale bounces leave cracks unchanged without a score", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("beetle", 1, 500, 500);
+    b.facing = Math.PI / 2;
+    const draw = (now = 0) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, new ArenaInput(), [b], [], 5, 0, now); return [...fixture.context.paints]; };
+    const shapeKey = (p: Paint) => JSON.stringify([p.path, p.transform]);
+    const effectiveAlpha = (p: Paint) => {
+      const style = p.op === "fill" ? p.fillStyle : p.strokeStyle;
+      const rgba = typeof style === "string" ? Bun.color(style, "[rgba]") : null;
+      expect(rgba).not.toBeNull(); // Parse CSS color alpha too; never assume an unknown paint is opaque.
+      return p.globalAlpha * rgba![3] / 255;
+    };
+    const intact = draw();
+    const body = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "ellipse"))!;
+    const plate = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[4]! - q.args[3]! < Math.PI))!;
+    expect(body).toBeDefined(); expect(plate).toBeDefined();
+    const ellipse = body.path.find(p => p.op === "ellipse")!;
+    const xScale = Math.hypot(body.transform[0]!, body.transform[1]!), yScale = Math.hypot(body.transform[2]!, body.transform[3]!);
+    expect(2 * ellipse.args[2]! * xScale).toBeGreaterThanOrEqual(44);
+    expect(2 * ellipse.args[3]! * yScale).toBeGreaterThanOrEqual(36);
+    expect(Math.atan2(plate.transform[1]!, plate.transform[0]!)).toBeCloseTo(b.facing);
+    const arc = plate.path.find(p => p.op === "arc")!;
+    expect(arc.args[2]! * Math.min(Math.hypot(plate.transform[0]!, plate.transform[1]!), Math.hypot(plate.transform[2]!, plate.transform[3]!))).toBeGreaterThanOrEqual(20);
+    expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
+    const rim = intact.find(p => p.op === "stroke" && shapeKey(p) === shapeKey(plate))!;
+    expect(rim).toBeDefined();
+    expect(effectiveAlpha(body)).toBeGreaterThan(0.5);
+    expect(effectiveAlpha(plate)).toBeGreaterThan(0.5); expect(effectiveAlpha(rim)).toBeGreaterThan(0.5);
+    expect(plate.fillStyle).not.toEqual(body.fillStyle); expect(plate.strokeStyle).not.toEqual(body.strokeStyle);
+    const onBody = (p: Paint) => p.op === "stroke" && p.transform.every((value, i) => value === body.transform[i]);
+    const intactPaths = new Set(intact.filter(onBody).map(p => JSON.stringify(p.path)));
+    const cracks = (paints: Paint[]) => paints.filter(p => onBody(p) && !intactPaths.has(JSON.stringify(p.path)));
+    for (let hp = 5; hp >= 1; hp--) {
+      b.hp = hp; const damaged = cracks(draw()); expect(damaged).toHaveLength(5 - hp);
+      for (const crack of damaged) expect(effectiveAlpha(crack)).toBeGreaterThan(0.5);
+    }
+    const baseline = new Set(draw().filter(p => p.op === "stroke").map(shapeKey));
+    const effects = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && !baseline.has(shapeKey(p)));
+    const cached = fixture.created, event = { id: 2, tick: 1, kind: "beetle" as const, type: "bounce" as const, x: 500, y: 522, points: 0 as const };
+    renderer.events([event], 0); const spark = draw(50), bounce = effects(spark);
+    expect(cracks(spark)).toHaveLength(4); expect(bounce).toHaveLength(1); expect(effectiveAlpha(bounce[0]!)).toBeGreaterThan(0.5);
+    expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
+    renderer.events([event], 170); expect(effects(draw(181))).toHaveLength(0);
+    expect(fixture.created).toBe(cached); renderer.reset(); expect(effects(draw())).toHaveLength(0);
+    renderer.events([{ ...event, type: "hit" }], 0);
+    expect(effects(draw(50))[0]!.strokeStyle).not.toEqual(bounce[0]!.strokeStyle);
+
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("bounce, HP cracks, facing and removal stay on the delayed combat clock and reset without replay", () => {
+  const view = new Interpolation(), b = createBug("beetle", 1, 500, 500);
+  const shot = { id: 2, owner: "a", life: 1, x: 550, y: 500, vx: -900, vy: 0, born: 0 };
+  const s: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [shot], globs: [], events: [] };
+  view.push(structuredClone(s), 0);
+  s.tick = 2; s.shots = []; s.events = [{ id: 3, tick: 2, kind: "beetle", type: "bounce", x: 522, y: 500, points: 0 }];
+  view.push(structuredClone(s), 50);
+  expect(view.combat(149).shots).toHaveLength(1); expect(view.combat(149).events).toHaveLength(0);
+  const bounce = view.combat(150); expect(bounce.shots).toHaveLength(0); expect(bounce.bugs[0]!.hp).toBe(5); expect(bounce.events[0]!.type).toBe("bounce");
+  expect(view.combat(150).events).toHaveLength(0);
+  s.tick = 3; b.hp = 4; b.facing = 0.1; s.events = [{ id: 4, tick: 3, kind: "beetle", type: "hit", x: 500, y: 500, points: 0 }]; view.push(structuredClone(s), 100);
+  expect(view.combat(199).bugs[0]).toMatchObject({ hp: 5, facing: 0 });
+  expect(view.combat(200).bugs[0]).toMatchObject({ hp: 4, facing: 0.1 });
+  s.tick = 4; s.bugs = []; s.events = [{ id: 5, tick: 4, kind: "beetle", type: "kill", x: 500, y: 500, points: 90 }]; view.push(structuredClone(s), 150);
+  expect(view.combat(249).bugs).toHaveLength(1); expect(view.combat(250).bugs).toHaveLength(0);
+  view.clear(); expect(view.combat(1000).events).toHaveLength(0); view.push(s, 1000); expect(view.combat(1100).events[0]!.type).toBe("kill");
+});
 
 test("hive has cached pulsing art, authoritative health, edge arrow, minimap diamond and delayed awards/banner", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");

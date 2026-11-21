@@ -49,6 +49,24 @@ test("JSON and binary clients share hive, ring, life rewards and idempotent pers
   } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
 }, 10000);
 
+test("real JSON and binary clients receive beetle state and shell bounces", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "beetle-wire-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const url = `ws://127.0.0.1:${app.server.port}/ws`, a = client(url, 1), b = client(url, 2, "Other", undefined, true);
+  try {
+    await Promise.all([a.wait(m => m.type === "welcome"), b.wait(m => m.type === "welcome")]);
+    const room = app.arenas.active.get(a.id)!.room!, p = room.state.players.get(a.id)!;
+    const bug = createBug("beetle", 999, 1200, 1200); room.state.bugs = [bug];
+    Object.assign(p, { x: 1400, y: 1200 });
+    Object.assign(room.state.players.get(b.id)!, { x: 1600, y: 1200 });
+    room.state.shots.push({ id: room.state.nextId++, owner: p.id, life: 1, x: bug.x + 24, y: bug.y, vx: -900, vy: 0, born: room.state.tick * 50 });
+    const [json, binary] = await Promise.all([a, b].map(c => c.wait((m): m is Snapshot => m.type === "snapshot" &&
+      m.bugs.some(b => b.id === 999 && b.kind === "beetle") && m.events.some(e => e.kind === "beetle" && e.type === "bounce"))));
+    expect(binary!.tick).toBe(json!.tick);
+    expect(binary!.events).toEqual(json!.events);
+  } finally { a.socket.close(); b.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 10000);
+
 test.each([false, true])("two real clients receive the same swell, glob, interception and five points (compact=%s)", async compact => {
   const scratch = mkdtempSync(join(tmpdir(), "spitter-wire-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
