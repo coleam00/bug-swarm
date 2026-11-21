@@ -12,14 +12,18 @@ test("the entry mounts the board by pathname; board routes load only the board a
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
 let gameImports = 0;
+let arenaImports = 0;
 const Game = () => null;
+const Arena = () => null;
 mock.module(${moduleUrl("App.tsx")}, () => { gameImports++; return { App: Game }; });
+mock.module(${moduleUrl("arena/Arena.tsx")}, () => { arenaImports++; return { Arena }; });
 Object.defineProperty(globalThis, "localStorage", { get() { throw new Error("Player storage on board"); } });
 const { loadView } = await import(${moduleUrl("route.ts")});
 const { Board } = await import(${moduleUrl("board/Board.tsx")});
 for (const path of ["/board", "/board/", new URL("https://swarm.test/board?stream=1").pathname]) {
   assert.equal(await loadView(path), Board);
   assert.equal(gameImports, 0, "Board imported the game");
+  assert.equal(arenaImports, 0, "Board imported the arena");
 }
 // Exercise the actual entry-to-router connection, with a deliberately different
 // hash so using the wrong location field cannot accidentally select the board.
@@ -38,6 +42,9 @@ assert.equal(element.props.children.type, Board, "The actual entry did not mount
 assert.equal(gameImports, 0, "The board entry imported the game");
 for (const path of ["/", "/other", "/boardwalk"]) assert.equal(await loadView(path), Game);
 assert.equal(gameImports, 1);
+for (const path of ["/arena", "/arena/"]) assert.equal(await loadView(path), Arena);
+assert.equal(arenaImports, 1);
+assert.equal(gameImports, 1, "Arena imported release 1");
 `;
   try {
     const child = Bun.spawnSync([process.execPath, "--eval", probe], {

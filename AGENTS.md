@@ -10,6 +10,7 @@ A real-time multiplayer arena shooter for a livestream audience: viewers share a
 Quick commands:
 - `bun install` then `bun run dev`
 - `bun run check` must pass before any pull request.
+- `/arena` is the release 2 movement slice. `bun run bots -- --url http://127.0.0.1:3000 --count 18 --seconds 60` fills a locally started arena; use separate browser storage contexts for different human identities. Press F for frame timings. Evidence: `docs/arena-validation.md`.
 - `bun run stats` prints the bet's numbers. `bun run hide "<name>"` hides a name from every board.
 - `bun run review` lists held scores; `bun run approve <run id>` releases one. Scores strictly above 3,000 await review, including honest outliers, and do not count on public boards, personal standings or team totals until approved. Commands use `DATA_DIR/app.db` (default `data/app.db`).
 - Pacing reports review candidates without failing on them.

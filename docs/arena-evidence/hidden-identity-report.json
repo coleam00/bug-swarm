@@ -1,0 +1,14 @@
+{
+  "checks": [
+    "first-time hidden name offers editable correction, then admits the corrected name",
+    "real hide CLI removes a live saved identity and explains that it cannot rejoin",
+    "saved identity refused before welcome after reload gets the same explanation",
+    "a saved legacy identity with no database registration also gets permanent-name guidance",
+    "a different fresh visitor can still correct a first-time refusal"
+  ],
+  "errors": [],
+  "base": "http://127.0.0.1:54626",
+  "browser": "156.0.8078.4",
+  "savedMessage": "This identity cannot rejoin because its name is hidden. Saved names are permanent.",
+  "finished": true
+}

@@ -6,6 +6,10 @@ import { join, resolve } from "node:path";
 const workspace = resolve(import.meta.dir, "../..");
 const scratch = mkdtempSync(join(tmpdir(), "startup-test-"));
 const home = join(scratch, "home");
+const CHILD_TIMEOUT_MS = 10_000;
+// Keep Bun's test watchdog outside the child's deadline, including exit/assertion
+// overhead. Windows CI can spend more than the default five seconds in a probe.
+const STARTUP_TEST_TIMEOUT_MS = CHILD_TIMEOUT_MS + 5_000;
 const env = {
   ...process.env,
   HOME: home,
@@ -82,7 +86,7 @@ beforeAll(() => {
     cwd: scratch, env, stdout: "pipe", stderr: "pipe", timeout: 30_000,
   });
   expect(build.exitCode, build.stderr.toString()).toBe(0);
-}, 30_000);
+}, 35_000);
 
 afterAll(() => {
   // Child processes have exited and released SQLite handles before cleanup.
@@ -93,25 +97,25 @@ test("invalid load override fails before creating a database or starting a liste
   const dataDir = join(scratch, "invalid-data");
   const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
     cwd: scratch, env: { ...env, DATA_DIR: dataDir, LOAD_TEST_START_LIMIT: "" },
-    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS,
   });
   expect(child.exitCode).not.toBe(0);
   expect(child.stderr.toString()).toContain("LOAD_TEST_START_LIMIT must be a positive safe integer");
   expect(child.stdout.toString()).not.toContain("App on");
   expect(existsSync(dataDir)).toBe(false);
-});
+}, STARTUP_TEST_TIMEOUT_MS);
 
 test("invalid proxy hops fail before creating a database or starting a listener", () => {
   const dataDir = join(scratch, "invalid-proxy-data");
   const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
     cwd: scratch, env: { ...env, DATA_DIR: dataDir, TRUST_PROXY_HOPS: "1e0" },
-    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS,
   });
   expect(child.exitCode).not.toBe(0);
   expect(child.stderr.toString()).toContain("TRUST_PROXY_HOPS must be a canonical nonnegative safe integer");
   expect(child.stdout.toString()).not.toContain("App on");
   expect(existsSync(dataDir)).toBe(false);
-});
+}, STARTUP_TEST_TIMEOUT_MS);
 
 test.each(["0", "1", "2"])("startup wires proxy hops %s into client accounting", (hops) => {
   const child = Bun.spawnSync([process.execPath, "--eval", `
@@ -131,21 +135,21 @@ test.each(["0", "1", "2"])("startup wires proxy hops %s into client accounting",
     }
   `], {
     cwd: scratch, env: { ...env, TRUST_PROXY_HOPS: hops, DATA_DIR: join(scratch, `hops-${hops}`) },
-    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS,
   });
   expect(child.exitCode, child.stderr.toString()).toBe(0);
-});
+}, STARTUP_TEST_TIMEOUT_MS);
 
 test("invalid public origin fails before opening the database", () => {
   const dataDir = join(scratch, "invalid-origin-data");
   const child = Bun.spawnSync([process.execPath, "src/server/main.ts"], {
     cwd: scratch, env: { ...env, DATA_DIR: dataDir, PUBLIC_ORIGIN: "https://example.test/path" },
-    stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS,
   });
   expect(child.exitCode).not.toBe(0);
   expect(child.stderr.toString()).toContain("PUBLIC_ORIGIN");
   expect(existsSync(dataDir)).toBe(false);
-});
+}, STARTUP_TEST_TIMEOUT_MS);
 
 test.each([
   { name: "defaults", overrides: {}, port: 3000, dataDir: "data", hostname: "0.0.0.0" },
@@ -167,7 +171,7 @@ test.each([
   { name: "Railway origin", overrides: { RAILWAY_PUBLIC_DOMAIN: "swarm.up.railway.app", DATA_DIR: join(scratch, "railway-data") }, port: 3000, dataDir: join(scratch, "railway-data"), hostname: "0.0.0.0" },
 ])("startup uses $name", async ({ overrides, port, dataDir, hostname }) => {
   const child = Bun.spawnSync([process.execPath, "--eval", probe], {
-    cwd: scratch, env: { ...env, ...overrides }, stdout: "pipe", stderr: "pipe", timeout: 10_000,
+    cwd: scratch, env: { ...env, ...overrides }, stdout: "pipe", stderr: "pipe", timeout: CHILD_TIMEOUT_MS,
   });
   expect(child.exitCode, child.stderr.toString()).toBe(0);
   const result = JSON.parse(readFileSync(join(scratch, "startup.json"), "utf8"));
@@ -200,4 +204,4 @@ test.each([
   }
   const builtAsset = await Bun.file(join(scratch, "dist", result.assetPath)).arrayBuffer();
   expect(result.assetHash).toBe(new Bun.CryptoHasher("sha256").update(builtAsset).digest("hex"));
-}, 15_000);
+}, STARTUP_TEST_TIMEOUT_MS);

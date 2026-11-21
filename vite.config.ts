@@ -23,6 +23,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/ws": { target, ws: true },
       "/api": target,
       "/health": target,
       "^/(favicon\\.svg|favicon\\.ico|apple-touch-icon\\.png|og-image\\.png)$": target,

@@ -1,0 +1,50 @@
+[
+  {
+    "label": "local ring removed",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "solid floor",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "ring also on remotes",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "saved hidden guidance removed",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "fresh hidden guidance replaced",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "error code dropped",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "label offset changed harmlessly",
+    "expectedPass": true,
+    "exit": 0,
+    "ok": true
+  },
+  {
+    "label": "bot padding removed harmlessly",
+    "expectedPass": true,
+    "exit": 0,
+    "ok": true
+  }
+]

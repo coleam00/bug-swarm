@@ -1,0 +1,320 @@
+{
+  "flags": [
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows"
+  ],
+  "errors": [],
+  "checks": [
+    "both human clients see each other move",
+    "two humans plus 18 bots pack one arena",
+    "bots move in both views",
+    "portrait floating stick survives a second right touch and cancels without delayed reacquisition",
+    "rotation clears an active touch stick",
+    "100ms simulated WebSocket round trip moves and converges after stop",
+    "reconnect resets the movement session without duplicate ownership",
+    "release 1 at / still starts and moves",
+    "phone entry fits portrait and landscape with 44px targets"
+  ],
+  "metrics": {
+    "desktop-1280x800": [
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.210",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.198",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.210",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.218",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.195",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.198",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.226",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.250",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.207",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.210",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.243",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.220",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.228",
+          "players": "20",
+          "x": "1201.43",
+          "y": "1126.25"
+        },
+        {
+          "fps": "60.0",
+          "frameMs": "0.223",
+          "players": "20",
+          "x": "1150.86",
+          "y": "1221.39"
+        }
+      ]
+    ],
+    "portrait-390x844-full-arena": [
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.188",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.213",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.210",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.218",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.203",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.188",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.208",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ]
+    ],
+    "landscape-844x390-full-arena": [
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.245",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.258",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.203",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.200",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.285",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.198",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ],
+      [
+        {
+          "fps": "60.0",
+          "frameMs": "0.193",
+          "players": "20",
+          "x": "1318.43",
+          "y": "1126.25"
+        }
+      ]
+    ]
+  },
+  "base": "http://127.0.0.1:54490",
+  "browser": "156.0.8078.4",
+  "bun": "1.4.2",
+  "fullStats": {
+    "arenas": [
+      {
+        "id": "bd9ffd54-9de0-422e-886f-393c746a2287",
+        "players": 20
+      }
+    ],
+    "totalPlayers": 20,
+    "tick": {
+      "windowMs": 60000,
+      "samples": 40,
+      "p50Ms": 0.12299999999981992,
+      "p95Ms": 0.37979999999993197
+    },
+    "schedulerLateness": {
+      "windowMs": 60000,
+      "samples": 40,
+      "p50Ms": 0.7385999999999058,
+      "p95Ms": 1.374699999999848
+    },
+    "dropped": {
+      "malformed": 0,
+      "unknown": 0,
+      "oversized": 0,
+      "rateLimited": 0,
+      "sequence": 0,
+      "handshake": 0,
+      "backpressure": 0
+    }
+  },
+  "bots": {
+    "requested": 18,
+    "joins": 18,
+    "arenas": [
+      "bd9ffd54-9de0-422e-886f-393c746a2287"
+    ],
+    "arenaCount": 1,
+    "sent": 21233,
+    "received": 21447,
+    "messagesPerSecond": {
+      "sent": 353.843301271444,
+      "received": 357.4095644689238
+    },
+    "errors": 0,
+    "tick": {
+      "windowMs": 60000,
+      "samples": 1181,
+      "p50Ms": 0.3629000000000815,
+      "p95Ms": 0.8605999999999767
+    }
+  },
+  "finished": true
+}

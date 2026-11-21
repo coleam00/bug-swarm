@@ -78,15 +78,29 @@ export function getRun(db: Database, id: string): Run | null {
   return db.query("SELECT * FROM runs WHERE id = ?").get(id) as Run | null;
 }
 export type StartResult = { runId: string } | { error: "team-required" | "name-conflict" } | { error: "team-conflict"; team: Team };
+/** Call inside a transaction; shared by arena entry and release 1 run creation. */
+function registerPlayer(db: Database, playerId: string, name: string, team?: Team): { team: Team | null } | Exclude<StartResult, { runId: string }> {
+  const player = db.query("SELECT name, team FROM players WHERE id = ?").get(playerId) as { name: string; team: Team | null } | null;
+  if (player && player.name !== name) return { error: "name-conflict" };
+  if (!player && !team) return { error: "team-required" };
+  if (player?.team && team && player.team !== team) return { error: "team-conflict", team: player.team };
+  const assigned = player?.team ?? team ?? null;
+  if (!player) db.query("INSERT INTO players(id, name, name_key, team) VALUES (?, ?, ?, ?)").run(playerId, name, nameKey(name), assigned);
+  else if (!player.team && team) db.query("UPDATE players SET team = ? WHERE id = ?").run(team, playerId);
+  return { team: assigned };
+}
+export function registerArenaPlayer(db: Database, playerId: string, name: string, team: Team) {
+  return db.transaction(() => {
+    // UUID hex casing cannot create a new arena identity or bypass a release 1 team assignment.
+    const existing = db.query("SELECT id FROM players WHERE id = ? COLLATE NOCASE ORDER BY id LIMIT 1").get(playerId) as { id: string } | null;
+    return registerPlayer(db, existing?.id ?? playerId.toLowerCase(), name, team);
+  }).immediate();
+}
 export function startRun(db: Database, playerId: string, name: string, now: number, team?: Team): StartResult {
   return db.transaction(() => {
-    const player = db.query("SELECT name, team FROM players WHERE id = ?").get(playerId) as { name: string; team: Team | null } | null;
-    if (player && player.name !== name) return { error: "name-conflict" } as const;
-    if (!player && !team) return { error: "team-required" } as const;
-    if (player?.team && team && player.team !== team) return { error: "team-conflict", team: player.team } as const;
-    const assigned = player?.team ?? team ?? null;
-    if (!player) db.query("INSERT INTO players(id, name, name_key, team) VALUES (?, ?, ?, ?)").run(playerId, name, nameKey(name), assigned);
-    else if (!player.team && team) db.query("UPDATE players SET team = ? WHERE id = ?").run(team, playerId);
+    const result = registerPlayer(db, playerId, name, team);
+    if ("error" in result) return result;
+    const assigned = result.team;
     const id = crypto.randomUUID();
     db.query("INSERT INTO runs(id, player_id, started_at_ms, team) VALUES (?, ?, ?, ?)").run(id, playerId, now, assigned);
     db.query("INSERT INTO events(type, at, run_id) VALUES (?, ?, ?)").run(EVENT_TYPES[1], new Date(now).toISOString(), id);

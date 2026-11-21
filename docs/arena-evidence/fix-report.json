@@ -1,0 +1,178 @@
+{
+  "checks": [
+    "refused fresh identity remains editable and corrects without storage clearing",
+    "refused identity stays editable after reload and corrected Tabs choice is persisted on welcome",
+    "accepted identity remains fixed across reload and rejoins without duplicate mounting",
+    "both local and remote wide accepted names fit their measured cache canvases",
+    "movement and floating stick still reach the shared world after admission",
+    "a later refusal preserves the permanent accepted identity"
+  ],
+  "errors": [],
+  "metrics": [
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.222",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.245",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.262",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.270",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.282",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.230",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.213",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.225",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.213",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.210",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.223",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.220",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ],
+    [
+      {
+        "fps": "60.0",
+        "frameMs": "0.218",
+        "players": "20",
+        "x": "904.31",
+        "y": "1131.20"
+      },
+      {
+        "fps": "60.0",
+        "frameMs": "0.215",
+        "players": "20",
+        "x": "1289.58",
+        "y": "1127.94"
+      }
+    ]
+  ],
+  "flags": [
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows"
+  ],
+  "base": "http://127.0.0.1:51626",
+  "browser": "156.0.8078.4",
+  "bun": "1.4.2",
+  "labels": [
+    {
+      "text": "WideWWWWWWWWWWWW",
+      "width": 214,
+      "center": 107,
+      "left": 102.5546875,
+      "right": 102.486328125
+    },
+    {
+      "text": "WideMMMMMMMMMMMM",
+      "width": 206,
+      "center": 103,
+      "left": 98.53515625,
+      "right": 97.13671875
+    },
+    {
+      "text": "WideWWWWWWWWWWWW",
+      "width": 214,
+      "center": 107,
+      "left": 102.5546875,
+      "right": 102.486328125
+    }
+  ],
+  "bots": {
+    "requested": 18,
+    "joins": 18,
+    "arenas": [
+      "2e0ba2f0-82f7-4214-a704-a8b3d1c8d7d7"
+    ],
+    "arenaCount": 1,
+    "sent": 21242,
+    "received": 21447,
+    "messagesPerSecond": {
+      "sent": 354.01291209849893,
+      "received": 357.42938168611744
+    },
+    "errors": 0,
+    "tick": {
+      "windowMs": 60000,
+      "samples": 1180,
+      "p50Ms": 0.34619999999995343,
+      "p95Ms": 0.7836000000024796
+    }
+  },
+  "finished": true
+}
