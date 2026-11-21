@@ -25,7 +25,7 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
   try {
     const peers = new WeakMap<Request, string>();
     const trusted = (env.TRUSTED_PROXIES ?? "").split(",").map(v => v.trim()).filter(Boolean);
-    const app = createApp(db, { scoreCacheHook: invalidate => { invalidateScores = invalidate; }, startLimit, arenaStats: () => arenas.stats(), clientIp: request => resolveClientIp(
+    const app = createApp(db, { scoreCacheHook: invalidate => { invalidateScores = invalidate; }, startLimit, arenaStats: query => arenas.stats(query), clientIp: request => resolveClientIp(
       peers.get(request) ?? "unknown", request.headers.get("x-forwarded-for"), trusted, trustProxyHops,
     ) });
     app.route("/", shareAssets);

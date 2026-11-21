@@ -3,9 +3,10 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
+import { CdpSnapshots } from "./cdp-snapshots";
 // Run from a clean checkout after bun install. Every generated file stays in
 // this checkout; the owned Chrome/server processes never use an operator profile.
-const root = resolve(import.meta.dir, ".."), evidenceRoot = join(root, ".evidence/73");
+const root = resolve(import.meta.dir, ".."), evidenceRoot = join(root, ".evidence/77");
 mkdirSync(evidenceRoot, { recursive: true });
 const evidence = mkdtempSync(join(evidenceRoot, "redeploy-")), data = join(evidence, "data"), profile = join(evidence, "chrome-profile"), changed = join(evidence, "changed");
 mkdirSync(data, { recursive: true });
@@ -75,6 +76,7 @@ try {
   const targets: any[] = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
   ws = new WebSocket(targets.find(t => t.type === "page").webSocketDebuggerUrl);
   let next = 0, navigation = 0, latest: any, welcomes: any[] = [], restarts: any[] = [];
+  const frames = new CdpSnapshots(); let activeSocket: string | undefined;
   const pending = new Map<number, { resolve: (value: any) => void; reject: (value: any) => void }>();
   const send = (method: string, params: any = {}) => new Promise<any>((resolve, reject) => { const id = ++next; pending.set(id, { resolve, reject }); ws!.send(JSON.stringify({ id, method, params })); });
   ws.onmessage = raw => {
@@ -82,14 +84,15 @@ try {
     if (message.id) { const item = pending.get(message.id); pending.delete(message.id); if (message.error) item?.reject(message.error); else item?.resolve(message.result); return; }
     const p = message.params;
     if (message.method === "Page.frameNavigated" && !p.frame.parentId) { navigation++; log("navigation", { navigation, url: p.frame.url }); }
-    if (message.method === "Network.webSocketCreated") log("socket-created", { requestId: p.requestId });
-    if (message.method === "Network.webSocketClosed") log("socket-closed", { requestId: p.requestId });
+    if (message.method === "Network.webSocketCreated") { frames.created(p.requestId); activeSocket = p.requestId; latest = undefined; log("socket-created", { requestId: p.requestId }); }
+    if (message.method === "Network.webSocketClosed") { frames.closed(p.requestId); if (activeSocket === p.requestId) latest = undefined; log("socket-closed", { requestId: p.requestId }); }
     if (message.method === "Network.webSocketFrameSent") {
       try { const m = JSON.parse(p.response.payloadData); if (m.type === "hello") log("hello", { message: m }); } catch {}
     }
     if (message.method === "Network.webSocketFrameReceived") {
       try {
-        const m = JSON.parse(p.response.payloadData);
+        if (p.requestId !== activeSocket) return;
+        const m = frames.read(p.requestId, p.response); if (!m) return;
         if (m.type === "snapshot") {
           latest = m;
           const welcome = welcomes.at(-1);
@@ -100,7 +103,7 @@ try {
         if (m.type === "welcome") { welcomes.push(log("welcome", { message: m })); }
         if (m.type === "server_restart") { restarts.push(log("restart", { message: m })); }
         if (m.type === "life_over") log("wire-life-over", { message: m });
-      } catch {}
+      } catch (error) { log("wire-decode-error", { requestId: p.requestId, error: String(error) }); }
     }
     if (message.method === "Runtime.consoleAPICalled") log("browser-console", { level: p.type, args: p.args.map((a: any) => a.value ?? a.description) });
     if (message.method === "Runtime.exceptionThrown") log("browser-exception", { details: p.exceptionDetails });
@@ -207,6 +210,7 @@ try {
   await until(() => latest?.players.some((p: any) => p.id === browserId && p.hits > 0), "root arena plays");
   await screenshot("root-playing");
   assert(!events.some(e => e.type === "browser-exception"), "Browser exceptions during validation");
+  assert(!events.some(e => e.type === "wire-decode-error"), "Invalid WebSocket frames during validation");
   await app!.stop("cleanup"); app = undefined;
   await send("Browser.close").catch(() => {}); await chrome.exited;
   await Bun.write(join(evidence, "browser-validation.json"), JSON.stringify({ chrome: targets[0]?.title, scenarios, events }, null, 2));

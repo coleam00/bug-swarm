@@ -65,7 +65,7 @@ bun run check
 
 Run from a clean committed checkout with Bun, Git and Chrome installed. The harness builds both artifacts itself; the standalone build command is optional. If Chrome is not at a conventional installation path, set `CHROME_PATH` to its executable (`$env:CHROME_PATH = 'C:/path/to/chrome.exe'` in PowerShell, or `export CHROME_PATH='/path/to/chrome'` in a POSIX shell).
 
-`scripts/validate-redeploy.ts` creates and prints a unique `.evidence/66/redeploy-*` directory, including a scratch home, temporary directory, database and Chrome profile. It builds this commit, creates a disposable clone with a comment-only commit, and builds that clone using the installed dependencies. It starts only its own loopback servers on an ephemeral port, starts Chrome through CDP and launches ten aimer bots for each restart. It exercises same-build reconnect, changed-build reload, rollback, redeploy to the previously visited build, and a save held by a 3.5-second SQLite lock. It checks navigation counts, identity, saved feedback, per-run restart reasons/events, and stats; then checks full-room timing, phone layouts, two-touch input and release 1. It stops all processes it started even when an assertion fails. All generated outputs remain under the printed evidence directory; no preexisting `.evidence` files or server are needed.
+`scripts/validate-redeploy.ts` creates and prints a unique `.evidence/77/redeploy-*` directory, including a scratch home, temporary directory, database and Chrome profile. It builds this commit, creates a disposable clone with a comment-only commit, and builds that clone using the installed dependencies. It starts only its own loopback servers on an ephemeral port, starts Chrome through CDP and launches ten aimer bots for each restart. It exercises same-build reconnect, changed-build reload, rollback, redeploy to the previously visited build, and a save held by a 3.5-second SQLite lock. It checks navigation counts, identity, saved feedback, per-run restart reasons/events, and stats; then checks full-room timing, phone layouts, two-touch input and arena entry at `/`. It stops all processes it started even when an assertion fails. All generated outputs remain under the printed evidence directory; no preexisting `.evidence` files or server are needed.
 
 On Windows the harness emits the production entry's registered SIGTERM handler through child stdin; on Linux/macOS it sends OS SIGTERM. Bot CLI disconnect failures at an intentional restart are expected; it does not reconnect. The application uses graceful socket acknowledgements, without persistent receipt replay: a missed acknowledgement produces reconnect feedback without claiming the score was saved.
 
@@ -75,3 +75,21 @@ Evidence files (gitignored):
 - `same-server.log`, `changed-server.log`, `same-bots.log`, `changed-bots.log`, `same-stats.txt`, `changed-stats.txt`.
 - `before-*-restart.png`, `*-saved-overlay.png`, `*-rejoined.png`, `full-room-frame-timing.png`, `portrait-play.png`, `release1-entry.png`, `release1-playing.png`.
 - `check-final.log`, `build.log`, `changed-build.log`, `shutdown-tests-2.log`, `storage-tests.log`.
+
+## Compact snapshot follow-up (#77)
+
+The CDP observer now decodes opcode-2 payloads from base64 through the shared snapshot decoder, retaining one baseline per WebSocket request id. Creation/reconnection resets that baseline; closure discards it and clears the active snapshot. Invalid frames are recorded and fail the proof instead of disappearing in a JSON-parser catch. A regression test covers JSON controls, binary keyframes/deltas, independent sockets, reused ids and closed-socket frames.
+
+Reran the complete production harness on factory Windows with Bun 1.4.2 and Chrome 157.0.8103.51. Original artifact: `bc6dfb8`; comment-only changed artifact: `7be7fdb4d8f77812dc2e09c41164f93e3a0ef777`. Both were built by the harness with fresh scratch home/data/profile under `.evidence/77/redeploy-Wa1MKQ`.
+
+| Scenario | Shutdown (ms) | Playable again (ms) | Navigations | Saved active lives |
+| --- | ---: | ---: | ---: | ---: |
+| same | 69.4 | 3561.3 | 0 | 11/11 |
+| changed | 41.0 | 3636.7 | 1 | 11/11 |
+| rollback | 36.1 | 596.1 | 1 | 11/11 |
+| redeploy | 43.9 | 1678.0 | 1 | 11/11 |
+| delayed | 3549.3 | 5051.7 | 0 | 11/11 |
+
+All five restart scenarios passed identity/build checks and exactly one saved restart event per active life. Observed pre-stop snapshot ticks were 62, 46, 57, 47 and 50, confirming decoded deltas as well as keyframes. There were zero wire-decoding errors and browser exceptions. The full-room check showed 20 players, 60.0 FPS, 0.295 ms/frame and tick p95 2.032 ms. Portrait/landscape, two-touch input and root arena entry/rejoin also passed; all owned processes exited. Rejoin measurements include post-stop database/stat inspection and replacement startup, rather than measuring only client reconnect latency.
+
+Evidence: `.evidence/77/fix-redeploy.log`, `.evidence/77/redeploy-Wa1MKQ/browser-validation.json`, `browser-events.json` and `full-room-frame-timing.png`. The latter screenshot was inspected. Earlier evidence in this document remains historical.

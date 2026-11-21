@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../server";
 import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
-import { runBots } from "../../../scripts/bots";
+import { runBots, BotFailure } from "../../../scripts/bots";
 import { createBug } from "../../shared/arena/bugs/registry";
 function client(url: string, index: number, name = `bot-${index}`, id = crypto.randomUUID()) {
   const socket = new WebSocket(url), messages: ServerMessage[] = [];
@@ -136,28 +136,79 @@ test("real server: clients see each other move, 21st player is isolated, refused
     rmSync(scratch, { recursive: true, force: true });
   }
 }, 10000);
+// Admission and each HTTP request already have CLI deadlines. The outer test
+// must also allow five calibration reads, measurement, cancellation and cleanup.
+const CLI_STARTUP_MS = 10_000;
+const CLI_MEASUREMENT_MS = 1_000 + 6 * 5_000 + 2_000;
+const CANCELLATION_STARTUP_MS = 10_000, CANCELLATION_MS = 8_000;
+const PEER_CLEANUP_MS = 2_000, FINAL_CLEANUP_MS = 8_000;
+const CLI_TEST_TIMEOUT_MS = 3_000 + CLI_STARTUP_MS + CLI_MEASUREMENT_MS +
+  CANCELLATION_STARTUP_MS + CANCELLATION_MS + 2 * PEER_CLEANUP_MS + FINAL_CLEANUP_MS + 5_000;
+
 test("real bot CLI wanders, reports required fields and cleans up, including cancellation", async () => {
   const scratch = mkdtempSync(join(tmpdir(), "arena-bots-")), home = join(scratch, "home"); mkdirSync(home);
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
-  const observer = client(`ws://127.0.0.1:${app.server.port}/ws`, 99, "Observer");
-  let child: ReturnType<typeof Bun.spawn> | undefined;
+  // Exercise the real CLI/HTTP boundary with deterministic tick costs. CPU
+  // budgets belong to the dedicated production run, not this one-second test.
+  const readStats = app.arenas.stats.bind(app.arenas);
+  app.arenas.stats = query => {
+    const value = readStats(query);
+    if (value.window) for (const metric of [value.window.tick, ...value.window.arenas.map(a => a.tick)]) {
+      metric.raw = metric.raw?.map(() => .1); metric.p50Ms = metric.p95Ms = metric.maxMs = metric.samples ? .1 : null;
+    }
+    return value;
+  };
+  const observer = client('ws://127.0.0.1:' + app.server.port + '/ws', 99, "Observer");
+  let child: ReturnType<typeof Bun.spawn> | undefined, stdout = "", stderr = "";
+  let cancellation: ReturnType<typeof runBots> | undefined, interrupted: AbortController | undefined;
+  let readers: Promise<void>[] = [];
+  const timings: Record<string, number> = {};
+  const detail = () => JSON.stringify({ pid: child?.pid, exitCode: child?.exitCode, players: app.arenas.active.size,
+    connections: app.arenas.connections.size, stdout: stdout.slice(-2000), stderr: stderr.slice(-2000) });
+  async function within<T>(label: string, ms: number, task: Promise<T>): Promise<T> {
+    const start = performance.now(); let timer: ReturnType<typeof setTimeout> | undefined;
+    try { return await Promise.race([task, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Error(label + " exceeded " + ms + " ms: " + detail())), ms);
+    })]); } finally { clearTimeout(timer); timings[label] = performance.now() - start; }
+  }
+  async function waitFor(label: string, ms: number, ready: () => boolean) {
+    const start = performance.now();
+    try {
+      while (!ready()) {
+        if (performance.now() - start >= ms) throw Error(label + " exceeded " + ms + " ms: " + detail());
+        await Bun.sleep(5);
+      }
+    } finally { timings[label] = performance.now() - start; }
+  }
+  async function read(stream: ReadableStream<Uint8Array>, append: (text: string) => void) {
+    const reader = stream.getReader(), decoder = new TextDecoder();
+    try { while (true) { const part = await reader.read(); if (part.done) break; append(decoder.decode(part.value, { stream: true })); } append(decoder.decode()); }
+    finally { reader.releaseLock(); }
+  }
   try {
     const welcome = await observer.wait((m): m is Extract<ServerMessage, { type: "welcome" }> => m.type === "welcome");
-    const running = Bun.spawn([process.execPath, "run", "bots", "--", "--url", `http://127.0.0.1:${app.server.port}`, "--count", "2", "--seconds", "1"], {
+    // Launch the actual CLI directly: a package-wrapper child adds cold-start
+    // time and can orphan its CLI grandchild when a test watchdog kills it.
+    const running = Bun.spawn([process.execPath, "scripts/bots.ts", "--", "--url", 'http://127.0.0.1:' + app.server.port, "--count", "2", "--seconds", "1"], {
       cwd: join(import.meta.dir, "../../.."),
       env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home, DATA_DIR: join(scratch, "data") },
       stdout: "pipe", stderr: "pipe",
     });
     child = running;
-    const [stdout, stderr, exit] = await Promise.all([new Response(running.stdout).text(), new Response(running.stderr).text(), running.exited]);
+    readers = [read(running.stdout, text => stdout += text), read(running.stderr, text => stderr += text)];
+    await waitFor("CLI startup/admission", CLI_STARTUP_MS, () => {
+      if (running.exitCode !== null) throw Error("CLI exited before admission: " + detail());
+      return app.arenas.active.size === 3;
+    });
+    const [exit] = await within("CLI measurement/report/exit", CLI_MEASUREMENT_MS, Promise.all([running.exited, ...readers]));
     expect(exit, stderr).toBe(0);
     const result = JSON.parse(stdout);
     expect(result).toMatchObject({ requested: 2, joins: 2, arenaCount: 1, errors: 0, arenas: [welcome.arenaId] });
-    expect(result.sent).toBeGreaterThan(20); expect(result.received).toBeGreaterThan(20);
-    for (const rate of [result.messagesPerSecond.sent, result.messagesPerSecond.received]) {
+    expect(result.client.sent).toBeGreaterThan(20); expect(result.client.received).toBeGreaterThan(20);
+    for (const rate of [result.client.messagesPerSecond.out, result.client.messagesPerSecond.in]) {
       expect(Number.isFinite(rate)).toBe(true); expect(rate).toBeGreaterThan(0);
     }
-    expect(result.tick.windowMs).toBe(60000); expect(result.tick.samples).toBeGreaterThan(0);
+    expect(result.untilMs - result.sinceMs).toBe(1000); expect(result.tick.samples).toBeGreaterThan(0);
     expect(Number.isFinite(result.tick.p50Ms)).toBe(true); expect(Number.isFinite(result.tick.p95Ms)).toBe(true);
     expect(result.tick.p95Ms).toBeGreaterThanOrEqual(result.tick.p50Ms);
     const observations = observer.messages.flatMap(m => m.type === "snapshot" ? m.players.filter(p => p.id !== observer.id) : []);
@@ -169,18 +220,31 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
       expect(positions.some(p => Math.hypot(p.x - first.x, p.y - first.y) > 5)).toBe(true);
     }
     observer.socket.close();
-    // Client close events precede the peer's close callbacks. Wait for the actual server cleanup.
-    const deadline = performance.now() + 2000;
-    while (app.arenas.active.size && performance.now() < deadline) await Bun.sleep(5);
+    await waitFor("CLI peer cleanup", PEER_CLEANUP_MS, () => app.arenas.connections.size === 0);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
-    const interrupted = new AbortController(), timer = setTimeout(() => interrupted.abort(), 200);
-    try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
-    finally { clearTimeout(timer); }
-    const abortedDeadline = performance.now() + 2000;
-    while (app.arenas.active.size && performance.now() < abortedDeadline) await Bun.sleep(5);
-    expect(app.arenas.active.size).toBe(0); expect(app.arenas.connections.size).toBe(0);
+    interrupted = new AbortController();
+    cancellation = runBots({ url: 'http://127.0.0.1:' + app.server.port, count: 21, seconds: 60 }, interrupted.signal);
+    let cancellationFailure: unknown;
+    void cancellation.catch(error => { cancellationFailure = error; });
+    await waitFor("worker startup/play", CANCELLATION_STARTUP_MS, () => {
+      if (cancellationFailure) throw cancellationFailure;
+      return app.arenas.active.size === 21 && [...app.arenas.active.values()].every(c => c.ackSeq > 0);
+    });
+    interrupted.abort();
+    await within("worker cancellation", CANCELLATION_MS, cancellation.then(
+      () => { throw Error("Expected worker cancellation to reject"); },
+      error => { expect(error).toBeInstanceOf(BotFailure); },
+    ));
+    await waitFor("cancelled peer cleanup", PEER_CLEANUP_MS, () => app.arenas.connections.size === 0);
+    expect(app.arenas.active.size).toBe(0); expect(app.arenas.connections.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
   } finally {
-    if (child && child.exitCode === null) { child.kill(); await child.exited; }
-    observer.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true });
+    interrupted?.abort(); observer.socket.close();
+    await within("final cleanup", FINAL_CLEANUP_MS, Promise.all([
+      (async () => { if (child?.exitCode === null) { child.kill(); await child.exited; } await Promise.all(readers); })(),
+      cancellation?.catch(() => {}),
+      app.stop(),
+    ]));
+    rmSync(scratch, { recursive: true, force: true });
+    console.info("bot CLI phase durations (ms)", JSON.stringify(timings));
   }
-}, 10000);
+}, CLI_TEST_TIMEOUT_MS);
