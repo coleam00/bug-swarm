@@ -46,6 +46,6 @@ export const BUG_SPAWN_MIN = 600;
 export const BUG_SPAWN_MAX = 900;
 export const MAX_VIEW = 900;
 export const VISIBILITY_PADDING = 64;
-export const THREAT_CURVE = [[0, 0.1], [60, 4], [120, 5], [240, 6]] as const;
+export const THREAT_CURVE = [[0, 0.1], [60, 4.25], [120, 5], [240, 6]] as const;
 export const MAX_SHOTS = MAX_PLAYERS * (Math.ceil(SHOT_RATE * SHOT_LIFETIME_MS / 1000) + 1);
 export const MAX_EVENTS = MAX_SHOTS;

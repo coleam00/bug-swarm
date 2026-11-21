@@ -111,6 +111,6 @@ test("revival resumes personal threat at the original life age without accumulat
   a.spawnCredits.set(p.id, 99); downPlayer(a, p); q.x = p.x;
   steps(a, 40); expect(p.status).toBe("active"); expect(p.startedTick).toBe(0);
   expect(a.spawnCredits.has(p.id)).toBe(false);
-  steps(a, 1); expect(a.spawnCredits.get(p.id)).toBeGreaterThan(0.2); expect(a.spawnCredits.get(p.id)).toBeLessThan(0.21);
+  steps(a, 1); expect(a.spawnCredits.get(p.id)).toBeGreaterThan(0.21); expect(a.spawnCredits.get(p.id)).toBeLessThan(0.22);
   expect(a.bugs).toHaveLength(0);
 });

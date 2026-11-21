@@ -1,6 +1,6 @@
 # Drop-in fairness validation — issue #65
 
-The current rules and measurements include the returned-check correction. Evidence stays inside this checkout under `.evidence/65/` (gitignored), with scratch homes, profiles and databases; the pull request summarizes it.
+The rules and measurements below record issue #65's returned-check correction, before downing/revival. Current arena tuning and measurements are in [revive validation](arena-revive-validation.md). Evidence stays inside this checkout under `.evidence/65/` (gitignored), with scratch homes, profiles and databases; the pull request summarizes it.
 
 ## Rules and correction
 
