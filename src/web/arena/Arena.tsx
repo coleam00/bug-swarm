@@ -45,7 +45,10 @@ function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identit
   useEffect(() => {
     const results = new ArenaResults(identity.playerId, api, setLife);
     const unmount = mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current(),
-      (result, respawn) => { press.current = null; replay.current = respawn; results.show(result); });
+      (result, respawn) => {
+        if (!result || result.life !== results.view?.result.life) press.current = null;
+        replay.current = respawn; results.show(result);
+      });
     const clear = () => { press.current = null; };
     window.addEventListener("blur", clear); document.addEventListener("visibilitychange", clear);
     return () => { unmount(); results.dispose(); window.removeEventListener("blur", clear); document.removeEventListener("visibilitychange", clear); };

@@ -78,3 +78,20 @@ wire observations and hide timing), `keyboard.json`, and Chrome screenshots:
 `slow-best-ready.png`, `board.png` and `live-hide.png`. The scratch probes are
 `validate.ts` and `keyboard.ts`. All owned browsers, bot processes and servers
 were closed after validation.
+
+## Review follow-up
+
+The entry regression now interleaves pointer-down, pending-to-saved/failed
+acknowledgement and pointer-up through the actual Arena component. Each tap
+must send one touch-attributed respawn. Replacement/removal (including a reused
+life number), blur, visibility change, scrolling and cancellation still reject
+stale gestures. Production Chrome repeated both acknowledgement interleavings
+with two natural deaths, a held touch and controlled WebSocket delivery; each
+tap advanced exactly one life.
+
+The same component test checks the numerical life score, best, rank/population,
+gap/target, both team totals and the player IDs requested by best and standing.
+Mutations of score, best, rank, gap, Spaces total, request IDs and both tap
+races fail the test; changing only the save-failure wording passes. Asynchronous ordering remains
+covered in the results-controller tests. Follow-up logs, mutation results and
+Chrome screenshots are under `.evidence/69/revision/`.
