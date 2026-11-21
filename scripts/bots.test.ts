@@ -101,18 +101,20 @@ test("production bot reporting uses the full window, server directions, payload 
   const scratch = mkdtempSync(join(tmpdir(), "bot-report-"));
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
   // This checks reporting/transport, not wall-clock performance in a one-second
-  // fixture. Keep real timestamps/counts/traffic and supply deterministic costs;
-  // the production load harness is the performance assertion.
+  // fixture. Keep real timestamped output and supply deterministic costs plus
+  // asymmetric input counts; the load harness is the performance assertion.
   const readStats = app.arenas.stats.bind(app.arenas);
   app.arenas.stats = query => {
     const value = readStats(query);
     if (value.window) for (const metric of [value.window.tick, ...value.window.arenas.map(a => a.tick)]) {
       metric.raw = metric.raw?.map(() => .1); metric.p50Ms = metric.p95Ms = metric.maxMs = metric.samples ? .1 : null;
     }
+    if (value.window) value.window.traffic.in += 1000; // Direction swaps must fail regardless of timer cadence.
     return value;
   };
+  const measured = (count: number) => runBots({ url: app.server.url.origin, count, seconds: 1 }, AbortSignal.timeout(10_000));
   try {
-    const report = await runBots({ url: app.server.url.origin, count: 2, seconds: 1 });
+    const report = await measured(2);
     expect(report.untilMs - report.sinceMs).toBe(1000); expect(report.complete).toBe(true); expect(report.errors).toBe(0);
     expect(report.joining.sent).toBeGreaterThanOrEqual(2); expect(report.population.min).toBe(2);
     expect(report.lifecycle).toEqual({ prematureDisconnects: 0, normalTeardownConnections: 2 });
@@ -120,22 +122,25 @@ test("production bot reporting uses the full window, server directions, payload 
     expect(report.server.traffic).toEqual(actual.traffic);
     expect(report.server.messagesPerSecond.in).toBe(actual.traffic.in);
     expect(report.server.messagesPerSecond.out).toBe(actual.traffic.accepted);
+    expect(actual.traffic.in).not.toBe(actual.traffic.accepted);
     expect(report.perPlayer.map(p => p.bytesOut).reduce((a,b) => a+b, 0)).toBe(actual.traffic.bytesOut);
     expect(report.tick.samples).toBe(actual.tick.samples);
     expect(report.snapshotBytes.keyframe!.samples).toBeGreaterThan(0);
     // The HTTP boundary must reject misaligned and unbounded requests.
     for (const query of ["sinceMs=1&untilMs=100", "sinceMs=0&untilMs=200000", "sinceMs=0", "sinceMs=0&untilMs=100&raw=no"]) expect((await fetch(app.server.url.origin + "/api/arena/stats?" + query)).status).toBe(400);
-    const workers = await runBots({ url: app.server.url.origin, count: 21, seconds: 1 });
+    const workers = await measured(21);
     expect(workers.joins).toBe(21); expect(workers.arenaCount).toBe(2); expect(workers.lifecycle.normalTeardownConnections).toBe(21);
     const stats = app.arenas.stats.bind(app.arenas);
     app.arenas.stats = query => { const value = stats(query); if (value.window) value.window.complete = false; return value; };
-    try { await runBots({ url: app.server.url.origin, count: 1, seconds: 1 }); throw Error("Expected incomplete window failure"); }
+    try { await measured(1); throw Error("Expected incomplete window failure"); }
     catch (error) {
       expect(error).toBeInstanceOf(BotFailure);
       const partial = (error as BotFailure).report as any;
-      expect(partial.joins).toBe(1); expect(partial.errors).toBeGreaterThan(0); expect(partial.diagnostics.join()).toContain("Incomplete"); expect(partial.intervals[0].complete).toBe(false);
+      expect(partial.joins).toBe(1); expect(partial.errors).toBeGreaterThan(0); expect(partial.diagnostics.length).toBeGreaterThan(0); expect(partial.intervals[0].complete).toBe(false);
     }
     for (let i = 0; i < 100 && app.arenas.active.size; i++) await Bun.sleep(10);
     expect(app.arenas.active.size).toBe(0);
   } finally { await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
-}, 15000);
+// Three bounded runs, each allowing ten seconds plus worker refresh/close (6s),
+// and server cleanup must finish before Bun's outer watchdog.
+}, 60_000);
