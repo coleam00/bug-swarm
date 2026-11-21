@@ -6,6 +6,7 @@ import { cameraFor } from "./camera";
 import { movePlayer } from "../../shared/arena/movement";
 import { neutralInput, lifeDefaults } from "../../shared/arena/types";
 import type { InputMessage, Snapshot } from "../../shared/arena/protocol";
+import { createArena, joinPlayer, stepArena } from "../../shared/arena/simulation";
 const player = () => ({ ...lifeDefaults(), id: crypto.randomUUID(), name: "Robot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 });
 test("floating stick has a dead zone, analog strength, exclusive left-touch ownership and cancellation", () => {
   const input = new ArenaInput();
@@ -51,7 +52,7 @@ test("arriving shots and bugs stay on the delayed timeline without reversing as 
   for (let tick = 1; tick <= 6; tick++) {
     interpolation.push(snapshot(tick), tick * 50);
     for (const now of [tick * 50, tick * 50 + 25]) {
-      const shots = interpolation.entities("shots", now), bugs = interpolation.entities("bugs", now);
+      const shots = interpolation.combat(now).shots, bugs = interpolation.combat(now).bugs;
       if (tick < 4) { expect(shots).toHaveLength(0); expect(bugs).toHaveLength(0); }
       else {
         expect(shots[0]!.x).toBeCloseTo(100 + (tick - 4 + (now % 50) / 50) * 45);
@@ -62,13 +63,55 @@ test("arriving shots and bugs stay on the delayed timeline without reversing as 
   }
   expect(positions).toEqual([...positions].sort((a, b) => a - b));
   interpolation.push({ ...snapshot(7), shots: [], bugs: [] }, 350);
-  expect(interpolation.entities("shots", 350)).toHaveLength(0); expect(interpolation.entities("bugs", 350)).toHaveLength(0);
-  interpolation.clear(); expect(interpolation.entities("shots", 1000)).toHaveLength(0);
+  expect(interpolation.combat(350).shots).toHaveLength(1); expect(interpolation.combat(350).bugs).toHaveLength(1);
+  const removed = interpolation.combat(450); expect(removed.shots).toHaveLength(0); expect(removed.bugs).toHaveLength(0);
+  interpolation.clear(); expect(interpolation.combat(1000).shots).toHaveLength(0);
 });
-test("camera follows and stops at all world edges in desktop and phone viewports", () => {
+test.each([1325, 1360])("a short-lived shot at crawler x=%i has visible travelling frames before its kill", x => {
+  const arena = createArena(1), p = joinPlayer(arena, { id: crypto.randomUUID(), name: "Pilot", team: "tabs" })!;
+  p.x = p.y = 1200; arena.bugs = [{ id: arena.nextId++, kind: "crawler", x, y: 1200, vx: 0, vy: 0 }];
+  const interpolation = new Interpolation();
+  const snapshot = (): Snapshot => structuredClone({ v: 1, type: "snapshot", arenaId: "short", tick: arena.tick, wave: arena.wave,
+    players: [{ ...p, ackSeq: 0 }], bugs: arena.bugs, shots: arena.shots, events: arena.events });
+  for (const tick of [8, 9, 10]) { arena.tick = tick; interpolation.push(snapshot(), tick * 50); }
+  const positions: number[] = [], effects: { at: number; id: number }[] = [];
+  let killedAt = 0;
+  for (let now = 500; now <= 900; now += 10) {
+    if (now > 500 && now % 50 === 0) {
+      stepArena(arena, new Map([[p.id, { ...neutralInput(), fire: now === 550 }]])); interpolation.push(snapshot(), now);
+      if (arena.events.length) killedAt = now;
+    }
+    const combat = interpolation.combat(now);
+    if (combat.shots[0]) positions.push(combat.shots[0].x);
+    if (killedAt && now < killedAt + 100) { expect(combat.bugs).toHaveLength(1); expect(combat.events).toHaveLength(0); }
+    for (const event of combat.events) {
+      effects.push({ at: now, id: event.id }); expect(combat.shots).toHaveLength(0); expect(combat.bugs).toHaveLength(0);
+    }
+  }
+  expect(p.score).toBe(11); expect(positions.length).toBeGreaterThan(1);
+  expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  expect(effects).toHaveLength(1); expect(effects[0]!.at).toBe(x === 1325 ? 700 : 750);
+  interpolation.clear();
+  interpolation.push({ ...snapshot(), events: [{ id: 1, tick: arena.tick, x: 1300, y: 1200, points: 11 }] }, 900);
+  expect(interpolation.combat(1000).events.map(e => e.id)).toEqual([1]);
+  expect(interpolation.combat(1010).events).toHaveLength(0);
+});
+test("combat does not rewind or replay effects after a delayed next snapshot", () => {
+  const interpolation = new Interpolation(), p = player();
+  const snapshot = (tick: number): Snapshot => ({ v: 1, type: "snapshot", arenaId: "stall", tick, wave: 1, players: [p], bugs: [],
+    shots: [{ id: 1, owner: p.id, life: 1, born: 0, x: 100 + tick * 45, y: 100, vx: 900, vy: 0 }],
+    events: [{ id: tick + 1, tick, x: 100, y: 100, points: 11 }] });
+  interpolation.push(snapshot(1), 50); interpolation.push(snapshot(2), 100);
+  const caughtUp = interpolation.combat(250); expect(caughtUp.shots[0]!.x).toBe(190); expect(caughtUp.events).toHaveLength(2);
+  interpolation.push(snapshot(3), 300);
+  expect(interpolation.combat(300).shots[0]!.x).toBe(190); expect(interpolation.combat(300).events).toHaveLength(0);
+  const resumed = interpolation.combat(400); expect(resumed.shots[0]!.x).toBe(235); expect(resumed.events.map(e => e.id)).toEqual([4]);
+  expect(interpolation.combat(410).events).toHaveLength(0);
+});
+test("camera follows and reserves feedback clearance at all world edges in desktop and phone viewports", () => {
   expect(cameraFor(1200, 1200, 1000, 800)).toEqual({ x: 700, y: 800 });
-  expect(cameraFor(0, 0, 390, 844)).toEqual({ x: 0, y: 0 });
-  expect(cameraFor(2400, 2400, 844, 390)).toEqual({ x: 1556, y: 2010 });
+  expect(cameraFor(0, 0, 390, 844)).toEqual({ x: -112, y: -144 });
+  expect(cameraFor(2400, 2400, 844, 390)).toEqual({ x: 1668, y: 2074 });
 });
 test("twin sticks retain sides across crossing, independent release, dead zone and mouse/Space OR", () => {
   const input = new ArenaInput(); input.down(1, 40, 200, 390); input.down(2, 350, 200, 390);

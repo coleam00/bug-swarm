@@ -68,9 +68,9 @@ try {
   await shot(desktop.session,'desktop-aim-shots');
   // Aim with actual mouse events at observed bugs, preserving server authority.
   let capturedKill = false; for (let i=0;i<200;i++) {
-    const target = await evaluate(desktop.session, `(()=>{const p=${ownExpr},s=window.evidence.snap;if(!p?.hits)return null;const b=s.bugs.toSorted((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];if(!b)return null;const t=Math.hypot(b.x-p.x,b.y-p.y)/900;return {x:b.x+b.vx*t-Math.max(0,Math.min(1120,p.x-640)),y:b.y+b.vy*t-Math.max(0,Math.min(1600,p.y-400))};})()`);
+    const target = await evaluate(desktop.session, `(()=>{const p=${ownExpr},s=window.evidence.snap;if(!p?.hits)return null;const b=s.bugs.toSorted((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];if(!b)return null;const t=Math.hypot(b.x-p.x,b.y-p.y)/900;return {x:b.x+b.vx*t-Math.max(-112,Math.min(1232,p.x-640)),y:b.y+b.vy*t-Math.max(-144,Math.min(1664,p.y-400))};})()`);
     if(target) await mouse(desktop.session,target.x,target.y);
-    const killed = await evaluate(desktop.session, `(()=>{const p=${ownExpr};const cx=Math.max(0,Math.min(1120,p.x-640)),cy=Math.max(0,Math.min(1600,p.y-400));return window.evidence.snap.events.some(e=>e.x>cx+20&&e.x<cx+1260&&e.y>cy+80&&e.y<cy+780)})()`); if(killed) { await shot(desktop.session,'kill-burst'); capturedKill = true; break; } await pause(80);
+    const killed = await evaluate(desktop.session, `(()=>{const p=${ownExpr};const cx=Math.max(-112,Math.min(1232,p.x-640)),cy=Math.max(-144,Math.min(1664,p.y-400));return window.evidence.snap.events.some(e=>e.x>cx+20&&e.x<cx+1260&&e.y>cy+80&&e.y<cy+780)})()`); if(killed) { await pause(125); await shot(desktop.session,'kill-burst'); capturedKill = true; break; } await pause(80);
   }
   assert(capturedKill, 'A visible live kill burst must be captured'); await until(() => evaluate(desktop.session, `(()=>{const p=${ownExpr};return p?.hits&&p.overheatUntil>window.evidence.snap.tick*50;})()`),8000); await shot(desktop.session,'overheat'); await mouse(desktop.session,900,350,false);
   // Remain still without firing until the simulation ends this life.
@@ -83,6 +83,30 @@ try {
   await until(()=>evaluate(desktop.session,'window.evidence.snap?.players.length===20'));
   for(const p of [desktop,phone]){if(await evaluate(p.session,`!!document.querySelector('.arena-life')`)){await key(p.session,'Space',true);await key(p.session,'Space',false);}} await pause(1000); await shot(desktop.session,'full-room-desktop'); await shot(phone.session,'full-room-phone'); const frames=[]; for(let i=0;i<7;i++){await pause(1000); frames.push({desktop:await stats(desktop.session),phone:await stats(phone.session)});} report.fullRoomFrames=frames;
   report.fullRoomBots=await botTask;botTask=undefined;
+  // Controlled edge setup on our own server, followed by real keyboard movement/fire.
+  // This phase runs after frame measurements so the canvas observer cannot affect them.
+  report.boundaries=[];
+  await evaluate(phone.session, `(()=>{const c=document.querySelector('canvas').getContext('2d'),translate=c.translate,fill=c.fillRect;
+    c.translate=function(x,y){const t=this.getTransform();if(t.e===0&&t.f===0)window.evidence.camera={x:-x,y:-y};return translate.call(this,x,y);};
+    c.fillRect=function(x,y,w,h){const t=this.getTransform();if(t.e===0&&t.f===0&&w>100&&h>40&&h<100)window.evidence.hud={left:x,top:y,right:x+w,bottom:y+h};return fill.call(this,x,y,w,h);};})()`);
+  for(const [shape,width,height] of [['portrait',390,844],['landscape',844,390]] as const){
+    await call('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:true},phone.session);await pause(150);
+    if(await evaluate(phone.session,`!!document.querySelector('.arena-life')`)){await key(phone.session,'Space',true);await key(phone.session,'Space',false);}
+    await until(()=>evaluate(phone.session,`(${ownExpr})?.hits>0`));
+    const id=await evaluate(phone.session,'window.evidence.id'),room=app.arenas.active.get(id)!.room!,p=room.state.players.get(id)!;
+    for(const [edge,x,y,code,mx,my] of [['north',1200,30,'KeyW',width/2,0],['east',2370,1200,'KeyD',width,height/2],['south',1200,2370,'KeyS',width/2,height],['west',30,1200,'KeyA',0,height/2]] as const){
+      Object.assign(p,{x,y,vx:0,vy:0,heat:16,overheatUntil:0,nextShotAt:room.state.tick*50,immuneUntil:room.state.tick*50+10000});
+      await pause(150);await mouse(phone.session,Math.min(mx,width-1),Math.min(my,height-1));await key(phone.session,'Space',true);await key(phone.session,code,true);
+      await pause(350);await key(phone.session,code,false);await key(phone.session,'Space',false);await pause(100);
+      const observed=await evaluate(phone.session,`(()=>{const p=${ownExpr},c=window.evidence.camera;return {own:p,camera:c,hud:window.evidence.hud,robot:{left:p.x-c.x-110,right:p.x-c.x+110,top:p.y-c.y-54,bottom:p.y-c.y+50},errors:window.evidence.errors};})()`);
+      const r=observed.robot,h=observed.hud;assert(r.left>=0&&r.right<=width&&r.top>=0&&r.bottom<=height);
+      assert(r.right<=h.left||r.left>=h.right||r.bottom<=h.top||r.top>=h.bottom);assert.deepEqual(observed.errors,[]);
+      assert.equal(edge==='north'||edge==='south'?observed.own.y:observed.own.x,edge==='north'||edge==='west'?14:2386);
+      const angle=edge==='north'?-Math.PI/2:edge==='south'?Math.PI/2:edge==='west'?Math.PI:0;
+      assert(Math.abs(Math.atan2(Math.sin(observed.own.facing-angle),Math.cos(observed.own.facing-angle)))<0.1,'Barrel aims outward at the boundary');
+      report.boundaries.push({shape,edge,...observed});await shot(phone.session,`${shape}-${edge}-boundary`);
+    }
+  }
   const legacy=await page(1280,800,origin+'/'); await until(()=>evaluate(legacy.session,`!!document.querySelector('input')`));
   await evaluate(legacy.session,`document.querySelector('input').focus()`); await call('Input.insertText',{text:'LegacyPilot'},legacy.session);
   report.legacyButtons=await evaluate(legacy.session,`Array.from(document.querySelectorAll('button')).map(b=>b.textContent)`);

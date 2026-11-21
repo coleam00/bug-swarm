@@ -48,18 +48,18 @@ The final live full-room run used two browser clients and 18 aimer bots for 18 s
 
 | View | FPS range | Update/draw ms per frame |
 | --- | ---: | ---: |
-| Live desktop, 1280 x 800 | 60.0-60.0 | 0.297-0.457 |
-| Live phone, 844 x 390 | 60.0-60.0 | 0.298-0.442 |
-| Renderer bounds, 1280 x 800 | 60.0-60.0 | 0.978-1.160 |
-| Renderer bounds, 390 x 844 | 59.0-60.0 | 0.755-0.958 |
+| Live desktop, 1280 x 800 | 60.0-60.0 | 0.255-0.372 |
+| Live phone, 844 x 390 | 60.0-60.0 | 0.253-0.378 |
+| Renderer bounds, 1280 x 800 | 60.0-60.0 | 1.120-2.032 |
+| Renderer bounds, 390 x 844 | 60.0-60.0 | 0.770-0.941 |
 
 The F readout measures combined client update/draw CPU work, excluding later compositing. Device scale factor was 1, with no CPU throttling. Browser flags: `--headless=new --no-sandbox --no-first-run --no-default-browser-check --remote-debugging-port=0 --user-data-dir=<scratch-profile> --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows`. Chrome device emulation is evidence for this machine, rather than a physical-phone hardware claim.
 
 | Population / measured duration | Joins / errors | Tick p50 / p95 ms | Scheduler lateness p95 ms |
 | --- | ---: | ---: | ---: |
-| Two browsers + 10 bots / 40 s | 10/10, 0 errors | 0.349 / 0.735 | 1.699 |
-| Two browsers + 18 bots / 18 s | 18/18, 0 errors | 0.427 / 1.068 | 1.912 |
-| 200 bots, 10 rooms / 120 s | 200/200, 0 errors | 0.695 / 1.163 | 1.693 |
+| Two browsers + 10 bots / 40 s | 10/10, 0 errors | 0.431 / 0.940 | 1.746 |
+| Two browsers + 18 bots / 18 s | 18/18, 0 errors | 0.510 / 0.967 | 1.746 |
+| 200 bots, 10 rooms / 120 s | 200/200, 0 errors | 0.691 / 1.176 | 1.712 |
 
 The 200-bot run used the actual CLI in a separate Bun process for 120 seconds. Tick p95 includes simulation, snapshot serialization and socket enqueueing; scheduler lateness is reported separately. Full JSON snapshots and bounded scans meet the 10 ms tick gate, so no spatial index, delta protocol or persistence worker was added. [Raw browser, load and persistence report](arena-combat-evidence/report.json).
 
@@ -83,7 +83,7 @@ bun run bots -- --url <owned-origin> --count 200 --seconds 120 --policy aimer
 
 The interaction/full-room phases call the same bot runner with `(count:10, seconds:40)` and `(count:18, seconds:18)`, both aimer. Real-server tests also execute the CLI and both policies. The manual fixture route is `/scripts/arena-benchmark.html` on an owned Vite instance; it is excluded from the production build.
 
-`bun run check` passed **542 tests, zero failures across 55 files**, including release 1. `bun run skill`, `bun run build`, focused real-server/SQLite/input tests and `git diff --check` passed. No new dependency was added. The final implementation keeps the planned bounded scans/full snapshots and between-tick writer; later bug kinds, revives, pickups and minimap remain out of scope.
+`bun run check` passed **547 tests, zero failures across 55 files**, including release 1. `bun run skill`, `bun run build`, focused real-server/SQLite/input tests and `git diff --check` passed. No new dependency was added. The final implementation keeps the planned bounded scans/full snapshots and between-tick writer; later bug kinds, revives, pickups and minimap remain out of scope.
 
 
 ## Returned-check repairs
@@ -95,3 +95,14 @@ New shots and bugs now become visible on the existing delayed interpolation time
 The returned coverage gaps now have observable behavioral guards: mouse and simultaneous touch events pass through the real bindings; a teammate sits on the projectile path; unequal crawler distances oppose id ordering; waves scale with two living players and one dead player and use both spawn regions; actual wave/bug state reaches room snapshots; respawn clears an attacker; simulation duration reaches SQLite; and touch activates the React life-over control. The skill matrix derives participant count and player-seconds from recorded lives and verifies distinct seeds, eight players and 180 seconds. Policy tests exercise dodging and retreat, and the WebSocket bot test inspects distinct outgoing policy inputs rather than an echoed option. Recording-canvas tests cover proportional heat, warning and immunity phases, and changing HUD numbers without exact decorative wording or layout.
 
 The ineffective real-server stale-input duplicate was removed; the deterministic lifecycle guard remains. Other production paths inspected for the same faults (nearest-target policy selection, wave placement/scaling, safe spawning, duration persistence, and input forwarding) required stronger tests rather than implementation changes. All 23 targeted mutation probes were rejected: [mutation results](arena-combat-evidence/fix-mutations.json). The corrected skill result is 869.5 versus 236 points (3.6843x), with unchanged life medians and no constant tuning.
+
+
+## Combat timeline and phone-boundary repair
+
+The previous arrival repair delayed births but still removed entities using the latest snapshot. That mixed timeline hid projectiles that hit before the 100 ms delay elapsed. Combat now derives births, motion, removals and kill effects from one monotonic delayed view. Historical membership preserves one- and two-snapshot shots; their final interval uses the last observed velocity until the removal tick. Kill bursts use that tick and the same frame timestamp, so feedback neither precedes the travelling shot nor misses its first display frame. Tests run the actual simulation against nearby crawlers, count visible shot frames, verify monotonic travel, delayed matching removal/effect delivery, deduplication and reset, and retain the original no-reversal regression. The pre-existing remote-player arrival fallback is unchanged.
+
+The camera now reserves bounded space outside the world (112 units horizontally, 144 above and 64 below) so the HUD cannot cover the local robot and the name, outward barrel and heat bar remain on-screen. Gameplay/world bounds are unchanged. Recording-canvas tests cover both phone orientations, four aim directions, every edge and every corner (64 poses). Production Chrome additionally uses controlled positions/heat/immunity on our owned server, then real movement and held-fire keys to reach each boundary. These layout-only setup mutations run after the frame measurement; the geometry observer records actual camera/HUD rectangles without affecting the performance samples.
+
+Boundary screenshots: [portrait north](arena-combat-evidence/portrait-north-boundary.png), [east](arena-combat-evidence/portrait-east-boundary.png), [south](arena-combat-evidence/portrait-south-boundary.png), [west](arena-combat-evidence/portrait-west-boundary.png); [landscape north](arena-combat-evidence/landscape-north-boundary.png), [east](arena-combat-evidence/landscape-east-boundary.png), [south](arena-combat-evidence/landscape-south-boundary.png), [west](arena-combat-evidence/landscape-west-boundary.png). Raw boundary positions and clearances are included in report.json.
+
+The renderer now guards nonzero local/remote barrel angles and a streak above the displayed multiplier cap with distinct HUD values. Aggregate and per-seed skill summaries share a tested helper whose odd/even fixture has independently known score and duration medians. All eight targeted mutations were rejected: [timeline/layout/summary mutation results](arena-combat-evidence/timeline-fix-mutations.json). The original cooldown, controls, scoring, life persistence and skill gates remain intact.

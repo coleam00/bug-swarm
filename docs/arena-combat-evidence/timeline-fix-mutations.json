@@ -1,0 +1,111 @@
+[
+  {
+    "name": "latest-only combat removal",
+    "file": "src/web/arena/interpolation.ts",
+    "from": "for (const p of a[kind]) {",
+    "to": "for (const p of this.samples.at(-1)!.snapshot[kind]) {",
+    "tests": [
+      "src/web/arena/movement.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) arriving shots and bugs stay on the delayed timeline without reversing as history arrives [0.70ms]",
+      "(fail) a short-lived shot at crawler x=1325 has visible travelling frames before its kill [2.43ms]",
+      "(fail) a short-lived shot at crawler x=1360 has visible travelling frames before its kill [1.06ms]",
+      "(fail) combat does not rewind or replay effects after a delayed next snapshot [0.54ms]"
+    ]
+  },
+  {
+    "name": "immediate kill feedback",
+    "file": "src/web/arena/engine.ts",
+    "from": "latest = message;",
+    "to": "latest = message; renderer.events(message.events, performance.now());",
+    "tests": [
+      "src/web/arena/engine.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) engine routes controls, predicts/reconciles and renders interpolated movement with a following camera, then cleans up [147.59ms]"
+    ]
+  },
+  {
+    "name": "combat reset",
+    "file": "src/web/arena/interpolation.ts",
+    "from": "this.combatTick = -Infinity; this.lastEvent = 0;",
+    "to": "",
+    "tests": [
+      "src/web/arena/movement.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) a short-lived shot at crawler x=1325 has visible travelling frames before its kill [2.89ms]",
+      "(fail) a short-lived shot at crawler x=1360 has visible travelling frames before its kill [1.28ms]"
+    ]
+  },
+  {
+    "name": "north HUD clearance",
+    "file": "src/web/arena/camera.ts",
+    "from": "y: Math.max(-144,",
+    "to": "y: Math.max(0,",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) phone boundaries and corners keep the robot, barrel and heat clear of the HUD and clipping [4.26ms]"
+    ]
+  },
+  {
+    "name": "barrel direction",
+    "file": "src/web/arena/draw.ts",
+    "from": "c.rotate(p.facing)",
+    "to": "c.rotate(0)",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) renderer paints a grid, a distinguishing local ring, remote robots and complete names [2.89ms]"
+    ]
+  },
+  {
+    "name": "displayed multiplier cap",
+    "file": "src/web/arena/draw.ts",
+    "from": "Math.min(3, 1 + p.streak / 10)",
+    "to": "(1 + p.streak / 10)",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) combat feedback paints proportional heat, warning/immunity phases and authoritative HUD values [2.69ms]"
+    ]
+  },
+  {
+    "name": "score used as life seconds",
+    "file": "src/shared/arena/skill.ts",
+    "from": "medianSeconds: median(lives.map(l => l.seconds))",
+    "to": "medianSeconds: median(lives.map(l => l.score))",
+    "tests": [
+      "src/shared/arena/skill.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) score and life-length summaries have independent known odd and even medians [0.82ms]",
+      "(fail) 20 seeds × 8 bots × 180s: aimer median score is positive and at least twice mover [7287.65ms]"
+    ]
+  },
+  {
+    "name": "effect clock differs from frame clock",
+    "file": "src/web/arena/draw.ts",
+    "from": "{ at: now }",
+    "to": "{ at: performance.now() }",
+    "tests": [
+      "src/web/arena/draw.test.ts"
+    ],
+    "rejected": true,
+    "failures": [
+      "(fail) combat feedback paints proportional heat, warning/immunity phases and authoritative HUD values [2.58ms]"
+    ]
+  }
+]

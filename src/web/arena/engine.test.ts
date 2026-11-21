@@ -10,7 +10,7 @@ test("engine routes controls, predicts/reconciles and renders interpolated movem
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
 let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal, lifePanel;
-const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set();
+const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set(), effects = [];
 performance.now = () => clock;
 globalThis.setInterval = (fn, ms) => { assert.equal(ms, 50); const id = ++next; timers.set(id, fn); return id; };
 globalThis.clearInterval = id => timers.delete(id);
@@ -22,7 +22,7 @@ globalThis.document = new EventTarget();
 const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight: 844, dataset: {}, getContext: () => ({ setTransform() {} }),
   getBoundingClientRect: () => ({ left: 20, top: 30 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
-mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events() {} draw(width, height, camera, players, local) {
+mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local) {
   draws.push(structuredClone({ width, height, camera, players, local }));
 } } }));
 mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, touch, got, status, gone) => {
@@ -43,7 +43,7 @@ for (let cycle = 0; cycle < 2; cycle++) {
   assert.equal(admissions, cycle * 2 + 1);
   const own = { life: 1, hits: 3, id: identity.playerId, name: identity.name, team: identity.team, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0, ackSeq: 0 };
   const remote = { ...own, id: crypto.randomUUID(), name: "Remote", team: "spaces", x: 1000, y: 1100 };
-  const snapshot = (tick, ownX, remoteX, ackSeq) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, bugs: [], shots: [], events: [],
+  const snapshot = (tick, ownX, remoteX, ackSeq, events = []) => receive({ v: 1, type: "snapshot", arenaId: "room", tick, wave: 1, bugs: [], shots: [], events,
     players: [{ ...own, x: ownX, ackSeq }, { ...remote, x: remoteX }] });
   snapshot(1, 1200, 1000, 0);
   let draw = frame(base); assert.equal(draw.local.x, 1200); assert.deepEqual(draw.camera, { x: 1005, y: 778 });
@@ -82,15 +82,20 @@ for (let cycle = 0; cycle < 2; cycle++) {
   key("KeyD"); send(); assert.equal(inputs.at(-1).move.x, 1);
   window.dispatchEvent(new Event("blur")); send(); assert.equal(inputs.at(-1).move.x, 0);
   snapshot(4, 50, 1020, inputs.at(-1).seq); draw = frame(clock + 50);
-  assert.equal(draw.camera.x, 0);
+  assert.equal(draw.camera.x, -112);
   mouse("pointermove", 150, 400); send();
   const firstAim = inputs.at(-1).aim;
-  assert.ok(Math.abs(firstAim - Math.atan2(-22, 100)) < 1e-8);
+  assert.ok(Math.abs(firstAim - Math.atan2(-22, -12)) < 1e-8);
   key("KeyD"); send(); key("KeyD", "keyup"); send();
-  assert.ok(Math.abs(inputs.at(-1).aim - Math.atan2(-22, 91)) < 1e-8, "Stationary cursor must be resampled after player movement");
+  assert.ok(Math.abs(inputs.at(-1).aim - Math.atan2(-22, -21)) < 1e-8, "Stationary cursor must be resampled after player movement");
   key("Space"); send();
   own.hits = 0; own.result = { v: 1, type: "life_over", life: 1, playerId: own.id, score: 34, kills: 3, seconds: 8, touch: false, save: "pending" };
-  snapshot(6, 1203, 1020, inputs.at(-1).seq); assert.equal(lifePanel.score, 34);
+  const oldEffects = effects.length;
+  snapshot(6, 1203, 1020, inputs.at(-1).seq, [{ id: 100 + cycle, tick: 6, x: 1300, y: 1200, points: 11 }]); assert.equal(lifePanel.score, 34);
+  assert.equal(effects.length, oldEffects, "Receipt must not deliver kill feedback ahead of delayed combat");
+  frame(clock + 99); assert.equal(effects.length, oldEffects);
+  frame(clock + 1); assert.equal(effects.length, oldEffects + 1);
+  frame(clock + 10); assert.equal(effects.length, oldEffects + 1, "Kill feedback is delivered once");
   const deadCount = inputs.length; key("Space", "keydown", true); send(); assert.equal(inputs.length, deadCount, "Held input at death cannot respawn");
   key("KeyW"); assert.equal(inputs.at(-1).type, "respawn"); assert.equal(inputs.at(-1).life, 1);
   own.hits = 3; own.life = 2; delete own.result; snapshot(7, 1300, 1020, inputs.at(-1).seq); assert.equal(lifePanel, null);

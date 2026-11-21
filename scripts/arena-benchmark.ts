@@ -11,7 +11,7 @@ let count = 0, start = performance.now(), cost = 0, lastBurst = 0, eventId = 1;
 function frame(now: number) {
   const begin = performance.now(), width = canvas.clientWidth, height = canvas.clientHeight;
   if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-  if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, points: 11 }))); lastBurst = now; }
+  if (now - lastBurst > 650) { renderer.events(Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: eventId++, tick: 1, x: 700 + i % 14 * 70, y: 800 + Math.floor(i / 14) * 65, points: 11 })), now); lastBurst = now; }
   renderer.draw(width, height, { x: 1200 - width / 2, y: 1200 - height / 2 }, players, players[0]!, input, bugs, shots, 6, now / 50, now);
   cost += performance.now() - begin; count++;
   if (now - start >= 1000) { canvas.dataset.fps = (count * 1000 / (now - start)).toFixed(1); canvas.dataset.frameMs = (cost / count).toFixed(3); count = cost = 0; start = now; }

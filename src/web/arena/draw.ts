@@ -6,7 +6,7 @@ export class ArenaRenderer {
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0;
   reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
-  events(events: KillEvent[]) { for (const e of events) if (e.id > this.lastEvent) { Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: performance.now() }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
+  events(events: KillEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
   private floor: CanvasPattern | null;
   private glows = new Map<string, HTMLCanvasElement>();
   private labels = new Map<string, HTMLCanvasElement>();

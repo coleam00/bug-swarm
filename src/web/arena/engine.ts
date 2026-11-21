@@ -33,7 +33,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (message.tick < lastTick) return;
     lastTick = message.tick; lastSnapshot = performance.now();
     prediction.reconcile(own); interpolation.push(message, lastSnapshot);
-    latest = message; renderer.events(message.events);
+    latest = message;
     if (!own.hits) {
       if (deadLife !== own.life) { input.blockHeld(); input.clear(); deadLife = own.life; }
       if (own.result) showLife(own.result);
@@ -62,7 +62,9 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     const start = performance.now(), elapsed = Math.min(100, now - previous); previous = now;
     const local = prediction.visual(input.sample(), (now - lastSend) / STEP_MS, elapsed);
     if (local) camera = cameraFor(local.x, local.y, width, height);
-    renderer.draw(width, height, camera, interpolation.players(now), local, input, interpolation.entities("bugs", now), interpolation.entities("shots", now), latest?.wave ?? 0, latest?.tick ?? 0, now);
+    const combat = interpolation.combat(now);
+    renderer.events(combat.events, now);
+    renderer.draw(width, height, camera, interpolation.players(now), local, input, combat.bugs, combat.shots, latest?.wave ?? 0, latest?.tick ?? 0, now);
     cost += performance.now() - start; frames++;
     if (now - sampleAt >= 1000) {
       const fps = frames * 1000 / (now - sampleAt), ms = cost / frames;

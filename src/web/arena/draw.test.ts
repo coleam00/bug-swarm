@@ -6,14 +6,16 @@ import { TEAM_COLOURS } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { PLAYER_RADIUS, HEAT_CAPACITY } from "../../shared/arena/constants";
 import { lifeDefaults } from "../../shared/arena/types";
+import { cameraFor } from "./camera";
+import type { Paint } from "../game/canvas-fixture.test-support";
 
 test("renderer paints a grid, a distinguishing local ring, remote robots and complete names", () => {
   const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
   try {
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D);
-    const local = { id: "local", name: "WideWWWWWWWWWWWW", team: "tabs" as const, x: 500, y: 500, vx: 0, vy: 0, facing: 0 };
-    const remote = { ...local, id: "remote", team: "spaces" as const, x: 600, y: 400 };
+    const local = { id: "local", name: "WideWWWWWWWWWWWW", team: "tabs" as const, x: 500, y: 500, vx: 0, vy: 0, facing: Math.PI / 3 };
+    const remote = { ...local, id: "remote", team: "spaces" as const, x: 600, y: 400, facing: -Math.PI / 4 };
     expect(validateName(local.name).error).toBeUndefined();
     const camera = { x: 100, y: 100 };
     renderer.draw(800, 600, camera, [local, remote], local, new ArenaInput());
@@ -44,6 +46,11 @@ test("renderer paints a grid, a distinguishing local ring, remote robots and com
     expect(ringsAt(local).length).toBeGreaterThan(0);
     expect(ringsAt(remote)).toHaveLength(0);
     for (const player of [local, remote]) {
+      const barrel = fixture.context.paints.find(p => p.op === "fillRect" && p.fillStyle === TEAM_COLOURS[player.team] &&
+        Number(p.args[0]) > 0 && Number(p.args[1]) < 0 && Number(p.args[2]) > Number(p.args[3]) &&
+        p.transform[4] === player.x - camera.x && p.transform[5] === player.y - camera.y)!;
+      expect(barrel).toBeDefined();
+      expect(Math.atan2(barrel.transform[1]!, barrel.transform[0]!)).toBeCloseTo(player.facing);
       expect(fixture.context.paints.some(p => p.op === "stroke" && p.strokeStyle === TEAM_COLOURS[player.team] &&
         p.path.some(command => command.op === "roundRect") && p.transform[4] === player.x - camera.x && p.transform[5] === player.y - camera.y)).toBe(true);
       const surface = fixture.surfaces.find(s => s.context.paints.some(p => p.op === "fillText" && p.args[0] === player.name && p.fillStyle === TEAM_COLOURS[player.team]));
@@ -58,6 +65,42 @@ test("renderer paints a grid, a distinguishing local ring, remote robots and com
     const cached = fixture.created;
     renderer.draw(800, 600, camera, [local, remote], local, new ArenaInput());
     expect(fixture.created).toBe(cached);
+  } finally {
+    if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
+  }
+});
+test("phone boundaries and corners keep the robot, barrel and heat clear of the HUD and clipping", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p = { ...lifeDefaults(), id: "local", name: "WideWWWWWWWWWWWW", team: "tabs" as const, x: 1200, y: 1200,
+      vx: 0, vy: 0, facing: 0, immuneUntil: 0, heat: 17, overheatUntil: 10000 };
+    const bounds = (paint: Paint) => {
+      const rect = paint.path.find(c => c.op === "roundRect");
+      const image = paint.op === "drawImage" ? paint.args[0] as HTMLCanvasElement : null;
+      const [x, y, w, h] = rect ? rect.args : image ? [paint.args[1], paint.args[2], image.width, image.height] : paint.args;
+      const [a, b, c, d, e, f] = paint.transform as [number, number, number, number, number, number];
+      const corners = [[Number(x), Number(y)], [Number(x) + Number(w), Number(y)], [Number(x), Number(y) + Number(h)], [Number(x) + Number(w), Number(y) + Number(h)]];
+      const xs = corners.map(([x, y]) => a * x! + c * y! + e), ys = corners.map(([x, y]) => b * x! + d * y! + f);
+      return { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys) };
+    };
+    for (const [width, height] of [[390, 844], [844, 390]]) for (const [x, y] of [[14, 14], [1200, 14], [2386, 14], [2386, 1200], [2386, 2386], [1200, 2386], [14, 2386], [14, 1200]]) for (const facing of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      Object.assign(p, { x, y, facing }); fixture.context.paints.length = 0;
+      renderer.draw(width!, height!, cameraFor(x!, y!, width!, height!), [p], p, input);
+      const paints = fixture.context.paints;
+      const hud = paints.find(q => q.op === "fillRect" && Number(q.args[2]) > 100 && Number(q.args[3]) > 40 && Number(q.args[3]) < 100)!;
+      expect(hud).toBeDefined(); const panel = bounds(hud);
+      const feedback = paints.filter(q => q.op === "drawImage" || q.op === "stroke" && q.path.some(c => c.op === "roundRect") ||
+        q.op === "fillRect" && Number(q.args[2]) > 0 && Number(q.args[2]) <= 50 && Number(q.args[3]) > 0 && Number(q.args[3]) <= 10);
+      expect(feedback.length).toBeGreaterThanOrEqual(6);
+      for (const paint of feedback) {
+        const r = bounds(paint);
+        expect(r.left).toBeGreaterThanOrEqual(0); expect(r.top).toBeGreaterThanOrEqual(0);
+        expect(r.right).toBeLessThanOrEqual(width!); expect(r.bottom).toBeLessThanOrEqual(height!);
+        expect(r.right <= panel.left || r.left >= panel.right || r.bottom <= panel.top || r.top >= panel.bottom).toBe(true);
+      }
+    }
   } finally {
     if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
   }
@@ -95,6 +138,14 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
     p.score = 987; p.streak = 7; p.hits = 1;
     const updated = numbers(draw(3, 12)); expect(updated).toEqual(expect.arrayContaining([12, 987, 1.7, 1]));
     expect(updated).not.toContain(123); expect(updated).not.toContain(5);
+    p.streak = 30;
+    const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([17, 987, 3, 1]));
+    expect(capped).not.toContain(4);
+    const effectTime = 1_000_000_000, kill = { id: 1, tick: 4, x: 550, y: 550, points: 11 };
+    renderer.events([kill], effectTime);
+    expect(draw(effectTime / 50).some(paint => paint.op === "fillText" && paint.args[0] === "+11" && paint.globalAlpha > 0)).toBe(true);
+    renderer.events([kill], effectTime + 100);
+    expect(draw(effectTime / 50 + 15).some(paint => paint.op === "fillText" && paint.args[0] === "+11")).toBe(false);
   } finally {
     if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
   }
