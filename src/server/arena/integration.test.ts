@@ -153,11 +153,11 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     expect(exit, stderr).toBe(0);
     const result = JSON.parse(stdout);
     expect(result).toMatchObject({ requested: 2, joins: 2, arenaCount: 1, errors: 0, arenas: [welcome.arenaId] });
-    expect(result.sent).toBeGreaterThan(20); expect(result.received).toBeGreaterThan(20);
-    for (const rate of [result.messagesPerSecond.sent, result.messagesPerSecond.received]) {
+    expect(result.client.sent).toBeGreaterThan(20); expect(result.client.received).toBeGreaterThan(20);
+    for (const rate of [result.client.messagesPerSecond.out, result.client.messagesPerSecond.in]) {
       expect(Number.isFinite(rate)).toBe(true); expect(rate).toBeGreaterThan(0);
     }
-    expect(result.tick.windowMs).toBe(60000); expect(result.tick.samples).toBeGreaterThan(0);
+    expect(result.untilMs - result.sinceMs).toBe(1000); expect(result.tick.samples).toBeGreaterThan(0);
     expect(Number.isFinite(result.tick.p50Ms)).toBe(true); expect(Number.isFinite(result.tick.p95Ms)).toBe(true);
     expect(result.tick.p95Ms).toBeGreaterThanOrEqual(result.tick.p50Ms);
     const observations = observer.messages.flatMap(m => m.type === "snapshot" ? m.players.filter(p => p.id !== observer.id) : []);
@@ -174,7 +174,7 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     while (app.arenas.active.size && performance.now() < deadline) await Bun.sleep(5);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
     const interrupted = new AbortController(), timer = setTimeout(() => interrupted.abort(), 200);
-    try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
+    try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 21, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
     finally { clearTimeout(timer); }
     const abortedDeadline = performance.now() + 2000;
     while (app.arenas.active.size && performance.now() < abortedDeadline) await Bun.sleep(5);

@@ -1,9 +1,22 @@
 import { expect, test } from "bun:test";
-import { botName, parseBotArgs, runBots } from "./bots";
+import { botName, parseBotArgs, runBots, BotFailure } from "./bots";
 import { validateName } from "../src/server/rules";
 import { parseClient, type InputMessage, type Snapshot, VERSION } from "../src/shared/arena/protocol";
 import { lifeDefaults } from "../src/shared/arena/types";
 import { WORLD_WIDTH, WORLD_HEIGHT, PLAYER_SPEED, PLAYER_RADIUS, MAX_PLAYERS, STEP_MS } from "../src/shared/arena/constants";
+import { emptyTraffic } from "../src/server/arena/metrics";
+import { createServer } from "../src/server/server";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+// Timing is synthetic in policy-only transport fixtures. Real reporting is
+// covered against the production server below.
+function policyStats(request: Request, id: string) {
+  const url = new URL(request.url), since = Number(url.searchParams.get("sinceMs")), until = Number(url.searchParams.get("untilMs"));
+  const tick = { samples: 1, p50Ms: .1, p95Ms: .1, maxMs: .1, raw: [.1] };
+  return Response.json({ serverNowMs: performance.now(), arenas: [{ id, players: 1 }], totalPlayers: 1,
+    window: { sinceMs: since, untilMs: until, complete: true, population: { min: 1, max: 1 }, traffic: emptyTraffic(), dropped: emptyTraffic(), perPlayer: [{ playerId: "fixture", arenaId: id, bytesOut: 0, peakSecondBytesOut: 0 }], tick, schedulerLateness: tick, snapshotBytes: {}, arenas: [{ id, population: { min: 1, max: 1 }, tick, schedulerLateness: tick }] } });
+}
 test("bots CLI defaults, optional separator, origin and bounded positive argument validation", () => {
   expect(parseBotArgs([])).toEqual({ url: "http://127.0.0.1:3000", count: 18, seconds: 60, policy: "aimer" });
   expect(parseBotArgs(["--", "--url", "https://swarm.test/", "--count", "20", "--seconds", "1"])).toEqual({ url: "https://swarm.test", count: 20, seconds: 1, policy: "aimer" });
@@ -16,7 +29,7 @@ test("WebSocket bots actually send distinct mover and aimer inputs for the same 
   const server = Bun.serve<{}>({ hostname: "127.0.0.1", port: 0,
     fetch(request, server) {
       if (new URL(request.url).pathname === "/ws" && server.upgrade(request, { data: {} })) return;
-      return Response.json({ arenas: [{ id: "policy-test", players: 1 }], totalPlayers: 1, tick: { p50Ms: 0.1, p95Ms: 0.2 } });
+      return policyStats(request, "policy-test");
     },
     websocket: { message(socket, raw) {
       const message = parseClient(raw); if (!message) throw new Error("Invalid bot input");
@@ -52,7 +65,7 @@ test("bot transport waits downed, resumes the same life after revival and reques
   const server = Bun.serve<{}>({ hostname: "127.0.0.1", port: 0,
     fetch(request, server) {
       if (new URL(request.url).pathname === "/ws" && server.upgrade(request, { data: {} })) return;
-      return Response.json({ arenas: [{ id: "revive-test", players: 1 }], totalPlayers: 1, tick: { p50Ms: 0.1, p95Ms: 0.2 } });
+      return policyStats(request, "revive-test");
     },
     websocket: { message(socket, raw) {
       const m = parseClient(raw); if (!m) throw Error("Invalid input");
@@ -77,3 +90,35 @@ test("bot transport waits downed, resumes the same life after revival and reques
     expect(phases).toEqual(["downed", "active"]); expect(respawns).toBe(1);
   } finally { await server.stop(true); }
 });
+
+test("production bot reporting uses the full window, server directions, payload totals and normal teardown; incomplete data fails with diagnostics", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "bot-report-"));
+  const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  try {
+    const report = await runBots({ url: app.server.url.origin, count: 2, seconds: 1 });
+    expect(report.untilMs - report.sinceMs).toBe(1000); expect(report.complete).toBe(true); expect(report.errors).toBe(0);
+    expect(report.joining.sent).toBeGreaterThanOrEqual(2); expect(report.population.min).toBe(2);
+    expect(report.lifecycle).toEqual({ prematureDisconnects: 0, normalTeardownConnections: 2 });
+    const actual = app.arenas.stats({ sinceMs: report.sinceMs, untilMs: report.untilMs }).window!;
+    expect(report.server.traffic).toEqual(actual.traffic);
+    expect(report.server.messagesPerSecond.in).toBe(actual.traffic.in);
+    expect(report.server.messagesPerSecond.out).toBe(actual.traffic.accepted);
+    expect(report.perPlayer.map(p => p.bytesOut).reduce((a,b) => a+b, 0)).toBe(actual.traffic.bytesOut);
+    expect(report.tick.samples).toBe(actual.tick.samples);
+    expect(report.snapshotBytes.keyframe!.samples).toBeGreaterThan(0);
+    // The HTTP boundary must reject misaligned and unbounded requests.
+    for (const query of ["sinceMs=1&untilMs=100", "sinceMs=0&untilMs=200000", "sinceMs=0", "sinceMs=0&untilMs=100&raw=no"]) expect((await fetch(app.server.url.origin + "/api/arena/stats?" + query)).status).toBe(400);
+    const workers = await runBots({ url: app.server.url.origin, count: 21, seconds: 1 });
+    expect(workers.joins).toBe(21); expect(workers.arenaCount).toBe(2); expect(workers.lifecycle.normalTeardownConnections).toBe(21);
+    const stats = app.arenas.stats.bind(app.arenas);
+    app.arenas.stats = query => { const value = stats(query); if (value.window) value.window.complete = false; return value; };
+    try { await runBots({ url: app.server.url.origin, count: 1, seconds: 1 }); throw Error("Expected incomplete window failure"); }
+    catch (error) {
+      expect(error).toBeInstanceOf(BotFailure);
+      const partial = (error as BotFailure).report as any;
+      expect(partial.joins).toBe(1); expect(partial.errors).toBeGreaterThan(0); expect(partial.diagnostics.join()).toContain("Incomplete"); expect(partial.intervals[0].complete).toBe(false);
+    }
+    for (let i = 0; i < 100 && app.arenas.active.size; i++) await Bun.sleep(10);
+    expect(app.arenas.active.size).toBe(0);
+  } finally { await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+}, 15000);
