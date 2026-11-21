@@ -19,11 +19,12 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
   const template = existsSync("dist/index.html") ? readFileSync("dist/index.html", "utf8") : undefined;
   const buildId = env.RAILWAY_GIT_COMMIT_SHA ?? env.BUILD_ID ?? (template ? new Bun.CryptoHasher("sha256").update(template).digest("hex").slice(0, 16) : "development");
   if (startLimit > START_LIMIT) console.warn(`LOAD TEST: start limit raised to ${startLimit} per IP per ten minutes. Unset LOAD_TEST_START_LIMIT before serving players.`);
-  const db = openDb(join(dataDir, "app.db")), arenas = new RoomManager(db, buildId);
+  let invalidateScores = () => {};
+  const db = openDb(join(dataDir, "app.db")), arenas = new RoomManager(db, buildId, { invalidate: () => invalidateScores() });
   try {
     const peers = new WeakMap<Request, string>();
     const trusted = (env.TRUSTED_PROXIES ?? "").split(",").map(v => v.trim()).filter(Boolean);
-    const app = createApp(db, { startLimit, arenaStats: () => arenas.stats(), clientIp: request => resolveClientIp(
+    const app = createApp(db, { scoreCacheHook: invalidate => { invalidateScores = invalidate; }, startLimit, arenaStats: () => arenas.stats(), clientIp: request => resolveClientIp(
       peers.get(request) ?? "unknown", request.headers.get("x-forwarded-for"), trusted, trustProxyHops,
     ) });
     app.route("/", shareAssets);

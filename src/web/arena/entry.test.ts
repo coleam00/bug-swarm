@@ -11,9 +11,9 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { createElement } from ${JSON.stringify(import.meta.resolve("react"))};
 import { create, act } from ${JSON.stringify(import.meta.resolve("react-test-renderer"))};
-let mounted = 0, disposed = 0, onError, onAccepted, joined;
-mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted) => {
-  mounted++; onError = refused; onAccepted = accepted; joined = { identity, touch }; return () => { disposed++; };
+let mounted = 0, disposed = 0, onError, onAccepted, onLife, joined;
+mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
+  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; joined = { identity, touch }; return () => { disposed++; };
 } }));
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
@@ -57,6 +57,14 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   }
   act(() => onAccepted());
   assert.deepEqual(JSON.parse(saved), { playerId: joined.identity.playerId, name: acceptedName, team });
+  if (kind === "new" && team === "tabs") {
+    const respawns = []; let prevented = false;
+    act(() => onLife({ life: 1, score: 34, save: "saved" }, touch => respawns.push(touch)));
+    act(() => tree.root.findByProps({ role: "dialog" }).props.onPointerDown({ pointerType: "touch", preventDefault() { prevented = true; } }));
+    assert.deepEqual(respawns, [true], "A touch on the actual life-over overlay must request a touch-attributed respawn");
+    assert.equal(prevented, true);
+    act(() => onLife(null, () => {})); assert.equal(tree.root.findAllByProps({ role: "dialog" }).length, 0);
+  }
   const restoredTeam = team === "tabs" ? "spaces" : "tabs";
   const before = mounted; act(() => onError("Saved team restored", restoredTeam));
   assert.equal(JSON.parse(saved).team, restoredTeam); assert.equal(mounted, before, "Team correction remounted a live connection");

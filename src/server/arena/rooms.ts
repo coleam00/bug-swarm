@@ -2,18 +2,21 @@ import type { Database } from "bun:sqlite";
 import { registerArenaPlayer } from "../db";
 import { nameKey, validateName } from "../rules";
 import { HELLO_TIMEOUT_MS, INPUT_LIMIT, INPUT_STALE_MS, INPUT_WINDOW_MS, MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STALL_TIMEOUT_MS, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "../../shared/arena/constants";
-import { HIDDEN_IDENTITY_MESSAGE, parseClient, type ArenaError, type InputMessage, type Snapshot, type Welcome } from "../../shared/arena/protocol";
-import { createArena, joinPlayer, leavePlayer, stepArena } from "../../shared/arena/simulation";
-import { neutralInput, type ArenaState, type Input } from "../../shared/arena/types";
+import { HIDDEN_IDENTITY_MESSAGE, parseClient, serializeSnapshot, type ArenaError, type InputMessage, type Snapshot, type Welcome, type LifeOver } from "../../shared/arena/protocol";
+import { createArena, joinPlayer, leavePlayer, stepArena, endLife, respawnPlayer } from "../../shared/arena/simulation";
+import { neutralInput, type ArenaState, type Input, type LifeResult } from "../../shared/arena/types";
 import { TickMetrics } from "./metrics";
+import { LifeWriter, type LifeRecord } from "./lives";
 export interface Transport { send(data: string): unknown; close(code?: number, reason?: string): void; getBufferedAmount(): number }
 export interface Connection {
+  storedId?: string; record?: LifeRecord; result?: LifeOver;
   socket: Transport; id?: string; room?: Room; joinedAt: number; attempts: number[];
   lastSeq: number; ackSeq: number; freshAt: number; pending?: InputMessage; held: Input; stalledAt?: number;
   helloTimer?: ReturnType<typeof setTimeout>; closed: boolean;
 }
 export interface Room { id: string; state: ArenaState; members: Set<Connection>; timer: ReturnType<typeof setInterval>; metrics: TickMetrics; lateness: TickMetrics; nextTickAt: number }
 interface Options {
+  wallNow?: () => number; invalidate?: () => void;
   now?: () => number; seed?: () => number; id?: () => string;
   schedule?: (callback: () => void, ms: number) => ReturnType<typeof setInterval>;
   cancel?: (timer: ReturnType<typeof setInterval>) => void;
@@ -26,9 +29,11 @@ export class RoomManager {
   private now; private schedule; private cancel; private seed; private id;
   private moderation: ReturnType<typeof setInterval>;
   private stopped = false;
+  private wallNow; readonly writer: LifeWriter;
   // Retain closed-room samples until their window expires, without retaining players/sockets.
   private metrics = new Map<string, { tick: TickMetrics; lateness: TickMetrics }>();
   constructor(private db: Database, readonly buildId: string, options: Options = {}) {
+    this.wallNow = options.wallNow ?? Date.now; this.writer = new LifeWriter(db, options.invalidate);
     this.now = options.now ?? (() => performance.now()); this.schedule = options.schedule ?? ((fn: () => void, ms: number) => setInterval(fn, ms)); this.cancel = options.cancel ?? clearInterval;
     this.seed = options.seed ?? (() => crypto.getRandomValues(new Uint32Array(1))[0]!); this.id = options.id ?? (() => crypto.randomUUID());
     this.moderation = setInterval(() => this.refreshHidden(), 1000); this.moderation.unref();
@@ -55,9 +60,18 @@ export class RoomManager {
       c.attempts.push(now); return true;
     });
     if (!message) return;
+    if (message.type === "respawn") {
+      if (!c.room || !c.id) return;
+      const p = respawnPlayer(c.room.state, c.id, message.life); if (!p) return;
+      p.touch = message.touch; c.pending = undefined; c.held = neutralInput(); c.result = undefined;
+      this.startLife(c); return;
+    }
     if (message.type === "input") {
       if (!c.room) { this.dropped.handshake++; return; }
+      const p = c.room.state.players.get(c.id!)!;
+      if (!p.hits || message.life !== p.life) return;
       if (message.seq <= c.lastSeq) { this.dropped.sequence++; return; }
+      p.touch ||= message.touch;
       c.lastSeq = message.seq; c.pending = message; c.freshAt = this.now(); return;
     }
     if (c.room) { this.dropped.handshake++; return; }
@@ -79,18 +93,20 @@ export class RoomManager {
       const created = room;
       room.timer = this.schedule(() => this.tick(created), STEP_MS); room.timer.unref?.(); this.rooms.set(id, room);
     }
-    c.id = id; c.room = room; clearTimeout(c.helloTimer); room.members.add(c); this.active.set(id, c);
-    joinPlayer(room.state, { id, name: name.name!, team: message.team });
+    c.id = id; c.storedId = result.playerId; c.room = room; clearTimeout(c.helloTimer); room.members.add(c); this.active.set(id, c);
+    joinPlayer(room.state, { id, name: name.name!, team: message.team })!.touch = message.touch;
+    this.startLife(c);
     c.socket.send(JSON.stringify({ v: 1, type: "welcome", playerId: id, arenaId: room.id, buildId: this.buildId,
       world: { width: WORLD_WIDTH, height: WORLD_HEIGHT }, constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } } satisfies Welcome));
     this.broadcast(room);
   }
   snapshot(room: Room): Snapshot {
     return { v: 1, type: "snapshot", arenaId: room.id, tick: room.state.tick,
-      players: Array.from(room.members, c => ({ ...room.state.players.get(c.id!)!, ackSeq: c.ackSeq })) };
+      wave: room.state.wave, bugs: room.state.bugs, shots: room.state.shots, events: room.state.events,
+      players: Array.from(room.members, c => ({ ...room.state.players.get(c.id!)!, ackSeq: c.ackSeq, ...(c.result ? { result: c.result } : {}) })) };
   }
   private broadcast(room: Room) {
-    const payload = JSON.stringify(this.snapshot(room)); const now = this.now();
+    const payload = serializeSnapshot(this.snapshot(room)); const now = this.now();
     for (const c of room.members) {
       if (c.socket.getBufferedAmount() > 0) {
         this.dropped.backpressure++; c.stalledAt ??= now;
@@ -106,10 +122,31 @@ export class RoomManager {
       if (start - c.freshAt >= INPUT_STALE_MS) c.held = { ...neutralInput(), aim: c.held.aim };
       inputs.set(c.id!, c.held);
     }
-    stepArena(room.state, inputs); this.broadcast(room); room.metrics.add(this.now() - start);
+    stepArena(room.state, inputs);
+    for (const result of room.state.ended) { const c = this.active.get(result.playerId); if (c) this.finishLife(c, result); }
+    this.broadcast(room); room.metrics.add(this.now() - start);
+  }
+  private startLife(c: Connection) {
+    const p = c.room!.state.players.get(c.id!)!;
+    c.record = { runId: crypto.randomUUID(), playerId: c.storedId!, team: p.team, started: this.wallNow() };
+    this.writer.enqueue({ ...c.record });
+  }
+  private finishLife(c: Connection, result: LifeResult) {
+    if (!c.record || c.record.result) return;
+    c.record = { ...c.record, result: { ...result }, ended: this.wallNow() };
+    c.result = { v: 1, type: "life_over", ...result, save: "pending" };
+    // Terminal messages are independent of cosmetic snapshot backpressure.
+    if (!c.closed) c.socket.send(JSON.stringify(c.result));
+    const terminal = c.result;
+    this.writer.enqueue(c.record, saved => {
+      terminal.save = saved ? "saved" : "failed";
+      if (!c.closed && c.result === terminal) c.socket.send(JSON.stringify(terminal));
+    });
+    c.pending = undefined; c.held = neutralInput();
   }
   leave(c: Connection) {
     if (c.closed) return;
+    if (c.room && c.id) { const result = endLife(c.room.state, c.id); if (result) this.finishLife(c, result); }
     c.closed = true; clearTimeout(c.helloTimer); this.connections.delete(c);
     if (c.id && this.active.get(c.id) === c) this.active.delete(c.id);
     const room = c.room;
@@ -133,5 +170,5 @@ export class RoomManager {
       tick: TickMetrics.combine([...this.metrics.values()].map(m => m.tick)),
       schedulerLateness: TickMetrics.combine([...this.metrics.values()].map(m => m.lateness)), dropped: { ...this.dropped } };
   }
-  stop() { if (this.stopped) return; this.stopped = true; clearInterval(this.moderation); for (const c of [...this.connections]) { this.leave(c); c.socket.close(1012, "server-restarting"); } }
+  stop() { if (this.stopped) return; this.stopped = true; clearInterval(this.moderation); for (const c of [...this.connections]) { this.leave(c); c.socket.close(1012, "server-restarting"); } this.writer.stop(); }
 }

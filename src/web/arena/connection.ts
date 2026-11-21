@@ -1,5 +1,5 @@
 import type { Identity } from "../../shared/api";
-import { parseServer, type InputMessage, type ServerMessage } from "../../shared/arena/protocol";
+import { parseServer, type InputMessage, type Respawn, type ServerMessage } from "../../shared/arena/protocol";
 export function connectArena(identity: Identity, touch: boolean, receive: (message: ServerMessage) => void, status: (message: string) => void, disconnected: () => void) {
   let socket: WebSocket | undefined, disposed = false, refused = false, retryTeam = false;
   let timer: ReturnType<typeof setTimeout> | undefined, backoff = 250, buildId = "unknown";
@@ -30,7 +30,7 @@ export function connectArena(identity: Identity, touch: boolean, receive: (messa
   }
   connect();
   return {
-    send(input: InputMessage): boolean { if (socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount) return false; socket.send(JSON.stringify(input)); return true; },
+    send(input: InputMessage | Respawn): boolean { if (socket?.readyState !== WebSocket.OPEN || socket.bufferedAmount) return false; socket.send(JSON.stringify(input)); return true; },
     reconnect() { socket?.close(); },
     dispose() { disposed = true; clearTimeout(timer); if (socket) { socket.onclose = null; socket.onmessage = null; socket.onerror = null; socket.onopen = null; socket.close(); } },
   };

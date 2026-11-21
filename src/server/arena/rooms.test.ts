@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { openDb, hideName, startRun } from "../db";
 import { RoomManager, type Transport } from "./rooms";
+import { parseServer } from "../../shared/arena/protocol";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
@@ -27,25 +28,44 @@ test("rooms pack fullest first, 21st opens a new arena, departures dispose empty
     expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([1, 19]);
     expect(f.join().c.room).toBe(later[0]!.c.room);
     expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([1, 20]);
-    expect((f.db.query("SELECT COUNT(*) AS n FROM runs").get() as any).n).toBe(0);
-    expect((f.db.query("SELECT COUNT(*) AS n FROM events").get() as any).n).toBe(0);
+    f.manager.writer.flush();
+    expect((f.db.query("SELECT COUNT(*) AS n FROM runs").get() as any).n).toBe(42);
+    expect((f.db.query("SELECT COUNT(*) AS n FROM events WHERE type = 'run_started'").get() as any).n).toBe(42);
   } finally { f.close(); }
 });
 test("latest input applies once per tick, acknowledges applied sequences, expires held movement", () => {
   const f = fixture(); try {
     const { c } = f.join(), room = c.room!, p = room.state.players.get(c.id!)!, x = p.x;
-    const send = (seq: number) => f.manager.message(c, JSON.stringify({ v: 1, type: "input", seq, move: { x: 1, y: 0 }, aim: 0, fire: false }));
+    const send = (seq: number) => f.manager.message(c, JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq, move: { x: 1, y: 0 }, aim: 0, fire: false }));
     send(1); send(3); send(2); expect(c.ackSeq).toBe(0); expect(p.x).toBe(x);
     f.at(50); f.manager.tick(room); expect(p.x).toBe(x + 9); expect(c.ackSeq).toBe(3); expect(f.manager.dropped.sequence).toBe(1);
     f.at(100); f.manager.tick(room); expect(p.x).toBe(x + 18);
     f.at(250); f.manager.tick(room); expect(p.x).toBe(x + 18); expect(p.vx).toBe(0);
   } finally { f.close(); }
 });
+test("room snapshots transmit the simulated wave and crawler population", () => {
+  const f = fixture(); try {
+    const { c, messages } = f.join(), room = c.room!;
+    for (const [tick, wave, count] of [[0, 1, 9], [600, 2, 12]]) {
+      room.state.tick = tick!; room.state.bugs = []; room.state.spawnCredit = 0;
+      f.manager.tick(room);
+      const snapshot = parseServer(JSON.stringify(messages.at(-1)));
+      expect(snapshot?.type).toBe("snapshot"); if (snapshot?.type !== "snapshot") throw new Error("Missing snapshot");
+      expect(snapshot.wave).toBe(wave!); expect(snapshot.bugs).toHaveLength(count!);
+      expect(snapshot.bugs.map(b => b.id)).toEqual(room.state.bugs.map(b => b.id));
+      for (let i = 0; i < snapshot.bugs.length; i++) {
+        expect(snapshot.bugs[i]!.kind).toBe("crawler");
+        expect(snapshot.bugs[i]!.x).toBeCloseTo(room.state.bugs[i]!.x, 3);
+        expect(snapshot.bugs[i]!.y).toBeCloseTo(room.state.bugs[i]!.y, 3);
+      }
+    }
+  } finally { f.close(); }
+});
 test("rolling input limit includes malformed input attempts and expires exactly at 1 second", () => {
   const f = fixture(); try {
     const { c } = f.join();
     for (let i = 0; i < 30; i++) f.manager.message(c, '{"v":1,"type":"input"}');
-    const input = JSON.stringify({ v: 1, type: "input", seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: false });
+    const input = JSON.stringify({ v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 0, y: 0 }, aim: 0, fire: false });
     f.at(999); f.manager.message(c, input); expect(f.manager.dropped.rateLimited).toBe(1); expect(c.lastSeq).toBe(0);
     f.at(1000); f.manager.message(c, input); expect(c.lastSeq).toBe(1);
   } finally { f.close(); }

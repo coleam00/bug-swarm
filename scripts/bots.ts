@@ -1,17 +1,19 @@
 import { STEP_MS } from "../src/shared/arena/constants";
-import { parseServer, type Hello, type InputMessage } from "../src/shared/arena/protocol";
+import { parseServer, type Hello, type InputMessage, type Snapshot } from "../src/shared/arena/protocol";
+import { createPolicy, policyInput, type Policy } from "../src/shared/arena/policies";
 import { validateName } from "../src/server/rules";
 import { TEAMS } from "../src/shared/teams";
-export interface BotOptions { url: string; count: number; seconds: number }
+export interface BotOptions { url: string; count: number; seconds: number; policy?: Policy }
 export function parseBotArgs(args: string[]): BotOptions {
-  const options = { url: "http://127.0.0.1:3000", count: 18, seconds: 60 };
+  const options: BotOptions = { url: "http://127.0.0.1:3000", count: 18, seconds: 60, policy: "aimer" };
   const seen = new Set<string>();
   if (args[0] === "--") args = args.slice(1);
   for (let i = 0; i < args.length; i += 2) {
     const flag = args[i]!, value = args[i + 1];
-    if (!["--url", "--count", "--seconds"].includes(flag) || seen.has(flag) || !value) throw new Error("Usage: bun run bots -- --url <origin> --count <n> --seconds <s>");
+    if (!["--url", "--count", "--seconds", "--policy"].includes(flag) || seen.has(flag) || !value) throw new Error("Usage: bun run bots -- --url <origin> --count <n> --seconds <s> --policy mover|aimer");
     seen.add(flag);
-    if (flag === "--url") options.url = value;
+    if (flag === "--policy") { if (value !== "mover" && value !== "aimer") throw new Error("--policy must be mover or aimer"); options.policy = value; }
+    else if (flag === "--url") options.url = value;
     else {
       if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) throw new Error(`${flag} must be a positive safe integer`);
       if (flag === "--count") options.count = Number(value); else options.seconds = Number(value);
@@ -45,7 +47,8 @@ export async function runBots(options: BotOptions, signal?: AbortSignal) {
     if (signal?.aborted) throw new Error("Bot run interrupted");
     const joining = Array.from({ length: options.count }, (_, index) => new Promise<void>((resolve, reject) => {
       const playerId = crypto.randomUUID(), name = botName(index), socket = new WebSocket(url); sockets.push(socket);
-      let seq = 0, welcomed = false, x = 1200, y = 1200, tick = 0;
+      let seq = 0, welcomed = false, snapshot: Snapshot | undefined, respawned = 0;
+      const policy = createPolicy(index + 1);
       socket.onopen = () => {
         socket.send(JSON.stringify({ v: 1, type: "hello", playerId, name, team: TEAMS[index % TEAMS.length]!, touch: false, buildId: "bots" } satisfies Hello)); sent++;
       };
@@ -53,17 +56,14 @@ export async function runBots(options: BotOptions, signal?: AbortSignal) {
         received++; const message = parseServer(event.data);
         if (!message) { fail(new Error(`${name}: invalid server message`)); return; }
         if (message.type === "error") { fail(new Error(`${name}: ${message.code}: ${message.message}`)); return; }
-        if (message.type === "snapshot") { const p = message.players.find(p => p.id === playerId); if (p) { x = p.x; y = p.y; tick = message.tick; } }
+        if (message.type === "snapshot") snapshot = message;
         if (message.type === "welcome" && !welcomed) {
           welcomed = true; joins++; arenas.add(message.arenaId); resolve();
           timers.push(setInterval(() => {
             if (socket.readyState !== WebSocket.OPEN) return;
-            // Distinct, reproducible orbits near the shared spawn; authoritative positions steer the bot.
-            const angle = tick * STEP_MS / 1000 * 0.35 + index * 2.399963;
-            const radius = 90 + (index % 4) * 28;
-            const dx = 1200 + Math.cos(angle) * radius - x, dy = 1200 + Math.sin(angle) * radius - y;
-            const distance = Math.hypot(dx, dy), scale = Math.max(30, distance);
-            const message: InputMessage = { v: 1, type: "input", seq: ++seq, move: { x: dx / scale, y: dy / scale }, aim: Math.atan2(dy, dx), fire: false };
+            const p = snapshot?.players.find(p => p.id === playerId); if (!p || !snapshot) return;
+            if (!p.hits) { if (respawned !== p.life) { socket.send(JSON.stringify({ v: 1, type: "respawn", life: p.life, touch: false })); sent++; respawned = p.life; } return; }
+            const message: InputMessage = { v: 1, type: "input", seq: ++seq, life: p.life, touch: false, ...policyInput(options.policy ?? "aimer", snapshot, p, policy) };
             socket.send(JSON.stringify(message)); sent++;
           }, STEP_MS));
         }
@@ -79,7 +79,7 @@ export async function runBots(options: BotOptions, signal?: AbortSignal) {
       !Number.isFinite(stats.tick.p50Ms) || !Number.isFinite(stats.tick.p95Ms)) throw new Error("Unavailable or invalid arena stats");
     const elapsed = (performance.now() - start) / 1000;
     return { requested: options.count, joins, arenas: [...arenas], arenaCount: arenas.size, sent, received,
-      messagesPerSecond: { sent: sent / elapsed, received: received / elapsed }, errors: 0, tick: stats.tick };
+      policy: options.policy ?? "aimer", messagesPerSecond: { sent: sent / elapsed, received: received / elapsed }, errors: 0, tick: stats.tick, schedulerLateness: stats.schedulerLateness };
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : String(error)}; joins ${joins}/${options.count}, arenas ${arenas.size}, sent ${sent}, received ${received}, errors 1`, { cause: error });
   } finally {

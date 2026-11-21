@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
-import { parseClient, parseServer, type Hello, type InputMessage, type ArenaError, type Snapshot, type Welcome } from "./protocol";
+import { parseClient, parseServer, serializeSnapshot, type Hello, type InputMessage, type ArenaError, type Snapshot, type Welcome } from "./protocol";
 import { createArena, joinPlayer } from "./simulation";
 import { MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "./constants";
+import { MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SERVER_MESSAGE_BYTES } from "./constants";
 const hello: Hello = { v: 1, type: "hello", playerId: crypto.randomUUID(), name: "Robot", team: "tabs", touch: false, buildId: "test" };
-const input: InputMessage = { v: 1, type: "input", seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
-test("directional protocol accepts the five variants and full-room snapshots over 1 KiB", () => {
+const input: InputMessage = { v: 1, type: "input", life: 1, touch: false, seq: 1, move: { x: 1, y: 0 }, aim: 0, fire: false };
+test("directional protocol accepts validated envelopes and full-room snapshots over 1 KiB", () => {
   expect(parseClient(JSON.stringify(hello))).toEqual(hello); expect(parseClient(JSON.stringify(input))).toEqual(input);
   const welcome: Welcome = { v: 1, type: "welcome", playerId: hello.playerId, arenaId: "room", buildId: "test", world: { width: WORLD_WIDTH, height: WORLD_HEIGHT },
     constants: { stepMs: STEP_MS, playerSpeed: PLAYER_SPEED, playerRadius: PLAYER_RADIUS, maxPlayers: MAX_PLAYERS } };
@@ -12,10 +13,23 @@ test("directional protocol accepts the five variants and full-room snapshots ove
   const error: ArenaError = { v: 1, type: "error", code: "name-refused", message: "Pick another." }; expect(parseServer(JSON.stringify(error))).toEqual(error);
   const arena = createArena(3);
   for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: `bot-${i}`, team: "spaces" });
-  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, players: [...arena.players.values()].map(p => ({ ...p, ackSeq: 0 })) };
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 1, bugs: [], shots: [], events: [], players: [...arena.players.values()].map(p => ({ ...p, ackSeq: 0 })) };
   const raw = JSON.stringify(snapshot); expect(raw.length).toBeGreaterThan(1024); expect(parseServer(raw)).toEqual(snapshot); expect(parseClient(raw)).toBeNull();
   snapshot.players[0]!.name = "<script>"; expect(parseServer(JSON.stringify(snapshot))).toBeNull();
   expect(parseServer(JSON.stringify(hello))).toBeNull(); expect(parseClient(JSON.stringify(welcome))).toBeNull();
+});
+test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/results", () => {
+  const arena = createArena(2);
+  for (let i = 0; i < 20; i++) joinPlayer(arena, { id: crypto.randomUUID(), name: "WideWWWWWWWWWWWW", team: "tabs" });
+  const players = [...arena.players.values()].map(p => ({ ...p, heat: 17.9991, streak: 999999, points: 9999999, score: 9999999, kills: 999999, immuneUntil: 9999999, overheatUntil: 9999999, nextShotAt: 9999999, ackSeq: 99999999 }));
+  const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: crypto.randomUUID(), tick: 9999999, wave: 9999, players,
+    bugs: Array.from({ length: MAX_BUGS }, (_, i) => ({ id: i, kind: "crawler", x: 1234.56789, y: 1234.56789, vx: -98.994949, vy: 98.994949 })),
+    shots: Array.from({ length: MAX_SHOTS }, (_, i) => ({ id: MAX_BUGS + i, owner: players[i % 20]!.id, life: 1, x: 1234.56789, y: 1234.56789, vx: 636.3961, vy: -636.3961, born: 499999949.12345 })),
+    events: Array.from({ length: MAX_EVENTS }, (_, i) => ({ id: 1000 + i, tick: 9999999, x: 1234.56789, y: 1234.56789, points: 30 })) };
+  const raw = serializeSnapshot(snapshot); expect(new TextEncoder().encode(raw).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(raw)).not.toBeNull();
+  const corrupt = JSON.parse(raw); corrupt.players[0].result = null; expect(parseServer(JSON.stringify(corrupt))).toBeNull();
+  snapshot.bugs[0]!.vx = 1e6; expect(parseServer(serializeSnapshot(snapshot))).toBeNull(); snapshot.bugs[0]!.vx = 0;
+  snapshot.shots[0]!.owner = crypto.randomUUID(); expect(parseServer(serializeSnapshot(snapshot))).toBeNull();
 });
 test("UTF-8 cap measures bytes: 1024 accepted, 1025 dropped, malformed and unknown counted", () => {
   const prefix = JSON.stringify({ ...input, extra: "é" });
@@ -29,7 +43,7 @@ test("UTF-8 cap measures bytes: 1024 accepted, 1025 dropped, malformed and unkno
 });
 test("reject unsafe/nonfinite/schema inputs, binary and future types; name refusals reach hello handler", () => {
   for (const value of [{ ...input, seq: 0 }, { ...input, seq: Number.MAX_SAFE_INTEGER + 1 }, { ...input, aim: null }, { ...input, fire: 1 },
-    { ...input, move: { x: "1", y: 0 } }, { ...input, type: "respawn" }, { ...hello, playerId: "bad" }, { ...hello, team: "blue" }]) expect(parseClient(JSON.stringify(value))).toBeNull();
+    { ...input, move: { x: "1", y: 0 } }, { ...input, type: "respawn", life: 0 }, { ...hello, playerId: "bad" }, { ...hello, team: "blue" }]) expect(parseClient(JSON.stringify(value))).toBeNull();
   expect(parseClient(new Uint8Array())).toBeNull();
   expect(parseClient(JSON.stringify({ ...hello, name: "<script>" }))).not.toBeNull();
 });

@@ -163,7 +163,7 @@ test("hold migration backfills only finished high scores once and preserves appr
     expect(getRun(db, "above")?.held).toBe(1);
     expect(getRun(db, "pending")?.held).toBe(0);
     expect(db.query("SELECT * FROM runs ORDER BY id").all().map(row => {
-      const { held, ...rest } = row as Record<string, unknown>; return rest;
+      const { held, mode, ...rest } = row as Record<string, unknown>; expect(mode).toBe("release1"); return rest;
     })).toEqual(before);
     expect(approveRun(db, "high")).toBe("approved");
     db.close(); db = openDb(path); db.close(); db = openDb(path);

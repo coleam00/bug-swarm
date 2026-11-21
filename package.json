@@ -14,6 +14,7 @@
     "approve": "bun scripts/approve.ts",
     "load": "bun scripts/load.ts",
     "bots": "bun scripts/bots.ts",
+    "skill": "bun scripts/skill.ts",
     "reset": "bun scripts/reset.ts"
   },
   "dependencies": {
