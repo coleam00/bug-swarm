@@ -274,12 +274,46 @@ test("one HUD baseline uses authoritative combat and connected population, fitti
       // Counting every text paint also catches persistent instructions outside that line.
       const hud = c.paints.filter(p => p.op === "fillText" || p.op === "strokeText");
       expect(hud).toHaveLength(1);
-      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+W19\s+20 in this arena$/);
+      expect(String(hud[0]!.args[0])).toMatch(/pts\s+×1\.7\s+2 hits\s+Lv 1\s+20 in this arena$/);
       if (score === 123) expect(String(hud[0]!.args[0])).toStartWith("123 pts");
       c.font = hud[0]!.font;
       expect(Number(hud[0]!.args[1]) + c.measureText(String(hud[0]!.args[0])).width).toBeLessThanOrEqual(width! - 16);
       expect(hud[0]!.transform).toEqual([1, 0, 0, 1, 0, 0]);
     }
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("HUD level follows authoritative life age, freezes at termination and resets on respawn", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const local = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs" as const, x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const p: Snapshot["players"][number] = { ...local, startedTick: 73800, ackSeq: 0 };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "old-room", tick: 73800, wave: 124, players: [p], bugs: [], shots: [], globs: [], events: [] };
+    const draw = (level: number, now = 0) => {
+      fixture.context.paints.length = 0;
+      renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], snapshot.wave, 1, now, 1, snapshot, 0);
+      const hud = fixture.context.paints.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"));
+      expect(String(hud?.args[0])).toMatch(new RegExp(`\\bLv ${level}\\b`));
+      expect(String(hud?.args[0])).not.toMatch(/\bW\d+\b/);
+    };
+    draw(1); // Wave 124, but this life just joined. Predicted startedTick is stale.
+    for (const [age, level] of [[59.95, 1], [60, 2], [120, 3], [240, 4]]) {
+      snapshot.tick = p.startedTick + age! * 20; draw(level!);
+    }
+    snapshot.tick = p.startedTick + 1200; draw(2);
+    snapshot.wave++; draw(2); draw(2, 1e9); // Neither waves nor animation time set level.
+    p.status = "downed"; draw(2);
+    p.status = "active"; draw(2); // Revival retains the original startedTick.
+    p.status = "out";
+    p.result = { v: 1, type: "life_over", playerId: p.id, life: p.life, score: 0, kills: 0, seconds: 60, touch: false, save: "saved" };
+    snapshot.tick += 100000; draw(2); // Terminal duration stays frozen across thresholds.
+    Object.assign(p, lifeDefaults(snapshot.tick, 2)); delete p.result; draw(1);
+    local.startedTick = 100;
+    fixture.context.paints.length = 0;
+    renderer.draw(1280, 720, { x: 750, y: 750 }, [local], local, input, [], [], 124, 2500, 1e9);
+    expect(fixture.context.paints.find(p => p.op === "fillText" && String(p.args[0]).includes(" pts"))?.args[0]).toContain("Lv 3");
   } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
 });
 
@@ -348,8 +382,7 @@ test("downed robots remain visible with countdown/progress, local copy and remot
     const arrows = (paints: Paint[]) => paints.filter(paint => paint.op === "fill" && paint.path[0]?.op === "moveTo" && paint.path.some(c => c.op === "lineTo"));
     const overlay = (paints: Paint[], width = 390) => paints.find(paint => paint.op === "fillRect" && Number(paint.args[2]) > width / 2 &&
       Number(paint.args[1]) > 78 && Number(paint.args[1]) + Number(paint.args[3]) < p.y);
-    // Require the explanation separately from the countdown in both banner
-    // layouts, without pinning the wording of either explanation line.
+    // Both layouts read as the same sentence, separate from the countdown.
     for (const [width, height, lines] of [[390, 844, 2], [844, 390, 1]] as const) {
       const frame = draw(p, [], 0, width, height), panel = overlay(frame, width);
       expect(panel).toBeDefined();
@@ -358,6 +391,7 @@ test("downed robots remain visible with countdown/progress, local copy and remot
         Number(paint.args[2]) > Number(panel!.args[1]) && Number(paint.args[2]) < Number(panel!.args[1]) + Number(panel!.args[3]));
       const explanation = text.filter(paint => /\p{L}{2,}/u.test(String(paint.args[0])));
       expect(explanation).toHaveLength(lines);
+      expect(explanation.map(paint => paint.args[0]).join(" ")).toBe("Downed. A teammate can revive you.");
       expect(text.filter(paint => paint.args[0] === "8s")).toHaveLength(1);
       for (const paint of text) {
         expect(paint.globalAlpha).toBeGreaterThan(0);
@@ -714,12 +748,12 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
     expect(immuneA.globalAlpha).not.toBe(immuneB.globalAlpha); expect(immuneB.globalAlpha).toBeGreaterThan(0);
     const numbers = (paints: typeof cold) => paints.filter(paint => paint.op === "fillText")
       .flatMap(paint => String(paint.args[0]).match(/\d+(?:\.\d+)?/g)?.map(Number) ?? []);
-    expect(numbers(cold)).toEqual(expect.arrayContaining([5, 123, 1, 3]));
+    expect(numbers(cold)).toEqual(expect.arrayContaining([123, 1, 3]));
     p.score = 987; p.streak = 7; p.hits = 1;
-    const updated = numbers(draw(3, 12)); expect(updated).toEqual(expect.arrayContaining([12, 987, 1.7, 1]));
+    const updated = numbers(draw(3, 12)); expect(updated).toEqual(expect.arrayContaining([987, 1.7, 1]));
     expect(updated).not.toContain(123); expect(updated).not.toContain(5);
     p.streak = 30;
-    const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([17, 987, 3, 1]));
+    const capped = numbers(draw(4, 17)); expect(capped).toEqual(expect.arrayContaining([987, 3, 1]));
     expect(capped).not.toContain(4);
     const effectTime = 1_000_000_000, kill = { id: 1, tick: 4, x: 550, y: 550, points: 11, type: "kill" as const, kind: "crawler" as const };
     renderer.events([kill], effectTime);
