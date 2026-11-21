@@ -13,7 +13,7 @@ export function skillSeed(seed: number, policy: Policy, steps = 180000 / STEP_MS
   const inputs = new Map<string, Input>();
   for (let tick = 0; tick < steps; tick++) {
     for (const p of arena.players.values()) if (p.status === "out") respawnPlayer(arena, p.id, p.life);
-    const observation = { players: [...arena.players.values()], bugs: arena.bugs };
+    const observation = { players: [...arena.players.values()], bugs: arena.bugs, pickups: arena.pickups, tick: arena.tick };
     for (const p of arena.players.values()) inputs.set(p.id, policyInput(policy, observation, p, states[Number(p.id)]!));
     stepArena(arena, inputs); for (const life of arena.ended) lives.push({ ...life, cutoff: false });
   }
@@ -51,7 +51,7 @@ export function newcomerTrial(seed: number, policy: Policy | "idle", joinSeconds
       admitted?.(arena);
     }
     for (const p of arena.players.values()) if (p.status === "out" && p.id !== "newcomer") respawnPlayer(arena, p.id, p.life);
-    const observation = { players: [...arena.players.values()], bugs: arena.bugs };
+    const observation = { players: [...arena.players.values()], bugs: arena.bugs, pickups: arena.pickups, tick: arena.tick };
     for (const p of arena.players.values()) {
       inputs.set(p.id, p.id === "newcomer" ? policy === "idle" ? neutralInput() : policyInput(policy, observation, p, newcomerState)
         : policyInput("aimer", observation, p, states[Number(p.id)]!));

@@ -1,8 +1,9 @@
 import { isId, validateName } from "../../server/rules";
 import { isTeam, type Team } from "../teams";
-import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS } from "./constants";
-import type { Input, CombatPlayer, Bug, Shot, CombatEvent, LifeResult } from "./types";
+import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS, MAX_BUGS, MAX_SHOTS, MAX_EVENTS, SHOT_SPEED, HEAT_CAPACITY, PLAYER_SPEED, DOWNED_MS, REVIVE_MS, STEP_MS, MAX_PICKUPS, PICKUP_LIFETIME_MS } from "./constants";
+import type { Input, CombatPlayer, Bug, Shot, CombatEvent, LifeResult, Pickup } from "./types";
 import { BUGS, isBugKind } from "./bugs/registry";
+import { PICKUPS, isPickupKind } from "./pickups/registry";
 export const VERSION = 1;
 export const HIDDEN_IDENTITY_MESSAGE = "That name isn't allowed.";
 export interface Hello { v: 1; type: "hello"; playerId: string; name: string; team: Team; touch: boolean; buildId: string }
@@ -14,7 +15,7 @@ export interface LifeOver extends LifeResult { v: 1; type: "life_over"; save: Sa
 export interface ServerRestart { v: 1; type: "server_restart"; result?: LifeOver }
 export interface Welcome { v: 1; type: "welcome"; playerId: string; arenaId: string; buildId: string;
   world: { width: number; height: number }; constants: { stepMs: number; playerSpeed: number; playerRadius: number; maxPlayers: number } }
-export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; bugs: Bug[]; shots: Shot[]; events: CombatEvent[];
+export interface Snapshot { v: 1; type: "snapshot"; arenaId: string; tick: number; wave: number; pickups: Pickup[]; bugs: Bug[]; shots: Shot[]; events: CombatEvent[];
   players: (CombatPlayer & { ackSeq: number; result?: LifeOver })[] }
 export interface ArenaError { v: 1; type: "error"; code: string; message: string; team?: Team }
 export type ClientMessage = Hello | InputMessage | Respawn;
@@ -67,6 +68,8 @@ export function parseServer(raw: unknown): ServerMessage | null {
       (p.status === "downed" ? p.downedUntil <= v.tick * STEP_MS || p.downedUntil > v.tick * STEP_MS + DOWNED_MS :
         p.downedUntil !== 0 || p.reviveMs !== 0 || p.reviving) ||
       (p.status !== "active" && (p.vx !== 0 || p.vy !== 0))) return null;
+    if (!object(p.effects) || Object.getPrototypeOf(p.effects) !== Object.prototype) return null;
+    for (const [kind, until] of Object.entries(p.effects)) if (!isPickupKind(kind) || p.status !== "active" || !finite(until) || until <= v.tick * STEP_MS || until > v.tick * STEP_MS + PICKUPS[kind].duration + 0.001) return null;
     ids.add(p.id);
   }
   const entityIds = new Set<number>();
@@ -77,6 +80,11 @@ export function parseServer(raw: unknown): ServerMessage | null {
       if (entities === v.bugs ? (!isBugKind(e.kind) || !integer(e.hp) || e.hp < 1 || e.hp > BUGS[e.kind].health || !finite(e.facing) || Math.abs(e.facing) > Math.PI + 0.001 || !BUGS[e.kind].valid(e as Bug, v.tick * 50)) : !ids.has(e.owner) || !integer(e.life) || e.life !== v.players.find((p: RecordValue) => p.id === e.owner)?.life || !finite(e.born) || e.born < 0 || e.born > v.tick * 50) return null;
       entityIds.add(e.id);
     }
+  }
+  if (!Array.isArray(v.pickups) || v.pickups.length > MAX_PICKUPS) return null;
+  for (const p of v.pickups) {
+    if (!object(p) || !integer(p.id) || entityIds.has(p.id) || !isPickupKind(p.kind) || ![p.x, p.y, p.expiresAt].every(finite) || p.x < 0 || p.x > WORLD_WIDTH || p.y < 0 || p.y > WORLD_HEIGHT || p.expiresAt <= v.tick * STEP_MS || p.expiresAt > v.tick * STEP_MS + PICKUP_LIFETIME_MS + 0.001) return null;
+    entityIds.add(p.id);
   }
   if (!Array.isArray(v.events) || v.events.length > MAX_EVENTS) return null;
   const events = new Set<number>();

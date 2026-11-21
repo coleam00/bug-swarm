@@ -67,3 +67,13 @@ export const VISIBILITY_PADDING = 64;
 export const THREAT_CURVE = [[0, 0.1], [60, 4.25], [120, 5], [240, 6]] as const;
 export const MAX_SHOTS = MAX_PLAYERS * (Math.ceil(SHOT_RATE * SHOT_LIFETIME_MS / 1000) + 1);
 export const MAX_EVENTS = MAX_SHOTS;
+export const MAX_PICKUPS = 6;
+export const PICKUP_LIFETIME_MS = 12000;
+export const PICKUP_BLINK_MS = 3000;
+export const PICKUP_RADIUS = 16;
+export const SHIELD_MS = 20000;
+export const PICKUP_SEEK_DISTANCE = 250;
+export const PICKUP_SAFE_DISTANCE = 200;
+export const PICKUP_ROUTE_CLEARANCE = 150;
+// Reserved rates do not introduce unimplemented bug kinds.
+export const PICKUP_DROP_CHANCE = { crawler: 0.02, dasher: 0.06, spitter: 0.06, beetle: 0.15 } as const;

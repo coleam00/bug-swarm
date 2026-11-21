@@ -2,7 +2,7 @@ import { DOWNED_MS, REVIVE_IMMUNITY_MS, REVIVE_MS, REVIVE_POINTS, REVIVE_RADIUS,
 import type { ArenaState, CombatPlayer } from "./types";
 
 export function downPlayer(state: ArenaState, p: CombatPlayer) {
-  p.status = "downed"; p.hits = 0; p.vx = p.vy = 0;
+  p.effects = {}; p.status = "downed"; p.hits = 0; p.vx = p.vy = 0;
   p.downedUntil = state.tick * STEP_MS + DOWNED_MS; p.reviveMs = 0; p.reviving = false;
   state.spawnCredits.delete(p.id);
   // Cancellation is not a miss: preserve the life's accuracy streak.

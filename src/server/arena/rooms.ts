@@ -105,7 +105,7 @@ export class RoomManager {
   }
   snapshot(room: Room): Snapshot {
     return { v: 1, type: "snapshot", arenaId: room.id, tick: room.state.tick,
-      wave: room.state.wave, bugs: room.state.bugs, shots: room.state.shots, events: room.state.events,
+      wave: room.state.wave, pickups: room.state.pickups, bugs: room.state.bugs, shots: room.state.shots, events: room.state.events,
       players: Array.from(room.members, c => ({ ...room.state.players.get(c.id!)!, ackSeq: c.ackSeq, ...(c.result ? { result: c.result } : {}) })) };
   }
   private broadcast(room: Room) {
