@@ -7,6 +7,7 @@ import type { ArenaInput } from "./input";
 import { helpArrow } from "./help-arrow";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
+import { personalLevel } from "./level";
 export class ArenaRenderer {
   private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bugDraw: Record<BugKind, BugDraw>;
@@ -79,12 +80,16 @@ export class ArenaRenderer {
       c.fillText("Help", arrow.x, arrow.y + 26);
     }
     if (local && "life" in local) {
-      const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
+      const authoritative = snapshot?.players.find(p => p.id === local.id);
+      const p = authoritative ?? local as CombatPlayer;
       const population = snapshot?.players.length ?? players.length;
-      const key = `${p.score}/${p.streak}/${p.hits}/${wave}/${population}/${width}/${height}`;
+      const result = p.status === "out" && authoritative?.result?.life === p.life && authoritative.result.playerId === p.id ? authoritative.result : undefined;
+      const age = result ? result.seconds : Math.max(0, ((snapshot?.tick ?? tick) - p.startedTick) * STEP_MS / 1000);
+      const level = personalLevel(age);
+      const key = `${p.score}/${p.streak}/${p.hits}/${level}/${population}/${width}/${height}`;
       if (key !== this.hudKey) {
         this.hudKey = key; this.hudFont = Math.min(width, height) < 600 ? 16 : 20;
-        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  W${wave}  ${population} in this arena`;
+        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  Lv ${level}  ${population} in this arena`;
         this.hudText = text(p.score.toLocaleString()); c.font = `bold ${this.hudFont}px system-ui`;
         if (c.measureText(this.hudText).width > width - 32) this.hudText = text(Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(p.score));
         while (c.measureText(this.hudText).width > width - 32 && this.hudFont > 12) c.font = `bold ${--this.hudFont}px system-ui`;
@@ -101,14 +106,14 @@ export class ArenaRenderer {
       const p = local as CombatPlayer;
       if (p.status === "downed") {
         c.font = "bold 16px system-ui";
-        const message = "Downed — a teammate can revive you", wide = c.measureText(message).width <= width - 32;
+        const message = "Downed. A teammate can revive you.", wide = c.measureText(message).width <= width - 32;
         const panelHeight = wide ? 52 : 74, robotY = (p.y - camera.y) * scale, preferredY = map.y + map.height + 8;
         // Keep the entire name/rings/Help clear, including at the top wall.
         const panelY = robotY - 54 * scale >= preferredY + panelHeight + 8 ? preferredY : Math.ceil(robotY + 72 * scale);
         c.fillStyle = "#060b12ee"; c.fillRect(8, panelY, width - 16, panelHeight);
         c.textAlign = "center"; c.fillStyle = "#ffe09a";
         if (wide) c.fillText(message, width / 2, panelY + 20);
-        else { c.fillText("Downed — a teammate", width / 2, panelY + 20); c.fillText("can revive you", width / 2, panelY + 42); }
+        else { c.fillText("Downed. A teammate", width / 2, panelY + 20); c.fillText("can revive you.", width / 2, panelY + 42); }
         c.fillText(`${Math.ceil(Math.max(0, p.downedUntil - this.time) / 1000)}s`, width / 2, panelY + (wide ? 42 : 64));
       }
     }
