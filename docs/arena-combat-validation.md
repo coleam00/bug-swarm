@@ -1,5 +1,7 @@
 # Drop-in fairness validation — issue #65
 
+Earlier slice evidence below is historical. The game now runs at `/` through StartScreen; `/arena` redirects there. Current entry, HUD, minimap and touch validation: [cutover-validation.md](cutover-validation.md).
+
 The current rules and measurements include the returned-check correction. Evidence stays inside this checkout under `.evidence/65/` (gitignored), with scratch homes, profiles and databases; the pull request summarizes it.
 
 ## Rules and correction
@@ -146,10 +148,10 @@ bun install --frozen-lockfile
 bun run check
 bun run skill
 bun run build
-bun docs/arena-combat-evidence/validate.ts
+bun scripts/validate-cutover.ts
 ```
 
-Set `CHROME_PATH` to your Chrome/Chromium executable before the last command. The [driver](arena-combat-evidence/validate.ts) creates its own loopback production server, private homes/data/profile, browser contexts and developer fixture server, and replaces the evidence files. It invokes the final load command itself against the origin it owns:
+Set `CHROME_PATH` to your Chrome/Chromium executable before the last command. The [driver](../scripts/validate-cutover.ts) creates its own loopback production server, private homes/data/profile, browser contexts and developer fixture server, and writes evidence under `.evidence/73/`. It invokes the final load command itself against the origin it owns:
 
 ```text
 bun run bots -- --url <owned-origin> --count 200 --seconds 120 --policy aimer

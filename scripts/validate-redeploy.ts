@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import assert from "node:assert/strict";
 // Run from a clean checkout after bun install. Every generated file stays in
 // this checkout; the owned Chrome/server processes never use an operator profile.
-const root = resolve(import.meta.dir, ".."), evidenceRoot = join(root, ".evidence/66");
+const root = resolve(import.meta.dir, ".."), evidenceRoot = join(root, ".evidence/73");
 mkdirSync(evidenceRoot, { recursive: true });
 const evidence = mkdtempSync(join(evidenceRoot, "redeploy-")), data = join(evidence, "data"), profile = join(evidence, "chrome-profile"), changed = join(evidence, "changed");
 mkdirSync(data, { recursive: true });
@@ -114,7 +114,7 @@ try {
   await send("Page.addScriptToEvaluateOnNewDocument", { source: `localStorage.setItem('bug-swarm-player', ${JSON.stringify(JSON.stringify(identity))}); let previous; new MutationObserver(() => { const status = document.querySelector('[role=status]')?.textContent ?? ''; if (status !== previous) { previous = status; evidenceStatus(JSON.stringify({status, canvas: !!document.querySelector('canvas'), dialog: !!document.querySelector('[role=dialog]')})); } }).observe(document, {subtree:true, childList:true, characterData:true});` });
   const evaluate = async (expression: string) => (await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true })).result.value;
   const screenshot = async (name: string) => { const result = await send("Page.captureScreenshot", { format: "png" }); await Bun.write(join(evidence, name + ".png"), Buffer.from(result.data, "base64")); };
-  await send("Page.navigate", { url: origin + "/arena" });
+  await send("Page.navigate", { url: origin + "/" });
   await until(() => evaluate("document.querySelector('button')?.textContent"), "join button");
   await evaluate("document.querySelector('button').click()");
   await until(() => welcomes.length === 1, "first welcome");

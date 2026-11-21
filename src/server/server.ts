@@ -36,6 +36,7 @@ export function createServer(options: { port?: number; hostname?: string; dataDi
     // Neither / nor /index.html may bypass share metadata substitution.
     app.get("/", c => html(c.req.url));
     app.get("/index.html", c => html(c.req.url));
+    for (const alias of ["/arena", "/arena/"]) app.get(alias, c => c.redirect("/" + new URL(c.req.url).search, 307));
     app.use("/*", serveStatic({ root: "./dist" }));
     app.get("*", c => html(c.req.url));
 

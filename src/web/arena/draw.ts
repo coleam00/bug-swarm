@@ -1,12 +1,11 @@
 import { PLAYER_RADIUS, WORLD_HEIGHT, WORLD_WIDTH, HEAT_CAPACITY, HEAT_WARNING, STEP_MS, MAX_EVENTS } from "../../shared/arena/constants";
 import { TEAM_COLOURS, TEAMS } from "../../shared/teams";
-import type { Player, CombatPlayer, Bug, Shot, KillEvent, LifeResult } from "../../shared/arena/types";
+import type { Player, CombatPlayer, Bug, Shot, KillEvent } from "../../shared/arena/types";
 import type { ArenaInput } from "./input";
-export function lifeClock(p: CombatPlayer & { result?: LifeResult }, tick: number): string {
-  const seconds = Math.floor(p.result?.seconds ?? Math.max(0, tick - p.startedTick) * STEP_MS / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
+import type { Snapshot } from "../../shared/arena/protocol";
+import { drawMinimap, minimapBounds } from "./minimap";
 export class ArenaRenderer {
+  private hudKey = ""; private hudText = ""; private hudFont = 20;
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0;
   reset() { this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
@@ -26,7 +25,7 @@ export class ArenaRenderer {
       g.fillStyle = gradient; g.fillRect(0, 0, 100, 100); this.glows.set(team, glow);
     }
   }
-  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1) {
+  draw(width: number, height: number, camera: { x: number; y: number }, players: Player[], local: Player | null, input: ArenaInput, bugs: Bug[] = [], shots: Shot[] = [], wave = 0, tick = 0, now = 0, scale = 1, snapshot?: Snapshot | null) {
     this.time = tick * STEP_MS;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
@@ -57,18 +56,29 @@ export class ArenaRenderer {
       c.fillStyle = "#fff1bd"; c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText(`+${e.points}`, e.x, e.y - 18 - age / 30); c.globalAlpha = 1;
     }
     c.restore();
+    if (local && "life" in local) {
+      const p = snapshot?.players.find(p => p.id === local.id) ?? local as CombatPlayer;
+      const population = snapshot?.players.length ?? players.length;
+      const key = `${p.score}/${p.streak}/${p.hits}/${wave}/${population}/${width}/${height}`;
+      if (key !== this.hudKey) {
+        this.hudKey = key; this.hudFont = Math.min(width, height) < 600 ? 16 : 20;
+        const text = (score: string) => `${score} pts  ×${Math.min(3, 1 + p.streak / 10).toFixed(1)}  ${p.hits} hits  W${wave}  ${population} in this arena`;
+        this.hudText = text(p.score.toLocaleString()); c.font = `bold ${this.hudFont}px system-ui`;
+        if (c.measureText(this.hudText).width > width - 32) this.hudText = text(Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(p.score));
+        while (c.measureText(this.hudText).width > width - 32 && this.hudFont > 12) c.font = `bold ${--this.hudFont}px system-ui`;
+      }
+      c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
+      c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
+    }
+    drawMinimap(c, minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT), WORLD_WIDTH, WORLD_HEIGHT, players, local, bugs);
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
       c.strokeStyle = "#ffffff55"; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, 60, 0, Math.PI * 2); c.stroke();
       c.fillStyle = "#ffffff66"; c.beginPath(); c.arc(s.x + s.dx * scale, s.y + s.dy * scale, 22, 0, Math.PI * 2); c.fill();
     }
-    if (local && "life" in local) {
-      const p = local as CombatPlayer;
-      c.fillStyle = "#060b12cc"; c.fillRect(10, 10, Math.min(width - 20, 330), 68);
-      c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = "bold 20px system-ui"; c.fillText(`Wave ${wave}   ${p.score.toLocaleString()} pts`, 22, 36);
-      c.font = "bold 16px system-ui"; c.fillStyle = "#7be7ca"; c.fillText(`×${Math.min(3, 1 + p.streak / 10).toFixed(1)}   ${p.hits} hits left   ${lifeClock(p, tick)}`, 22, 62);
-    }
+
   }
+
   private robot(p: Player, local: boolean, camera: { x: number; y: number }, width: number, height: number) {
     const combat = p as CombatPlayer; if (combat.hits === 0) return;
     if (p.x < camera.x - 70 || p.x > camera.x + width + 70 || p.y < camera.y - 70 || p.y > camera.y + height + 70) return;

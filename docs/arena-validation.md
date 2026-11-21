@@ -1,5 +1,7 @@
 # Arena movement validation — issue #57
 
+Earlier slice evidence below is historical. The game now runs at `/` through StartScreen; `/arena` redirects there. Current entry, HUD, minimap and touch validation: [cutover-validation.md](cutover-validation.md).
+
 Current combat evidence is in [arena-combat-validation.md](arena-combat-validation.md). The measurements below describe the earlier movement slice.
 
 Validated on Windows on 2026-11-20 with Bun 1.4.2 and headless Chromium 156.0.8078.4. The production Vite build ran through `createServer`, bound only to `127.0.0.1`, with a temporary SQLite directory and private HOME/USERPROFILE/AppData/cache/temp directories. Two independent browser storage contexts joined as Pilot-A (Tabs) and Pilot-B (Spaces). Every server, browser and bot process was started for this validation and stopped afterward.

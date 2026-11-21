@@ -1,6 +1,6 @@
 import { Resvg } from "@resvg/resvg-js";
 import { Hono } from "hono";
-import { BUG_STYLES } from "../web/game/styles";
+import { BUG_STYLES } from "../web/drawing/styles";
 
 // A static SVG interpretation of draw.ts. No canvas or per-frame work is shared.
 const glow = `<radialGradient id="core"><stop stop-color="#b5fff0"/><stop offset=".32" stop-color="#64fbd0" stop-opacity=".65"/><stop offset="1" stop-color="#64fbd0" stop-opacity="0"/></radialGradient>`;

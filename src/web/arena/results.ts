@@ -1,4 +1,4 @@
-import type { GameApi } from "../game/api";
+import type { ScoresApi } from "../api";
 import type { Standing, TeamTotals } from "../../shared/api";
 import type { LifeOver } from "../../shared/arena/protocol";
 import type { ReadStatus } from "../results/Results";
@@ -19,7 +19,7 @@ export class ArenaResults {
   private sequence = { best: 0, standing: 0, teams: 0 };
   private applied = { best: 0, standing: 0, teams: 0 };
   private timer: unknown;
-  constructor(private playerId: string, private api: Pick<GameApi, Field>, private publish: (view: ResultsView | null) => void,
+  constructor(private playerId: string, private api: Pick<ScoresApi, Field>, private publish: (view: ResultsView | null) => void,
     private clock: Scheduler = scheduler, private log: (message: string, error: unknown) => void = console.error) {}
   show(result: LifeOver | null) {
     if (result && this.view?.result.life === result.life && this.view.result.save === result.save) return;

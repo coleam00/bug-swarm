@@ -8,15 +8,17 @@ import "./entry.css";
 export interface StartRequest { name: string; team: Team; touch: boolean }
 
 /** The caller owns identity persistence and activation of its game route. */
-export function StartScreen({ savedIdentity, onStart }: {
+export function StartScreen({ savedIdentity, onStart, draft = "", onDraft, serverError = "", clearError }: {
   savedIdentity: Identity | null; onStart: (request: StartRequest) => void;
+  draft?: string; onDraft?: (name: string) => void; serverError?: string; clearError?: () => void;
 }) {
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState("");
+  const [localDraft, setDraft] = useState(draft);
+  const [validationError, setError] = useState("");
+  const error = validationError || serverError;
   const touch = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const firstTeam = useRef<HTMLButtonElement>(null);
-  const name = savedIdentity?.name ?? draft;
+  const name = savedIdentity?.name ?? localDraft;
   function validatedName(): string | undefined {
     const result = validateName(name);
     if (!result.error) return result.name;
@@ -25,12 +27,13 @@ export function StartScreen({ savedIdentity, onStart }: {
     input.current?.focus();
   }
   function join(team: Team) {
+    clearError?.(); setError("");
     const validated = validatedName();
     if (validated !== undefined) onStart({ name: validated, team, touch: touch.current });
   }
   return <main className="entry" onPointerDown={event => { if (event.pointerType === "touch") touch.current = true; }}>
     <div className="entry-layout">
-      <div className="entry-intro"><h1>Bug Swarm</h1><p className="entry-tagline">Survive the swarm.</p><StartScene /></div>
+      <div className="entry-intro"><h1>Bug Swarm</h1><StartScene /></div>
       <form className="entry-form" noValidate onSubmit={event => {
         event.preventDefault();
         if (savedIdentity?.team) join(savedIdentity.team);
@@ -43,11 +46,11 @@ export function StartScreen({ savedIdentity, onStart }: {
           <label className="entry-hidden" htmlFor="name">Your name</label>
           <input ref={input} id="name" placeholder="Your name" value={name} readOnly={!!savedIdentity}
             autoComplete="off" spellCheck={false} aria-invalid={!!error} aria-describedby={error ? "name-error" : undefined}
-            onChange={event => { setDraft(event.target.value); setError(""); }} />
-          {error && <p id="name-error" role="alert">{error}</p>}
+            onChange={event => { setDraft(event.target.value); onDraft?.(event.target.value); setError(""); clearError?.(); }} />
           <div className="entry-teams">{TEAMS.map((team, index) => <button key={team} ref={index === 0 ? firstTeam : undefined}
             type="button" style={{ background: TEAM_COLOURS[team] }} onClick={() => join(team)}>Join {TEAM_NAMES[team]}</button>)}</div>
         </>}
+        {error && <p id="name-error" role="alert">{error}</p>}
       </form>
     </div>
   </main>;

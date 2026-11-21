@@ -1,5 +1,7 @@
 # Arena results and moderation validation (issue 69)
 
+Earlier slice evidence below is historical. The game now runs at `/` through StartScreen; `/arena` redirects there. Current entry, HUD, minimap and touch validation: [cutover-validation.md](cutover-validation.md).
+
 Validated 2026-11-20 with the production Vite bundle and the production
 `createServer` boundary, bound to an owned ephemeral loopback port. SQLite,
 scratch homes, browser profiles and logs stayed under `.evidence/69/`.
