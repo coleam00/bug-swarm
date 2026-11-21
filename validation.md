@@ -1,3 +1,11 @@
 # Validation
 
 Run `bun run check` and `bun run build`. Production Chrome cutover, touch, layout, bundle and capacity evidence is summarized in [docs/cutover-validation.md](docs/cutover-validation.md). Combat rules and skill evidence remain in [docs/arena-combat-validation.md](docs/arena-combat-validation.md).
+
+Run `bun run playtest -- --issue <item-number>` for multiplayer product validation on every PR. For a focused run, use `bun run playtest -- --scenario revive --issue <item-number>`. Every arena gameplay, networking or UI change runs the relevant scenarios and attaches its JSON report and key screenshots to the PR. The full suite has a 570-second working deadline and a ten-minute total budget; combat includes a full 60-second fight. Chrome must be installed (or set `CHROME_PATH`); no browser download or physical phone is required.
+
+Evidence defaults to `.evidence/<issue>/playtest/<run-id>/report.json`, with per-scenario reports/screenshots, bounded samples and input logs, build/server/Chrome logs and isolated scratch data. `--out <checkout-folder>` changes the run folder. Keep it fresh; all output must remain inside this checkout, even through links. With `--scenario`, `--bots <count>` adds optional load up to 20 total participants; together requires exactly ten bots, late-join at least eight, and revive excludes bots so the browser rescuer owns the reward.
+
+Scenarios: `together` checks shared membership/name/colour; `combat` checks kills, saves, standing, respawn and `/board`; `revive` checks natural downing and browser rescue; `late-join` advances a bot-only room by 300 seconds before real-time admission/survival; `phone-desktop` drives both phone orientations with simultaneous two-point touch; `restart` checks graceful saves and automatic reconnection; `boss` checks the fifth-wave hive's visible body, health, edge arrows and contributor rewards with two setup bots by default (at least one required). It skips only when the hive is unavailable. Missing prerequisites and incomplete samples fail with a partial report.
+
+Implementation acceptance evidence and full-arena timings: [multiplayer browser playtest validation](docs/multiplayer-playtest-validation.md).

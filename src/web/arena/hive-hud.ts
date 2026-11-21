@@ -1,22 +1,23 @@
-import type { Bug, CombatEvent } from "../../shared/arena/types";
+import type { Bug, CombatEvent, HiveReward } from "../../shared/arena/types";
 import { helpArrow } from "./help-arrow";
 import { MAX_PLAYERS } from "../../shared/arena/constants";
 
 export class HiveHud {
   private bannerAt = -Infinity;
-  private awards = Array.from({ length: MAX_PLAYERS }, () => ({ x: 0, y: 0, amount: 0, at: -Infinity }));
+  private awards = Array.from({ length: MAX_PLAYERS }, () => ({ playerId: "", life: 0, x: 0, y: 0, amount: 0, at: -Infinity }));
   reset() { this.bannerAt = -Infinity; for (const a of this.awards) a.at = -Infinity; }
   event(event: CombatEvent, now: number) {
     if (event.type !== "kill" || event.kind !== "hive") return;
     this.bannerAt = now;
     event.rewards?.forEach((r, i) => Object.assign(this.awards[i]!, r, { at: now }));
   }
-  world(c: CanvasRenderingContext2D, now: number) {
+  world(c: CanvasRenderingContext2D, now: number, observe?: (reward: HiveReward & { at: number }) => void) {
     for (const r of this.awards) {
       const age = now - r.at; if (age < 0 || age > 1600) continue;
       c.save(); c.globalAlpha = Math.min(1, (1600 - age) / 400); c.font = "bold 32px system-ui"; c.textAlign = "center";
       c.strokeStyle = "#060b12"; c.lineWidth = 5; c.strokeText(`+${r.amount}`, r.x, r.y - 65 - age / 35);
       c.fillStyle = "#edff9c"; c.fillText(`+${r.amount}`, r.x, r.y - 65 - age / 35); c.restore();
+      observe?.(r);
     }
   }
   private bannerPosition(width: number, height: number, camera: { x: number; y: number }, scale: number, now: number, panelWidth: number, awardHalf: number, top: number) {
@@ -46,7 +47,9 @@ export class HiveHud {
     }
     return { x: (width - panelWidth) / 2, y: bottom };
   }
-  draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, visible: Bug | undefined, now: number, arrowTop: number) {
+  draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, visible: Bug | undefined, now: number, arrowTop: number,
+    observe?: (view: { id: number; hp: number; maxHp: number; arrow: boolean }) => void) {
+    let arrowDrawn = false;
     c.save();
     if (boss) {
       const w = width - 32;
@@ -59,6 +62,7 @@ export class HiveHud {
     if (visible) {
       const arrow = helpArrow((visible.x - camera.x) * scale, (visible.y - camera.y) * scale, width, height, arrowTop);
       if (arrow) {
+        arrowDrawn = true;
         c.save(); c.translate(arrow.x, arrow.y); c.rotate(arrow.angle); c.fillStyle = "#d9f278";
         c.beginPath(); c.moveTo(15, 0); c.lineTo(-10, -10); c.lineTo(-10, 10); c.lineTo(15, 0); c.fill(); c.restore();
         c.font = "bold 16px system-ui"; c.textAlign = "center"; c.fillStyle = "#efffc2"; c.fillText("Hive", arrow.x, arrow.y + 28);
@@ -72,5 +76,6 @@ export class HiveHud {
       c.fillStyle = "#edff9c"; c.fillText("Hive down!", x + w / 2, y + 38);
     }
     c.restore();
+    if (boss) observe?.({ id: boss.id, hp: boss.hp, maxHp: boss.maxHp!, arrow: arrowDrawn });
   }
 }
