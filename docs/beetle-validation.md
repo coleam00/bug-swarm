@@ -168,3 +168,18 @@ color passes; changing points also passes the reduced wire test while failing
 the pure scoring test. Logs and results are in `.evidence/83/recheck/`.
 Production code is unchanged, so the original skill, Chrome and load evidence
 above is retained without rerunning those separate acceptance commands.
+
+### Effective paint visibility
+
+The renderer guard now multiplies `globalAlpha` by CSS paint-color alpha for the
+body, shell fill/rim, every damage crack and the early bounce spark. It retains
+geometry-based identification, transformed-size checks and palette tolerance.
+Sixteen mutation probes reject transparent paints individually and together,
+zero global alpha, insufficient combined opacity, half-size drawing, incorrect
+facing and missing cracks; equivalent hex and opaque RGBA palettes pass.
+All production files were restored after the probes.
+
+All 52 focused tests passed, followed by `bun run check`: **434 tests, 28,996
+assertions**, TypeScript clean, exit zero. Logs, mutation results and the exit
+code are in `.evidence/83/visibility/`. This remains a test-only repair; the
+original issue-83 skill, Chrome and load evidence above is unchanged.

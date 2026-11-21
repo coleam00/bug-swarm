@@ -20,6 +20,13 @@ test("beetle plate follows facing, each lost HP cracks once, and pale bounces le
     const renderer = new ArenaRenderer(fixture.context as unknown as CanvasRenderingContext2D), b = createBug("beetle", 1, 500, 500);
     b.facing = Math.PI / 2;
     const draw = (now = 0) => { fixture.context.paints.length = 0; renderer.draw(800, 600, { x: 100, y: 100 }, [], null, new ArenaInput(), [b], [], 5, 0, now); return [...fixture.context.paints]; };
+    const shapeKey = (p: Paint) => JSON.stringify([p.path, p.transform]);
+    const effectiveAlpha = (p: Paint) => {
+      const style = p.op === "fill" ? p.fillStyle : p.strokeStyle;
+      const rgba = typeof style === "string" ? Bun.color(style, "[rgba]") : null;
+      expect(rgba).not.toBeNull(); // Parse CSS color alpha too; never assume an unknown paint is opaque.
+      return p.globalAlpha * rgba![3] / 255;
+    };
     const intact = draw();
     const body = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "ellipse"))!;
     const plate = intact.find(p => p.op === "fill" && p.path.some(q => q.op === "arc" && q.args[4]! - q.args[3]! < Math.PI))!;
@@ -32,17 +39,23 @@ test("beetle plate follows facing, each lost HP cracks once, and pale bounces le
     const arc = plate.path.find(p => p.op === "arc")!;
     expect(arc.args[2]! * Math.min(Math.hypot(plate.transform[0]!, plate.transform[1]!), Math.hypot(plate.transform[2]!, plate.transform[3]!))).toBeGreaterThanOrEqual(20);
     expect(arc.args[3]).toBeCloseTo(-Math.PI / 3); expect(arc.args[4]).toBeCloseTo(Math.PI / 3);
-    expect(plate.globalAlpha).toBeGreaterThan(0.5); expect(plate.fillStyle).not.toEqual(body.fillStyle); expect(plate.strokeStyle).not.toEqual(body.strokeStyle);
+    const rim = intact.find(p => p.op === "stroke" && shapeKey(p) === shapeKey(plate))!;
+    expect(rim).toBeDefined();
+    expect(effectiveAlpha(body)).toBeGreaterThan(0.5);
+    expect(effectiveAlpha(plate)).toBeGreaterThan(0.5); expect(effectiveAlpha(rim)).toBeGreaterThan(0.5);
+    expect(plate.fillStyle).not.toEqual(body.fillStyle); expect(plate.strokeStyle).not.toEqual(body.strokeStyle);
     const onBody = (p: Paint) => p.op === "stroke" && p.transform.every((value, i) => value === body.transform[i]);
     const intactPaths = new Set(intact.filter(onBody).map(p => JSON.stringify(p.path)));
-    const cracks = (paints: Paint[]) => paints.filter(p => onBody(p) && !intactPaths.has(JSON.stringify(p.path))).length;
-    for (let hp = 5; hp >= 1; hp--) { b.hp = hp; expect(cracks(draw())).toBe(5 - hp); }
-    const strokeKey = (p: Paint) => JSON.stringify([p.path, p.transform]);
-    const baseline = new Set(draw().filter(p => p.op === "stroke").map(strokeKey));
-    const effects = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && !baseline.has(strokeKey(p)));
+    const cracks = (paints: Paint[]) => paints.filter(p => onBody(p) && !intactPaths.has(JSON.stringify(p.path)));
+    for (let hp = 5; hp >= 1; hp--) {
+      b.hp = hp; const damaged = cracks(draw()); expect(damaged).toHaveLength(5 - hp);
+      for (const crack of damaged) expect(effectiveAlpha(crack)).toBeGreaterThan(0.5);
+    }
+    const baseline = new Set(draw().filter(p => p.op === "stroke").map(shapeKey));
+    const effects = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && !baseline.has(shapeKey(p)));
     const cached = fixture.created, event = { id: 2, tick: 1, kind: "beetle" as const, type: "bounce" as const, x: 500, y: 522, points: 0 as const };
     renderer.events([event], 0); const spark = draw(50), bounce = effects(spark);
-    expect(cracks(spark)).toBe(4); expect(bounce).toHaveLength(1); expect(bounce[0]!.globalAlpha).toBeGreaterThan(0);
+    expect(cracks(spark)).toHaveLength(4); expect(bounce).toHaveLength(1); expect(effectiveAlpha(bounce[0]!)).toBeGreaterThan(0.5);
     expect(spark.some(p => p.op === "fillText" && String(p.args[0]).startsWith("+"))).toBe(false);
     renderer.events([event], 170); expect(effects(draw(181))).toHaveLength(0);
     expect(fixture.created).toBe(cached); renderer.reset(); expect(effects(draw())).toHaveLength(0);
