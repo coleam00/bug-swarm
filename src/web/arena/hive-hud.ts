@@ -20,6 +20,7 @@ export class HiveHud {
     }
   }
   draw(c: CanvasRenderingContext2D, width: number, height: number, camera: { x: number; y: number }, scale: number, boss: Bug | undefined, visible: Bug | undefined, now: number, arrowTop: number) {
+    c.save();
     if (boss) {
       const w = width - 32;
       c.fillStyle = "#060b12ee"; c.fillRect(8, 46, width - 16, 40);
@@ -41,5 +42,6 @@ export class HiveHud {
       c.fillStyle = "#060b12dd"; c.fillRect(8, y - 34, width - 16, 54);
       c.fillStyle = "#edff9c"; c.font = "bold 32px system-ui"; c.textAlign = "center"; c.fillText("Hive down!", width / 2, y + 4);
     }
+    c.restore();
   }
 }

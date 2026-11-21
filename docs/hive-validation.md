@@ -55,7 +55,7 @@ The implementation was validated from the worktree based on `61ab6b7` and commit
 
 Main advanced to `833a996` (armoured beetles and flanking aimers) while the tuned full sweep was running. Merged it into the same hive branch. Both registered kinds, beetle shell blocking, zero-point bounces, elapsed-time steering and the flanking policy are preserved. Hive damage credit runs only after the shell-blocking hook accepts damage; JSON event rows carry both bounces and hive rewards. The benchmark now includes ten visible beetles alongside the hive, twelve spitters and 24 globs.
 
-The combined `bun run check` passed **478 tests / 29,956 assertions**, with TypeScript clean. Production build passed. The focused twenty-seed newcomer comparison passes at the same 80-unit/s hive speed: fresh median **156.225 seconds** (18 deaths / 2 cutoffs), eight-minute median **at least 540.825 seconds** (10 deaths / 10 cutoffs).
+The combined `bun run check` passed **478 tests / 29,957 assertions**, with TypeScript clean. Production build passed. The focused twenty-seed newcomer comparison passes at the same 80-unit/s hive speed: fresh median **156.225 seconds** (18 deaths / 2 cutoffs), eight-minute median **at least 540.825 seconds** (10 deaths / 10 cutoffs).
 
 Fresh production evidence is `.evidence/84/chrome-IjEuZO/`, including the same body/bar/ring/arrow/minimap/kill, downed arrival and touch screenshots listed above. Two isolated Chrome identities plus fifteen aimers again reached natural wave five at tick 2401, with seventeen connected / fifteen living players and 1,020 hive HP. Its measured 18-second boss window contains 352 ticks: tick p50/p95/max **1.58 / 3.46 / 7.04 ms**, scheduler lateness p95/max **2.34 / 12.56 ms**.
 
@@ -64,3 +64,6 @@ Seven full-arena samples per viewport again held **60.0 FPS**. Average update/dr
 The repeated **200-aimer / ten-room / 145-second** workload passes all gates: tick p50/p95/max **1.39 / 2.52 / 9.32 ms** over 28,364 ticks; scheduler lateness p95/max **2.47 / 58.94 ms**; maximum player mean output **36.09 KB/s**. Population stayed exactly 200; all connections closed normally, with zero errors or drops. Live globs reached the complete **24-glob bound**, with natural hive rings observed.
 
 The complete combined skill/fairness command is running; its raw results will be recorded before delivery.
+
+
+The final presentation review found the hive HUD leaving centered text alignment on the canvas, which clipped the FPS prefix of the following F readout. The helper now saves/restores its drawing state; the existing renderer test checks the caller's alignment. The complete check passes again (478 tests / 29,957 assertions), as does production build. `.evidence/84/chrome-6vEJSe/` repeats the controlled boss/ring/kill, arrival/downed and two-point-touch captures with a fully visible active-play F readout. All seven samples per layout remain 60.0 FPS; average draw ranges are 1.012-1.958 ms desktop, 0.943-1.490 ms portrait and 0.872-1.507 ms landscape. This presentation-only correction changes no simulation or transport behavior.

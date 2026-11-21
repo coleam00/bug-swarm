@@ -109,6 +109,7 @@ test("hive has cached pulsing art, authoritative health, edge arrow, minimap dia
     renderer.events([{ id: 2, type: "kill", kind: "hive", tick: 100, x: 300, y: 300, points: 0, rewards: [{ playerId: p.id, life: 1, amount: 350, x: p.x, y: p.y }] }], 1000);
     expect(draw(999).some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(false);
     const killed = draw(1100); expect(killed.filter(p => p.op === "fillText" && p.args[0] === "+350")).toHaveLength(1);
+    expect(c.textAlign).toBe("left"); // Keep the following F readout anchored on screen.
     expect(killed.some(p => p.op === "fillText" && p.args[0] === "+0")).toBe(false);
     expect(killed.some(p => p.op === "fillText" && p.args[0] === "Hive down!")).toBe(true);
     renderer.reset(); expect(draw(1200).some(p => p.op === "fillText" && ["Hive down!", "+350"].includes(String(p.args[0])))).toBe(false);
