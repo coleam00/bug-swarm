@@ -4,3 +4,6 @@ data/
 .env
 *.log
 .DS_Store
+
+# Validation evidence (screenshots, logs) written by agents during a work item
+.evidence/

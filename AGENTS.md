@@ -14,3 +14,7 @@ Quick commands:
 - `bun run stats` prints the bet's numbers. `bun run hide "<name>"` hides a name from every board.
 - `bun run review` lists held scores; `bun run approve <run id>` releases one. Scores strictly above 3,000 await review, including honest outliers, and do not count on public boards, personal standings or team totals until approved. Commands use `DATA_DIR/app.db` (default `data/app.db`).
 - Pacing reports review candidates without failing on them.
+
+## Evidence files
+
+Screenshots, logs and measurements made while validating a change go in `.evidence/<issue number>/` inside this checkout (gitignored), and are summarized in the pull request. Never write files outside the checkout: Archon's workflow and source folders are fingerprinted, and writing into them fails the run.
