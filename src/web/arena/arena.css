@@ -18,3 +18,6 @@
 .arena-hint { position: absolute; left: 16px; right: 16px; bottom: max(24px, env(safe-area-inset-bottom)); margin: 0; text-align: center; font: 600 16px/1.6 system-ui; color: #eff4db; text-shadow: 0 2px 4px #000; pointer-events: none; transition: opacity 200ms; }
 .arena-hint.fading { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .arena-hint { transition: none; } }
+
+.arena-hive-warning { position: fixed; top: calc(var(--safe-top) + 46px); left: calc(var(--safe-left) + 8px); right: calc(var(--safe-right) + 8px); height: 40px; margin: 0; display: flex; align-items: center; justify-content: center; gap: 12px; background: #060b12ee; color: #efffc2; font: bold 16px system-ui; z-index: 3; pointer-events: none; }
+.arena-life.has-hive-warning { top: calc(var(--safe-top) + 94px); }

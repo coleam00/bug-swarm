@@ -764,3 +764,62 @@ test("combat feedback paints proportional heat, warning/immunity phases and auth
     if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");
   }
 });
+
+
+test("crowded Help and Hive arrows share bounded slots through scaling, resize, revival and reset", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const players = Array.from({ length: 20 }, (_, i) => ({ ...lifeDefaults(), id: String(i), name: `Pilot${i}`, team: "tabs" as const, x: 5000, y: 5000, vx: 0, vy: 0, facing: 0, status: "downed" as const, hits: 0 }));
+    const boss = createBug("hive", 1, 5000, 5000);
+    for (const [width, height] of [[390, 844], [844, 390], [1280, 720]] as const) for (const scale of [1, 0.8, 1.5]) {
+      for (const [x, y] of [[5000, 300], [-5000, 300], [300, -5000], [300, 5000], [-5000, -5000], [5000, 5000]]) {
+        for (const p of players) { p.x = x!; p.y = y!; } boss.x = x!; boss.y = y!;
+        const draw = () => { c.paints.length = 0; renderer.draw(width, height, { x: 0, y: 0 }, players, null, input, [boss], [], 5, 100, 1000, scale); };
+        draw();
+        const labels = c.paints.filter(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])));
+        expect(labels).toHaveLength(21);
+        const occupied = labels.map(p => ({ x: Number(p.args[1]), y: Number(p.args[2]) - (p.args[0] === "Hive" ? 28 : 26) }));
+        for (const [i, a] of occupied.entries()) {
+          expect(a.x - 26).toBeGreaterThanOrEqual(8); expect(a.x + 26).toBeLessThanOrEqual(width - 8);
+          expect(a.y - 15).toBeGreaterThanOrEqual(94 + (width === 1280 ? 144 : 96) + 24); expect(a.y + 32).toBeLessThanOrEqual(height - 8);
+          for (const b of occupied.slice(0, i)) expect(Math.abs(a.x - b.x) + 0.001 >= 60 || Math.abs(a.y - b.y) + 0.001 >= 55).toBe(true);
+        }
+        const arrows = c.paints.filter(p => p.op === "fill" && p.path[0]?.op === "moveTo" && [12, 15].includes(p.path[0].args[0]!));
+        expect(arrows).toHaveLength(21);
+        for (const arrow of arrows) { const [a, b, , , ax, ay] = arrow.transform; expect(Math.atan2(b!, a!)).toBeCloseTo(Math.atan2(y! * scale - ay!, x! * scale - ax!)); }
+        const cached = fixture.created; draw(); expect(fixture.created).toBe(cached);
+      }
+    }
+    renderer.reset(); for (const p of players) { p.x = 200; p.y = 300; }
+    c.paints.length = 0; renderer.draw(390, 844, { x: 0, y: 0 }, players.map(p => ({ ...p, status: "active", hits: 3 })), null, input);
+    expect(c.paints.some(p => p.op === "fillText" && ["Help", "Hive"].includes(String(p.args[0])))).toBe(false);
+    expect(fixture.depth).toBe(0);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});
+
+test("authoritative hive warning reaches every life state before spawn and through arrival, independent of combat time", () => {
+  const fixture = canvasFixture(), original = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: { createElement: () => fixture.factory() } });
+  try {
+    const c = fixture.context, renderer = new ArenaRenderer(c as unknown as CanvasRenderingContext2D), input = new ArenaInput();
+    const p: CombatPlayer = { ...lifeDefaults(), id: "local", name: "Pilot", team: "tabs", x: 1200, y: 1200, vx: 0, vy: 0, facing: 0 };
+    const snapshot: Snapshot = { v: 1, type: "snapshot", arenaId: "test", tick: 2201, wave: 4, players: [{ ...p, ackSeq: 0 }], bugs: [], shots: [], globs: [], events: [] };
+    const boss = createBug("hive", 1, 1500, 1500);
+    const draw = (authoritative: Snapshot | null = snapshot, delayed = [boss]) => { c.paints.length = 0; renderer.draw(390, 844, { x: 1000, y: 800 }, [p], p, input, delayed, [], 100, 100000, 999999, 1, authoritative, 0); return c.paints.filter(p => p.op === "fillText").map(p => String(p.args[0])); };
+    for (const status of ["active", "downed", "out"] as const) {
+      p.status = status; p.startedTick = -90000;
+      const text = draw(snapshot, []); expect(text).toContain("The hive is coming"); expect(text).toContain("10s");
+      expect(c.paints.find(p => p.op === "strokeRect" && p.strokeStyle === "#66849baa")!.args[1]).toBe(94);
+    }
+    snapshot.tick = 2400; expect(draw()).toContain("0s");
+    snapshot.tick = 2401; snapshot.wave = 5; snapshot.bugs = [{ ...boss, phase: "arrival", phaseUntil: 122050 }];
+    expect(draw()).toContain("The hive is coming"); expect(draw()).toContain("2s");
+    expect(draw().some(t => /incoming|^HIVE\s+\d|wave|\u2014/i.test(t))).toBe(false);
+    snapshot.bugs[0]!.phase = "active";
+    const activated = draw(); expect(activated).not.toContain("The hive is coming"); expect(activated.some(t => t.startsWith("HIVE "))).toBe(true);
+    expect(draw(null, [])).not.toContain("The hive is coming");
+    expect(fixture.depth).toBe(0);
+  } finally { if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document"); }
+});

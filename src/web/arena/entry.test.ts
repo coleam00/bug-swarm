@@ -11,9 +11,9 @@ import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { createElement } from ${JSON.stringify(import.meta.resolve("react"))};
 import { create, act } from ${JSON.stringify(import.meta.resolve("react-test-renderer"))};
-let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, joined;
-mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView) => {
-  mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
+let mounted = 0, disposed = 0, onError, onAccepted, onLife, onStatus, onWarning, joined;
+mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, touch, status, refused, accepted, lifeView, hintView, warningView) => {
+  onWarning = warningView; mounted++; onError = refused; onAccepted = accepted; onLife = lifeView; onStatus = status; joined = { identity, touch }; return () => { disposed++; };
 } }));
 mock.module(${moduleUrl("../entry/StartScene.tsx")}, () => ({ StartScene: () => null }));
 globalThis.window = new EventTarget(); globalThis.document = new EventTarget();
@@ -94,6 +94,15 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
     const teams = overlay().findByProps({ className: "team-labels" }).findAllByType("span");
     assert.deepEqual(teams.map(numbers), [[54321], [87654]], "Both team totals come from the server");
     assert.deepEqual(requests, { best: [joined.identity.playerId], standing: [joined.identity.playerId] });
+    act(() => onWarning(10));
+    const banner = () => tree.root.findAllByProps({ className: "arena-hive-warning" });
+    assert.equal(banner().length, 1); assert.equal(text(banner()[0]), "The hive is coming 10s");
+    assert.equal(overlay().props.className, "arena-life has-hive-warning");
+    act(() => onWarning(9)); assert.equal(text(banner()[0]), "The hive is coming 9s");
+    act(() => onWarning(null)); assert.equal(banner().length, 0);
+    act(() => onLife(null, () => {})); act(() => onWarning(2)); assert.equal(banner().length, 0, "Canvas warning suffices without results");
+    await act(async () => show(1, "saved")); assert.equal(banner().length, 1, "Dying mid-warning immediately mirrors it");
+    act(() => onWarning(null));
     const down = { pointerType: "touch", button: 0, pointerId: 1, clientX: 20, clientY: 20 };
     act(() => overlay().props.onPointerUp(down)); assert.deepEqual(respawns, []);
     act(() => overlay().props.onPointerDown(down)); assert.deepEqual(respawns, []);

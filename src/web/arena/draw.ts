@@ -4,7 +4,8 @@ import type { Player, CombatPlayer, Bug, Shot, Glob, CombatEvent, BugKind } from
 import { createGlobDraw, GLOB_EXTENT } from "./globs";
 import { BUG_DRAW, createBugDraws, type BugDraw } from "./bugs/registry";
 import type { ArenaInput } from "./input";
-import { helpArrow } from "./help-arrow";
+import { EdgeMarkers } from "./edge-markers";
+import { hiveWarning } from "./hive-warning";
 import type { Snapshot } from "../../shared/arena/protocol";
 import { drawMinimap, minimapBounds } from "./minimap";
 import { HiveHud } from "./hive-hud";
@@ -14,15 +15,17 @@ export class ArenaRenderer {
   private bugDraw: Record<BugKind, BugDraw>;
   private globDraw = createGlobDraw();
   private hiveHud = new HiveHud();
+  private edgeMarkers: EdgeMarkers;
   private bursts = Array.from({ length: MAX_EVENTS }, () => ({ x: 0, y: 0, points: 0, type: "kill", at: -Infinity }));
   private burstIndex = 0; private lastEvent = 0; private time = 0; private animationTime = 0;
-  reset() { this.hiveHud.reset(); this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
+  reset() { this.edgeMarkers.reset(); this.hiveHud.reset(); this.lastEvent = 0; this.burstIndex = 0; for (const e of this.bursts) e.at = -Infinity; }
   events(events: CombatEvent[], now: number) { for (const e of events) if (e.id > this.lastEvent) { this.hiveHud.event(e, now); Object.assign(this.bursts[this.burstIndex++ % this.bursts.length]!, e, { at: now }); } for (const e of events) this.lastEvent = Math.max(this.lastEvent, e.id); }
   private floor: CanvasPattern | null;
   private glows = new Map<string, HTMLCanvasElement>();
   private labels = new Map<string, HTMLCanvasElement>();
   constructor(private ctx: CanvasRenderingContext2D) {
     this.bugDraw = createBugDraws();
+    this.edgeMarkers = new EdgeMarkers(ctx);
     const tile = document.createElement("canvas"); tile.width = tile.height = 48;
     const c = tile.getContext("2d")!; c.fillStyle = "#0c1420"; c.fillRect(0, 0, 48, 48);
     c.strokeStyle = "#1a2b3c"; c.lineWidth = 1; c.beginPath(); c.moveTo(0, 48); c.lineTo(0, 0); c.lineTo(48, 0); c.stroke();
@@ -39,7 +42,8 @@ export class ArenaRenderer {
     this.animationTime = now;
     const c = this.ctx, worldWidth = width / scale, worldHeight = height / scale;
     const boss = (snapshot?.bugs ?? bugs).find(b => b.kind === "hive"), visibleBoss = bugs.find(b => b.kind === "hive");
-    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT, !!boss || !!visibleBoss);
+    const warning = hiveWarning(snapshot);
+    const map = minimapBounds(width, height, WORLD_WIDTH, WORLD_HEIGHT, !!boss || !!visibleBoss || warning !== null);
     c.fillStyle = "#060b12"; c.fillRect(0, 0, width, height);
     c.save(); c.scale(scale, scale); c.translate(-camera.x, -camera.y); c.fillStyle = this.floor!; c.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     c.strokeStyle = "#38546b"; c.lineWidth = 4; c.strokeRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -74,15 +78,12 @@ export class ArenaRenderer {
     }
     this.hiveHud.world(c, now);
     c.restore();
+    this.edgeMarkers.begin(width, height, map.y + map.height + 24);
     for (const p of players) if (p.id !== local?.id && (p as CombatPlayer).status === "downed") {
-      const arrow = helpArrow((p.x - camera.x) * scale, (p.y - camera.y) * scale, width, height, map.y + map.height + 24);
-      if (!arrow) continue;
-      c.save(); c.globalAlpha = 0.75 + Math.sin(now / 180) * 0.25;
-      c.fillStyle = "#ffe09a"; c.translate(arrow.x, arrow.y); c.rotate(arrow.angle);
-      c.beginPath(); c.moveTo(12, 0); c.lineTo(-8, -8); c.lineTo(-8, 8); c.lineTo(12, 0); c.fill(); c.restore();
-      c.textAlign = "center"; c.font = "bold 16px system-ui"; c.fillStyle = "#ffe09a";
-      c.fillText("Help", arrow.x, arrow.y + 26);
+      this.edgeMarkers.add(p.id, false, (p.x - camera.x) * scale, (p.y - camera.y) * scale);
     }
+    if (visibleBoss) this.edgeMarkers.add(`hive:${visibleBoss.id}`, true, (visibleBoss.x - camera.x) * scale, (visibleBoss.y - camera.y) * scale);
+    this.edgeMarkers.place(); this.edgeMarkers.draw(c, now);
     if (local && "life" in local) {
       const authoritative = snapshot?.players.find(p => p.id === local.id);
       const p = authoritative ?? local as CombatPlayer;
@@ -101,7 +102,7 @@ export class ArenaRenderer {
       c.fillStyle = "#060b12cc"; c.fillRect(8, 8, width - 16, 34);
       c.textAlign = "left"; c.fillStyle = "#eff4db"; c.font = `bold ${this.hudFont}px system-ui`; c.fillText(this.hudText, 16, 32);
     }
-    this.hiveHud.draw(c, width, height, camera, scale, boss, visibleBoss, now, map.y + map.height + 24);
+    this.hiveHud.draw(c, width, height, camera, scale, boss, now, warning);
     for (const s of [input.stick, input.right]) if (s) {
       const length = Math.hypot(s.dx, s.dy), scale = Math.min(1, 60 / (length || 1));
       c.strokeStyle = "#ffffff55"; c.lineWidth = 2; c.beginPath(); c.arc(s.x, s.y, 60, 0, Math.PI * 2); c.stroke();

@@ -9,10 +9,13 @@ import { cameraFor } from "./camera";
 import { worldView } from "../../shared/arena/view";
 import { ArenaRenderer } from "./draw";
 import { FirstLifeHint, type HintView } from "./hint";
+import { hiveWarning } from "./hive-warning";
 export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch: boolean,
   status: (message: string) => void, refused: (message: string, team?: Identity["team"], code?: string) => void, accepted: () => void = () => {},
-  lifeView: (result: LifeOver | null, respawn: (touch: boolean) => void) => void = () => {}, hintView: (view: HintView) => void = () => {}) {
+  lifeView: (result: LifeOver | null, respawn: (touch: boolean) => void) => void = () => {}, hintView: (view: HintView) => void = () => {}, warningView: (seconds: number | null) => void = () => {}) {
   const hint = new FirstLifeHint(hintView);
+  let warning: number | null = null;
+  const publishWarning = (seconds: number | null) => { if (warning !== seconds) { warning = seconds; warningView(seconds); } };
   const touchEntry = touch || (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches);
   const ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx), input = new ArenaInput();
   const prediction = new Prediction(), interpolation = new Interpolation();
@@ -33,7 +36,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     shownLife = result.life; shownSave = result.save; lifeView(result, respawn);
   };
   const reset = () => { lastSend = performance.now(); };
-  const pause = () => { hint.dismiss(); ready = false; input.blockHeld(); input.clear(); deadLife = shownLife = 0; shownSave = ""; lifeView(null, respawn); reset(); };
+  const pause = () => { publishWarning(null); hint.dismiss(); ready = false; input.blockHeld(); input.clear(); deadLife = shownLife = 0; shownSave = ""; lifeView(null, respawn); reset(); };
   const clear = () => { pause(); seq = 0; lastTick = -1; prediction.reset(); interpolation.clear(); renderer.reset(); latest = null; };
   const connection = connectArena(identity, touch, message => {
     if (message.type === "error") { refused(message.message, message.team, message.code); return; }
@@ -48,6 +51,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
     if (prediction.player?.status !== own.status) { input.blockHeld(); input.clear(); }
     prediction.reconcile(own); interpolation.push(message, lastSnapshot);
     latest = message;
+    publishWarning(hiveWarning(message));
     hint.observe(own, touchEntry || input.touch);
     if (own.status === "out") {
       if (deadLife !== own.life) { input.blockHeld(); input.clear(); deadLife = own.life; }
