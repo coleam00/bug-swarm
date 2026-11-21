@@ -64,6 +64,17 @@ test("several lethal hits in one step never exceed six floor pickups", () => {
   // Chance rolls continue at capacity, without allocating or banking extra drops.
   expect(a.pickupRandom).not.toBe(seed);
 });
+
+test("armour bounces do not roll drops, while a lethal rear hit on a beetle does", () => {
+  const a = createArena(79), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;
+  p.x = p.y = 1200; const b = createBug("beetle", a.nextId++, 1600, 1200); a.bugs = [b];
+  a.pickupRandom = beforeRoll(0); const random = a.pickupRandom;
+  const shot = (side: number) => a.shots.push({ id: a.nextId++, owner: p.id, life: p.life, x: b.x + side * 25, y: b.y, vx: -side * 900, vy: 0, born: a.tick * 50 });
+  shot(1); stepArena(a, new Map());
+  expect(b.hp).toBe(5); expect(a.events[0]!.type).toBe("bounce"); expect(a.pickups).toEqual([]); expect(a.pickupRandom).toBe(random);
+  b.hp = 1; shot(-1); stepArena(a, new Map());
+  expect(a.events[0]!.type).toBe("kill"); expect(a.pickups).toHaveLength(1); expect(a.pickupRandom).not.toBe(random);
+});
 test("a moving bug drops at the swept impact rather than either end of its step", () => {
   const a = createArena(79), p = joinPlayer(a, { id: "a", name: "Pilot", team: "tabs" })!;
   p.x = p.y = 1200; a.pickupRandom = beforeRoll(0);

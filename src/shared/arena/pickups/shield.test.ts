@@ -15,7 +15,7 @@ function grant(f: ReturnType<typeof setup>) {
   f.arena.pickups.push({ id: f.arena.nextId++, kind: "shield", x: f.p.x, y: f.p.y, expiresAt: f.arena.tick * STEP_MS + 12000 });
   stepArena(f.arena, new Map());
 }
-test.each(["crawler", "dasher", "spitter"] as const)("shield absorbs one eligible %s contact, preserves life/score/streak and grants hit immunity", kind => {
+test.each(["crawler", "dasher", "spitter", "beetle"] as const)("shield absorbs one eligible %s contact, preserves life/score/streak and grants hit immunity", kind => {
   const f = setup(), { arena, p } = f; grant(f);
   p.effects.spread = p.effects.rapid = 8000;
   p.points = 100; p.score = 10; p.streak = 7;

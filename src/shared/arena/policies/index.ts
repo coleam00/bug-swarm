@@ -3,10 +3,11 @@ import { DASHER_DASH_MS, DASHER_DASH_SPEED, DASHER_RADIUS, DASHER_DODGE_CLEARANC
 import { nextRandom } from "../random";
 import { clampMove } from "../movement";
 import type { Bug, Glob, Input, Player, Life, Pickup } from "../types";
+import { shellBlocks } from "../bugs/beetle";
 import { safePickup } from "./pickups";
 export type Policy = "mover" | "aimer";
 export interface Observation { players: readonly (Player & Pick<Life, "status">)[]; bugs: readonly Bug[]; globs: readonly Glob[]; pickups: readonly Pickup[]; tick: number }
-export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number; globDodgeId?: number; globDodgeX?: number; globDodgeY?: number }
+export interface PolicyState { random: number; x: number; y: number; pause: boolean; steps: number; dodgeId?: number; dodgeX?: number; dodgeY?: number; flankId?: number; flankSide?: number; globDodgeId?: number; globDodgeX?: number; globDodgeY?: number }
 export const createPolicy = (seed: number): PolicyState => ({ random: seed >>> 0, x: 1200, y: 1200, pause: false, steps: 0 });
 export function intercept(dx: number, dy: number, vx: number, vy: number): number | null {
   const a = vx * vx + vy * vy - SHOT_SPEED * SHOT_SPEED, b = 2 * (dx * vx + dy * vy), c = dx * dx + dy * dy;
@@ -16,11 +17,26 @@ export function intercept(dx: number, dy: number, vx: number, vy: number): numbe
   const t = Math.min(t1 > 0 ? t1 : Infinity, t2 > 0 ? t2 : Infinity); return Number.isFinite(t) ? t : null;
 }
 export function policyInput(policy: Policy, observation: Observation, p: Player & { heat?: number; status: Life["status"] }, state: PolicyState): Input {
-  if (p.status !== "active") return { move: { x: 0, y: 0 }, aim: p.facing, fire: false };
+  if (p.status !== "active") { state.flankId = state.flankSide = undefined; return { move: { x: 0, y: 0 }, aim: p.facing, fire: false }; }
   let x = 0, y = 0, aim = p.facing, fire = policy === "mover";
   let nearest: Bug | undefined, distance = Infinity;
   for (const b of observation.bugs) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < distance || d === distance && b.id < nearest!.id) { nearest = b; distance = d; } }
-  if (policy === "mover" || !nearest) {
+  // Rescue and avoidance always use the closest danger, independently of the gun target.
+  let target = nearest, exposed = false, targetDistance = distance;
+  if (policy === "aimer") {
+    let closest = Infinity;
+    for (const b of observation.bugs) {
+      const t = intercept(b.x - p.x, b.y - p.y, b.vx, b.vy);
+      if (t === null || t > SHOT_LIFETIME_MS / 1000) continue;
+      const dx = p.x - b.x - b.vx * t, dy = p.y - b.y - b.vy * t, length = Math.hypot(dx, dy) || 1;
+      if (b.kind === "beetle" && shellBlocks(b.facing, dx / length, dy / length, 0.12)) continue;
+      const d = Math.hypot(b.x - p.x, b.y - p.y);
+      if (d < closest || d === closest && (!target || b.id < target.id)) { target = b; closest = d; exposed = true; }
+    }
+    targetDistance = target ? Math.hypot(target.x - p.x, target.y - p.y) : Infinity;
+    if (target?.kind !== "beetle") state.flankId = state.flankSide = undefined;
+  }
+  if (policy === "mover" || !target) {
     if (state.steps++ % 90 === 0 || Math.hypot(state.x - p.x, state.y - p.y) < 80) {
       state.random = nextRandom(state.random); state.x = 150 + state.random / 4294967296 * (WORLD_WIDTH - 300);
       state.random = nextRandom(state.random); state.y = 150 + state.random / 4294967296 * (WORLD_HEIGHT - 300);
@@ -28,18 +44,32 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
     const length = Math.hypot(state.x - p.x, state.y - p.y) || 1; x = (state.x - p.x) / length; y = (state.y - p.y) / length;
   } else {
     // Approach at long range; retreat and circle inside the desired separation.
-    const dx = (nearest.x - p.x) / (distance || 1), dy = (nearest.y - p.y) / (distance || 1);
-    const radial = Math.max(-1, Math.min(1, (distance - 350) / 100));
+    const dx = (target.x - p.x) / (targetDistance || 1), dy = (target.y - p.y) / (targetDistance || 1);
+    const radial = Math.max(-1, Math.min(1, (targetDistance - 350) / 100));
     x = dx * radial - dy * 0.45; y = dy * radial + dx * 0.45;
-    const t = intercept(nearest.x - p.x, nearest.y - p.y, nearest.vx, nearest.vy);
-    if (t !== null) aim = Math.atan2(nearest.y + nearest.vy * t - p.y, nearest.x + nearest.vx * t - p.x);
+    const t = intercept(target.x - p.x, target.y - p.y, target.vx, target.vy);
+    if (t !== null) aim = Math.atan2(target.y + target.vy * t - p.y, target.x + target.vx * t - p.x);
     if ((p.heat ?? 0) >= Math.min(12, HEAT_CAPACITY - 1)) state.pause = true;
     if ((p.heat ?? 0) <= 3) state.pause = false;
-    fire = !state.pause && t !== null && t <= SHOT_LIFETIME_MS / 1000;
+    fire = exposed && !state.pause && t !== null && t <= SHOT_LIFETIME_MS / 1000;
+    if (target.kind === "beetle" && (!exposed || targetDistance < 200)) {
+      const tx = -dy, ty = dx;
+      const clearance = (side: number) => Math.min(
+        tx * side > 0 ? (WORLD_WIDTH - PLAYER_RADIUS - p.x) / Math.abs(tx) : tx ? (p.x - PLAYER_RADIUS) / Math.abs(tx) : Infinity,
+        ty * side > 0 ? (WORLD_HEIGHT - PLAYER_RADIUS - p.y) / Math.abs(ty) : ty ? (p.y - PLAYER_RADIUS) / Math.abs(ty) : Infinity);
+      if (state.flankId !== target.id || clearance(state.flankSide ?? 1) < 65) {
+        state.flankId = target.id; state.flankSide = clearance(-1) > clearance(1) ? -1 : 1;
+      }
+      const radial = Math.max(-1.5, Math.min(1, (targetDistance - 85) / 45));
+      x = dx * radial + tx * state.flankSide! * 1.4 + target.vx / PLAYER_SPEED;
+      y = dy * radial + ty * state.flankSide! * 1.4 + target.vy / PLAYER_SPEED;
+    }
+    if (exposed) state.flankId = state.flankSide = undefined;
   }
   for (const b of observation.bugs) {
     const dx = p.x - b.x, dy = p.y - b.y, d = Math.hypot(dx, dy);
-    if (d < 150 && d > 0) { const force = (150 - d) / 150 * 2; x += dx / d * force; y += dy / d * force; }
+    const separation = policy === "aimer" && b.id === target?.id && b.kind === "beetle" ? 65 : 150;
+    if (d < separation && d > 0) { const force = (separation - d) / separation * 2; x += dx / d * force; y += dy / d * force; }
   }
   x += Math.max(0, (180 - p.x) / 90) - Math.max(0, (p.x - WORLD_WIDTH + 180) / 90);
   y += Math.max(0, (180 - p.y) / 90) - Math.max(0, (p.y - WORLD_HEIGHT + 180) / 90);
@@ -117,7 +147,7 @@ export function policyInput(policy: Policy, observation: Observation, p: Player 
       return { move: { x: (target.x - p.x) / (closest || 1) * strength, y: (target.y - p.y) / (closest || 1) * strength }, aim: p.facing, fire: false };
     }
   }
-  if (policy === "aimer" && !dodging) {
+  if (policy === "aimer" && !dodging && state.flankId === undefined) {
     const pickup = safePickup(observation, p);
     if (pickup) { const dx = pickup.x - p.x, dy = pickup.y - p.y, d = Math.hypot(dx, dy) || 1; x = dx / d; y = dy / d; }
   }

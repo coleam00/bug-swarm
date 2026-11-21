@@ -56,3 +56,10 @@ test("seeking keeps clearance from approaching bugs while still collecting on an
   o.pickups = [{ ...pickup, x: 1000, y: 1200 }];
   expect(safePickup(o, player)).toBe(o.pickups[0]);
 });
+
+test("flanking an armoured target takes priority over a pickup detour", () => {
+  const o = observation(), beetle = createBug("beetle", 3, 1600, 1200); beetle.facing = Math.PI; o.bugs = [beetle];
+  const state = createPolicy(79), input = policyInput("aimer", o, player, state);
+  expect(state.flankId).toBe(beetle.id);
+  expect(input).toEqual(policyInput("aimer", { ...o, pickups: [] }, player, createPolicy(79)));
+});

@@ -26,6 +26,22 @@ test("compact combat records preserve identities, life, velocity, phase, timings
   expect(parseServer(serializeSnapshot(bad))).toBeNull(); // One impact exceeds the shared budget.
 });
 
+test("beetle HP/facing/forward motion and zero-point shell bounces are validated", () => {
+  const b = createBug("beetle", 1, 1200, 1200);
+  const s: Snapshot = { pickups: [], v: 1, type: "snapshot", arenaId: "room", tick: 1, wave: 5, players: [], bugs: [b], shots: [], globs: [], events: [] };
+  const parse = () => parseServer(serializeSnapshot(s));
+  for (let hp = 1; hp <= 5; hp++) { b.hp = hp; expect(parse()).not.toBeNull(); }
+  const valid = { ...b, facing: 0.70049, vx: Math.cos(0.70049) * 84, vy: Math.sin(0.70049) * 84 };
+  s.bugs[0] = valid; expect(parse()).not.toBeNull();
+  for (const fields of [{ hp: 0 }, { hp: 6 }, { hp: 1.5 }, { facing: 4 }, { facing: null }, { vx: 85 }, { vx: -84, vy: 0 }, { phase: "approach" }, { phaseUntil: 0 }]) {
+    s.bugs[0] = { ...valid, ...fields } as any; expect(parse()).toBeNull();
+  }
+  s.bugs[0] = valid;
+  s.events = [{ id: 2, tick: 1, kind: "beetle", type: "bounce", x: 1222, y: 1200, points: 0 }]; expect(parse()).not.toBeNull();
+  s.events[0] = { ...s.events[0]!, points: 1 } as any; expect(parse()).toBeNull();
+  s.events[0] = { ...s.events[0]!, type: "bounce", points: 0, kind: "crawler" }; expect(parse()).toBeNull();
+});
+
 test("crawler validation accepts stationary and moving crawlers but rejects speed, phase and timer state", () => {
   const bug = createBug("crawler", 1, 1200, 1200);
   const snapshot: Snapshot = { globs: [], v: 1, type: "snapshot", pickups: [], arenaId: "room", tick: 1, wave: 1, players: [], bugs: [bug], shots: [], events: [] };
@@ -104,6 +120,15 @@ test("maximum full snapshot fits 64KiB and rejects corrupt combat entities/resul
     const bad = JSON.parse(raw); bad.shots[0][1] = owner; expect(parseServer(JSON.stringify(bad))).toBeNull();
   }
   // Every split of the shared shot/impact budget, including simultaneous boosts.
+  for (const impacts of [0, MAX_EVENTS]) {
+    const armoured = structuredClone(snapshot);
+    for (let i = 0; i < 10; i++) { const b = armoured.bugs[i]!; armoured.bugs[i] = createBug("beetle", b.id, b.x, b.y); }
+    if (impacts) {
+      armoured.shots = [];
+      armoured.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: armoured.tick, x: 1234.56789, y: 1234.56789, points: 0, type: "bounce", kind: "beetle" }));
+    }
+    const wire = serializeSnapshot(armoured); expect(new TextEncoder().encode(wire).byteLength).toBeLessThan(SERVER_MESSAGE_BYTES); expect(parseServer(wire)).not.toBeNull();
+  }
   for (const impacts of [1, 60, 330, 600, MAX_EVENTS]) {
     const mix = structuredClone(snapshot); mix.shots = mix.shots.slice(impacts);
     mix.events = Array.from({ length: impacts }, (_, i) => ({ id: offset + 3000 + i, tick: mix.tick, x: 1234.56789, y: 1234.56789, points: 75, type: "kill", kind: "dasher" }));
