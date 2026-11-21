@@ -10,6 +10,8 @@ The original shield-only scope was incomplete; both missing kinds now have their
 
 The engine fixture now carries a real visible pickup through delayed interpolation into drawing. Presentation tests require floor and HUD glyph paints, actual robot-overlay dispatch, timer depletion/refresh/removal, blinking, glow culling and resource caching for all three kinds. They identify the timer by location and arc depletion rather than an arbitrary shade. The random-stream test retains deterministic replay, independence from spawning and floor-cap behavior without reproducing the seed initializer.
 
+The appearance-coverage repair checks the bubble, fanned barrels and highlighted rapid barrel through actual renderer dispatch. It also requires distinguishable colours across kinds, matching floor/HUD/glow hues, and fading radial-gradient paint on the cached surface actually drawn. These checks allow shade and geometry changes rather than fixing exact colours or vertices. Nine appearance faults fail focused tests, including the returned wrong-factory, duplicate-colour and unpainted-glow mutations; three harmless shade/geometry variants pass (`presentation-return/mutations.json`). All mutations were restored. This repair changes tests only; production and skill measurements below were retained, not rerun.
+
 The repaired safety net was mutation-tested (`mutations-integrated.json`): dasher drops at 60%, dropped engine pickup delivery, dropped robot-overlay dispatch, shield-only drop selection, missing glyphs for any kind, wrong rapid cadence and wrong spread angle all fail relevant tests. Shade-only and seed-salt-only changes pass. All mutations were restored before normal validation.
 
 Pure fixed-step tests cover effect behavior, independent duration/refresh, combined firing, per-projectile heat, expiry restoring ordinary fire and heat-cap transitions. Existing shield protection/immunity, downing/revival, floor cap, exact floor expiry and first-touch tests remain in place. Real-server tests verify both clients observe one collection winner and receive the combined boosted fan through legacy JSON and negotiated binary transport. The merge with main retains spitter emission/interception, protection precedence and downing timing; shield blocks eligible acid globs, and pickup seeking checks the proposed route against those globs.
@@ -51,6 +53,8 @@ The expanded fixture includes twenty robots with all three effects, 150 bugs (in
 
 Every final sample met the nominal 60 FPS target while the full skill computation continued. Approximate median additions were 0.27 ms desktop, 0.40 ms portrait and 0.72 ms landscape. Floor glows are cached and robot strokes/fills remain bounded. Raw samples and inspected screenshots are in `production-SBqUxQ/report.json`. Chrome uses its normal rendering configuration, matching the other arena drivers; the driver no longer forces software rendering. An independent corrected-grid repeat in `.evidence/79/renderer-final-F6LzMY/` also held 60 FPS in every sample (pickup draw cost 1.761–2.490 ms/frame). The initial software-only pass with the earlier grid remains in `production-AgmAIs/report.json` (about 50 FPS desktop for both baseline and pickups, 60 FPS on phones).
 
+Review observed desktop measurement variability; its final warmed, alternating effects-enabled/disabled comparison held 60 FPS in all sixteen samples. Future comparisons should warm up and alternate the two fixtures.
+
 ## Server load
 
 After visual clients and renderer fixtures closed, the driver ran the actual CLI in a separate process:
@@ -61,7 +65,7 @@ All **200 clients joined across ten arenas**, with **zero errors**. The complete
 
 ## Checks, skill and fairness
 
-`bun run check` passed TypeScript and all **515 tests across 65 files** (`check-beetle.log`); Linux and Windows CI also passed. Focused integration tests passed 103 tests (`beetle-focused.log`); the final armour payload cases also pass (`protocol-beetle-final.log`). Production build passed (`build-beetle.log`).
+After the appearance-coverage repair, `bun run check` passed TypeScript and all **516 tests across 65 files** (`presentation-return/check.log`). The preceding 515-test delivery passed Linux and Windows CI. Focused integration tests passed 103 tests (`beetle-focused.log`); the final armour payload cases also pass (`protocol-beetle-final.log`). Production build passed (`build-beetle.log`).
 
 The complete `bun run skill` command finished successfully. Raw output: `.evidence/79/skill-beetle.json`; normalized UTF-8 report with every observation: `skill-beetle-report.json`; aggregate cohort data: `skill-beetle-summary.json`.
 
