@@ -21,10 +21,11 @@ Object.defineProperty(globalThis, "localStorage", { get() { throw new Error("Boa
 const text = node => typeof node === "object" ? node.children.map(text).join(" ") : String(node);
 for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
   globalThis.window = { location: { origin } };
-  const clock = new FakeScheduler(), leaders = [], teams = [], logs = [];
+  const clock = new FakeScheduler(), leaders = [], teams = [], stats = [], logs = [];
   const controller = new BoardController({
     leaders: () => { const request = deferred(); leaders.push(request); return request.promise; },
     teams: () => { const request = deferred(); teams.push(request); return request.promise; },
+    stats: () => { const request = deferred(); stats.push(request); return request.promise; },
   }, clock, (...args) => logs.push(args));
   let tree;
   const assertNoRows = () => {
@@ -33,6 +34,15 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
   };
   const assertStatus = failed => {
     assert.equal(Boolean(text(tree.root.findByProps({ role: "status" })).trim()), failed, "Incorrect reconnecting indication");
+  };
+  const assertActivity = (total, pills = []) => {
+    const domText = node => typeof node === "object" ? node.children.map(domText).join("") : String(node);
+    const actual = domText(tree.root.findByProps({ className: "board-playing" }));
+    assert.equal(actual, total + " playing now");
+    assert.deepEqual(tree.root.findAllByProps({ className: "board-arena" }).map(domText), pills);
+    const activity = tree.root.findByProps({ className: "board-activity" });
+    assert.ok(!text(activity).includes("secret-room"), "Raw arena id shown");
+    assert.ok(activity.findAll(node => Object.entries(node.props).some(([key, value]) => ["title", "aria-label"].includes(key) && String(value).includes("secret-room"))).length === 0);
   };
   const assertRows = (expected, scores) => {
     const rendered = tree.root.findAllByType("li");
@@ -59,7 +69,7 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
   };
   try {
     await act(async () => { tree = create(createElement(Board, { controller })); });
-    assertNoRows(); assertStatus(false);
+    assertNoRows(); assertStatus(false); assertActivity("—");
     assert.ok(document.title.trim());
     const pendingTotals = tree.root.findByProps({ className: "board-teams" }).findAllByType("strong");
     assert.ok(pendingTotals.every(total => total.props.title === undefined && text(total).trim()), "Missing team placeholders");
@@ -68,11 +78,11 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
     assert.equal(tree.root.findAllByType("input").length, 0);
     assert.equal(tree.root.findAllByType("canvas").length, 0);
     assert.equal(tree.root.findAllByType("button").length, 0);
-    await act(async () => { leaders[0].reject(new Error("initial failure")); teams[0].reject(new Error("initial failure")); });
-    assertStatus(true); assertNoRows();
+    await act(async () => { leaders[0].reject(new Error("initial failure")); teams[0].reject(new Error("initial failure")); stats[0].reject(new Error("initial failure")); });
+    assertStatus(true); assertNoRows(); assertActivity("—");
     await act(async () => { await clock.tick(2000); });
-    await act(async () => { leaders[1].resolve([]); teams[1].resolve({ tabs: 0, spaces: 0 }); });
-    assertNoRows(); assertStatus(false);
+    await act(async () => { leaders[1].resolve([]); teams[1].resolve({ tabs: 0, spaces: 0 }); stats[1].resolve({ totalPlayers: 0, arenas: [] }); });
+    assertNoRows(); assertStatus(false); assertActivity("0");
     assertRace([0, 0], ["0", "0"], [50, 50]);
     const firstRows = [1234567, 950, 840, 730, 620, 510, 400, 290, 180, 70].map((score, i) => ({
       playerId: i ? "player-" + i : "a", name: i ? "Robot_" + i : "Robot_Name-12345", score,
@@ -83,7 +93,10 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
     await act(async () => {
       leaders[2].resolve(firstRows);
       teams[2].resolve({ tabs: 999999, spaces: 333333 });
+      stats[2].resolve({ totalPlayers: 1234, arenas: [7, 18, 18, 6, 5, 4, 3, 2, 1, 20].map((players, i) => ({ id: "secret-room-" + i, players })) });
     });
+    const pills = ["Arena 10 · 20", "Arena 2 · 18", "Arena 3 · 18", "Arena 1 · 7", "Arena 4 · 6", "Arena 5 · 5", "Arena 6 · 4", "Arena 7 · 3", "+2 more"];
+    assertActivity("1,234", pills);
     assertRows(firstRows, ["1.2M", "950", "840", "730", "620", "510", "400", "290", "180", "70"]);
     assertRace([999999, 333333], ["999,999", "333,333"], [75, 25]);
     const row = tree.root.findAllByType("li")[0], shell = tree.root.findByType("main");
@@ -119,6 +132,12 @@ for (const origin of ["https://swarm.test", "http://localhost:12345"]) {
     await act(async () => { await clock.tick(2000); });
     await act(async () => { leaders[6].resolve([]); teams[6].resolve({ tabs: 0, spaces: 0 }); });
     assertNoRows(); assertStatus(false); assertRace([0, 0], ["0", "0"], [50, 50]);
+    // A stats-only outage keeps both total and pills, and shows the shared warning.
+    await act(async () => { stats[6].reject(new Error("stats offline")); });
+    assertStatus(true); assertActivity("1,234", pills);
+    await act(async () => { await clock.tick(2000); });
+    await act(async () => { stats[7].resolve({ totalPlayers: 25, arenas: [{ id: "secret-room-new", players: 25 }] }); });
+    assertStatus(false); assertActivity("25", ["Arena 1 · 25"]);
     act(() => tree.unmount()); tree = undefined;
     assert.equal(clock.timers.size, 0);
     // React StrictMode's effect cleanup/setup sequence on the same controller.

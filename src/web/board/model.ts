@@ -2,6 +2,7 @@ import type { Leader, TeamTotals } from "../../shared/api";
 import { TEAMS, type Team } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { exactScore } from "../format";
+import type { ArenaStats } from "./api";
 export { exactScore } from "../format";
 
 export const HIGHLIGHT_MS = 3000;
@@ -12,13 +13,20 @@ export interface Race {
   highlightUntil: TeamTotals;
 }
 export interface Lane<T> { data: T | null; failed: boolean }
+export interface Activity {
+  totalPlayers: number;
+  arenas: { id: string; number: number; players: number }[];
+  moreArenas: number;
+}
 export interface BoardState {
   leaders: Lane<Row[]>;
   teams: Lane<Race>;
+  stats: Lane<Activity>;
   lastLeader: Team | null;
 }
 export const initialState = (): BoardState => ({
   leaders: { data: null, failed: false }, teams: { data: null, failed: false }, lastLeader: null,
+  stats: { data: null, failed: false },
 });
 const isScore = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
@@ -43,6 +51,26 @@ export function readTeams(value: unknown): TeamTotals {
     throw new Error("Invalid team totals");
   }
   return { tabs: (value as TeamTotals).tabs, spaces: (value as TeamTotals).spaces };
+}
+
+export function readStats(value: unknown): Activity {
+  if (!value || typeof value !== "object") throw new Error("Invalid arena stats");
+  const stats = value as ArenaStats;
+  if (!isScore(stats.totalPlayers) || !Array.isArray(stats.arenas)) throw new Error("Invalid arena stats");
+  const ids = new Set<string>();
+  const arenas = stats.arenas.map((arena, index) => {
+    if (!arena || typeof arena !== "object" || typeof arena.id !== "string" || !arena.id.trim() || ids.has(arena.id) || !isScore(arena.players)) {
+      throw new Error("Invalid arena population");
+    }
+    ids.add(arena.id);
+    return { id: arena.id, number: index + 1, players: arena.players };
+  });
+  arenas.sort((a, b) => b.players - a.players || a.number - b.number);
+  return { totalPlayers: stats.totalPlayers, arenas: arenas.slice(0, 8), moreArenas: Math.max(0, arenas.length - 8) };
+}
+
+export function applyStats(state: BoardState, value: unknown): BoardState {
+  return { ...state, stats: { data: readStats(value), failed: false } };
 }
 
 export function applyLeaders(state: BoardState, value: unknown, now: number): BoardState {

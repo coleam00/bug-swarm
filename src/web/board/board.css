@@ -27,9 +27,13 @@ body:has(.stream-board) { margin: 0; }
 .board-race-bar span { transition: width 400ms ease; }
 .board-neutral { opacity: 0.4; }
 .stream-board .board-race-note { font-size: 14px; line-height: 18px; text-align: center; color: #c5d2e2; }
+.board-activity { text-align: center; font-variant-numeric: tabular-nums; }
+.board-playing { font-size: 40px; line-height: 44px; font-weight: 800; }
+.board-arenas { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 8px; margin-top: 4px; }
+.board-arena { padding: 0 10px; border: 1px solid #86ded166; border-radius: 20px; background: #172c3b; color: #e2fff9; font-size: 24px; line-height: 32px; white-space: nowrap; }
 .board-leaders { flex: 1; }
 .board-leaders h2 { font-size: 20px; line-height: 20px; text-transform: uppercase; letter-spacing: 0.1em; }
-.board-leaders ol { display: grid; grid-auto-flow: column; grid-template-rows: repeat(5, 80px); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; list-style: none; padding: 0; margin: 2px 0 0; }
+.board-leaders ol { display: grid; grid-auto-flow: column; grid-template-rows: repeat(5, 72px); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; list-style: none; padding: 0; margin: 2px 0 0; }
 .board-leaders li { display: grid; grid-template-columns: minmax(0, 1fr) max-content; align-items: center; min-width: 0; border-radius: 6px; padding: 0 8px; border-bottom: 1px solid #c5d2e222; }
 .board-name { position: relative; min-width: 0; white-space: nowrap; font: bold 40px/40px ui-monospace, "Cascadia Mono", "Courier New", monospace; }
 .board-name > span:last-child { display: block; }

@@ -1,5 +1,5 @@
-import type { GameApi } from "../game/api";
-import { applyLeaders, applyTeams, expireHighlights, highlightDeadline, initialState, type BoardState } from "./model";
+import type { BoardApi } from "./api";
+import { applyLeaders, applyStats, applyTeams, expireHighlights, highlightDeadline, initialState, type BoardState } from "./model";
 
 export interface Scheduler {
   now(): number;
@@ -12,7 +12,7 @@ const scheduler: Scheduler = {
 };
 export const POLL_MS = 2000;
 const MAX_BACKOFF_MS = 8000;
-type Endpoint = "leaders" | "teams";
+type Endpoint = "leaders" | "teams" | "stats";
 interface PollLane { sequence: number; applied: number; failures: number; timer?: unknown }
 
 /** Independent read lanes. The API client's five-second deadline bounds overlap. */
@@ -25,7 +25,7 @@ export class BoardController {
   private lanes!: Record<Endpoint, PollLane>;
 
   constructor(
-    private readonly api: Pick<GameApi, "leaders" | "teams">,
+    private readonly api: Pick<BoardApi, "leaders" | "teams"> & Partial<Pick<BoardApi, "stats">>,
     private readonly clock: Scheduler = scheduler,
     private readonly log: (endpoint: Endpoint, error: unknown) => void = (endpoint, error) => console.error(`Board ${endpoint} read failed`, error),
   ) {}
@@ -38,10 +38,12 @@ export class BoardController {
     if (this.active) return;
     this.active = true;
     this.generation++;
-    this.lanes = { leaders: { sequence: 0, applied: 0, failures: 0 }, teams: { sequence: 0, applied: 0, failures: 0 } };
+    this.lanes = { leaders: { sequence: 0, applied: 0, failures: 0 }, teams: { sequence: 0, applied: 0, failures: 0 }, stats: { sequence: 0, applied: 0, failures: 0 } };
     this.publish(expireHighlights(this.state, this.clock.now()));
     this.read("leaders");
     this.read("teams");
+    // Existing score-only consumers can keep supplying just the two score reads.
+    if (this.api.stats) this.read("stats");
   };
   stop = () => {
     if (!this.active) return;
@@ -81,9 +83,11 @@ export class BoardController {
       this.schedule(endpoint, Math.min(MAX_BACKOFF_MS, POLL_MS * 2 ** Math.min(lane.failures - 1, 2)));
     };
     // Promise wrapping also treats an injected synchronous API throw as a read failure.
-    void Promise.resolve().then<unknown>(() => this.api[endpoint]()).then(value => {
+    void Promise.resolve().then<unknown>(() => this.api[endpoint]!()).then(value => {
       if (!current()) return;
-      const state = (endpoint === "leaders" ? applyLeaders : applyTeams)(this.state, value, this.clock.now());
+      const state = endpoint === "leaders" ? applyLeaders(this.state, value, this.clock.now())
+        : endpoint === "teams" ? applyTeams(this.state, value, this.clock.now())
+        : applyStats(this.state, value);
       lane.applied = sequence;
       const recovering = lane.failures > 0;
       lane.failures = 0;

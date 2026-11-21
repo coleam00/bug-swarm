@@ -1,20 +1,20 @@
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { TEAM_COLOURS, TEAM_NAMES, TEAMS } from "../../shared/teams";
-import { api } from "../game/api";
+import { boardApi } from "./api";
 import { displayScore, exactScore } from "./model";
 import { BoardController } from "./polling";
 import "./board.css";
 
 export function Board({ controller: supplied, origin = window.location.origin }: { controller?: BoardController; origin?: string }) {
-  const [controller] = useState(() => supplied ?? new BoardController(api));
+  const [controller] = useState(() => supplied ?? new BoardController(boardApi));
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
     document.title = "Bug Swarm — Stream Board";
     controller.start();
     return controller.stop;
   }, [controller]);
-  const race = state.teams.data, rows = state.leaders.data;
-  const reconnecting = state.leaders.failed || state.teams.failed;
+  const race = state.teams.data, rows = state.leaders.data, activity = state.stats.data;
+  const reconnecting = state.leaders.failed || state.teams.failed || state.stats.failed;
   return <main className="stream-board">
     <header className="board-header"><h1>Bug Swarm</h1><p>Tabs vs Spaces</p></header>
     <section className="board-race" aria-label="Team race">
@@ -30,6 +30,13 @@ export function Board({ controller: supplied, origin = window.location.origin }:
         {TEAMS.map(team => <span key={team} style={{ width: `${(race?.shares[team] ?? 0.5) * 100}%`, background: TEAM_COLOURS[team] }} />)}
       </div>
       <p className="board-race-note">{!race ? "Waiting for team scores…" : !race.totals.tabs && !race.totals.spaces ? "No team scores yet" : "Every team score counts"}</p>
+    </section>
+    <section className="board-activity" aria-label="Live players">
+      <p className="board-playing">{activity ? exactScore(activity.totalPlayers) : "—"} playing now</p>
+      {activity && activity.arenas.length > 0 && <div className="board-arenas">
+        {activity.arenas.map(arena => <span className="board-arena" key={arena.id}>Arena {arena.number} · {exactScore(arena.players)}</span>)}
+        {activity.moreArenas > 0 && <span className="board-arena">+{exactScore(activity.moreArenas)} more</span>}
+      </div>}
     </section>
     <section className="board-leaders" aria-labelledby="board-top-ten">
       <h2 id="board-top-ten">Top 10</h2>
