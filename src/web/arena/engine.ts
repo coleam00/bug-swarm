@@ -8,7 +8,7 @@ import { Interpolation } from "./interpolation";
 import { cameraFor } from "./camera";
 import { ArenaRenderer } from "./draw";
 export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch: boolean,
-  status: (message: string) => void, refused: (message: string, team?: Identity["team"]) => void) {
+  status: (message: string) => void, refused: (message: string, team?: Identity["team"]) => void, accepted: () => void = () => {}) {
   const ctx = canvas.getContext("2d")!, renderer = new ArenaRenderer(ctx), input = new ArenaInput();
   const prediction = new Prediction(), interpolation = new Interpolation();
   let seq = 0, ready = false, lastSnapshot = 0, lastSend = performance.now(), previous = lastSend;
@@ -18,7 +18,7 @@ export function mountArena(canvas: HTMLCanvasElement, identity: Identity, touch:
   const clear = () => { ready = false; seq = 0; input.clear(); prediction.reset(); interpolation.clear(); reset(); };
   const connection = connectArena(identity, touch, message => {
     if (message.type === "error") { refused(message.message, message.team); return; }
-    if (message.type === "welcome") { clear(); ready = true; lastSnapshot = performance.now(); return; }
+    if (message.type === "welcome") { clear(); ready = true; lastSnapshot = performance.now(); accepted(); return; }
     if (!ready) return;
     const own = message.players.find(p => p.id === identity.playerId.toLowerCase());
     if (!own) return;

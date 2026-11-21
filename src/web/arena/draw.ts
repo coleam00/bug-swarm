@@ -48,11 +48,16 @@ export class ArenaRenderer {
     c.fillStyle = "#fff5d8"; c.beginPath(); c.arc(1, -1, 2.5, 0, Math.PI * 2); c.fill(); c.restore();
     let label = this.labels.get(p.id);
     if (!label) {
-      label = document.createElement("canvas"); label.width = 180; label.height = 30;
+      label = document.createElement("canvas");
       const l = label.getContext("2d")!; l.font = "bold 14px system-ui"; l.textAlign = "center";
-      l.strokeStyle = "#060b12"; l.lineWidth = 4; l.strokeText(p.name, 90, 20); l.fillStyle = colour; l.fillText(p.name, 90, 20);
+      const measured = l.measureText(p.name);
+      const halfWidth = Math.max(measured.width / 2, measured.actualBoundingBoxLeft, measured.actualBoundingBoxRight);
+      label.width = Math.ceil(halfWidth * 2) + 8; label.height = 30;
+      // Resizing clears canvas state. Include stroke padding around the measured glyph bounds.
+      l.font = "bold 14px system-ui"; l.textAlign = "center";
+      l.strokeStyle = "#060b12"; l.lineWidth = 4; l.strokeText(p.name, label.width / 2, 20); l.fillStyle = colour; l.fillText(p.name, label.width / 2, 20);
       this.labels.set(p.id, label);
     }
-    c.drawImage(label, p.x - 90, p.y - 54);
+    c.drawImage(label, p.x - label.width / 2, p.y - 54);
   }
 }

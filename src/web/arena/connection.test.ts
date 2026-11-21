@@ -25,6 +25,11 @@ const welcome = buildId => ({ v: 1, type: "welcome", playerId: identity.playerId
 const receive = m => sockets.at(-1).onmessage({ data: JSON.stringify(m) });
 const retry = expected => { const [key, t] = timers.entries().next().value; assert.equal(t.delay, expected); timers.delete(key); t.fn(); sockets.at(-1).onopen(); };
 let connection = connect(); sockets.at(-1).onopen(); assert.equal(sockets.at(-1).sent[0].buildId, "unknown");
+const input = { v: 1, type: "input", seq: 1, move: { x: 0.6, y: 0.8 }, aim: 1, fire: true };
+const socket = sockets.at(-1), sent = socket.sent.length;
+assert.equal(connection.send(input), true); assert.equal(socket.sent.length, sent + 1); assert.deepEqual(socket.sent.at(-1), input);
+socket.bufferedAmount = 1; assert.equal(connection.send({ ...input, seq: 2 }), false); assert.equal(socket.sent.length, sent + 1); socket.bufferedAmount = 0;
+socket.readyState = 3; assert.equal(connection.send({ ...input, seq: 2 }), false); assert.equal(socket.sent.length, sent + 1); socket.readyState = 1;
 for (const delay of [250,500,1000,2000,4000,5000,5000]) { sockets.at(-1).close(); retry(delay); }
 receive(welcome("one")); sockets.at(-1).close(); retry(250); assert.equal(sockets.at(-1).sent[0].buildId, "one");
 receive(welcome("two")); assert.equal(reloads, 1); connection.dispose(); assert.equal(timers.size, 0);

@@ -64,6 +64,13 @@ export class RecordingContext {
   fill(): void { this.paint("fill"); }
   stroke(): void { this.paint("stroke"); }
   fillRect(...args: number[]): void { this.paint("fillRect", ...args); }
+  strokeRect(...args: number[]): void { this.paint("strokeRect", ...args); }
+  createPattern(): CanvasPattern { return {} as CanvasPattern; }
+  measureText(text: string): TextMetrics {
+    const width = text.length * 13;
+    return { width, actualBoundingBoxLeft: this.textAlign === "center" ? width / 2 : 0,
+      actualBoundingBoxRight: this.textAlign === "center" ? width / 2 : width } as TextMetrics;
+  }
   drawImage(...args: unknown[]): void { this.paint("drawImage", ...args); }
   fillText(...args: unknown[]): void { this.paint("fillText", ...args); }
   strokeText(...args: unknown[]): void { this.paint("strokeText", ...args); }

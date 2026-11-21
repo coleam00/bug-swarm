@@ -60,22 +60,49 @@ test("real server: clients see each other move, 21st player is isolated, refused
     rmSync(scratch, { recursive: true, force: true });
   }
 }, 10000);
-test("real bots join, wander and report server timing, then leave no sockets or rooms", async () => {
-  const scratch = mkdtempSync(join(tmpdir(), "arena-bots-"));
+test("real bot CLI wanders, reports required fields and cleans up, including cancellation", async () => {
+  const scratch = mkdtempSync(join(tmpdir(), "arena-bots-")), home = join(scratch, "home"); mkdirSync(home);
   const app = createServer({ port: 0, hostname: "127.0.0.1", dataDir: join(scratch, "data"), env: {} });
+  const observer = client(`ws://127.0.0.1:${app.server.port}/ws`, 99, "Observer");
+  let child: ReturnType<typeof Bun.spawn> | undefined;
   try {
-    const result = await runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 1 });
-    expect(result).toMatchObject({ joins: 2, arenaCount: 1, errors: 0 }); expect(result.sent).toBeGreaterThan(20); expect(result.received).toBeGreaterThan(20);
-    expect(result.tick.p95Ms).toBeNumber();
+    const welcome = await observer.wait((m): m is Extract<ServerMessage, { type: "welcome" }> => m.type === "welcome");
+    const running = Bun.spawn([process.execPath, "run", "bots", "--", "--url", `http://127.0.0.1:${app.server.port}`, "--count", "2", "--seconds", "1"], {
+      cwd: join(import.meta.dir, "../../.."),
+      env: { ...process.env, HOME: home, USERPROFILE: home, APPDATA: home, LOCALAPPDATA: home, XDG_CONFIG_HOME: home, XDG_CACHE_HOME: home, DATA_DIR: join(scratch, "data") },
+      stdout: "pipe", stderr: "pipe",
+    });
+    child = running;
+    const [stdout, stderr, exit] = await Promise.all([new Response(running.stdout).text(), new Response(running.stderr).text(), running.exited]);
+    expect(exit, stderr).toBe(0);
+    const result = JSON.parse(stdout);
+    expect(result).toMatchObject({ requested: 2, joins: 2, arenaCount: 1, errors: 0, arenas: [welcome.arenaId] });
+    expect(result.sent).toBeGreaterThan(20); expect(result.received).toBeGreaterThan(20);
+    for (const rate of [result.messagesPerSecond.sent, result.messagesPerSecond.received]) {
+      expect(Number.isFinite(rate)).toBe(true); expect(rate).toBeGreaterThan(0);
+    }
+    expect(result.tick.windowMs).toBe(60000); expect(result.tick.samples).toBeGreaterThan(0);
+    expect(Number.isFinite(result.tick.p50Ms)).toBe(true); expect(Number.isFinite(result.tick.p95Ms)).toBe(true);
+    expect(result.tick.p95Ms).toBeGreaterThanOrEqual(result.tick.p50Ms);
+    for (const name of ["bot-01", "bot-02"]) {
+      const positions = observer.messages.flatMap(m => m.type === "snapshot" ? m.players.filter(p => p.name === name) : []);
+      expect(positions.length).toBeGreaterThan(1);
+      const first = positions[0]!;
+      expect(positions.some(p => Math.hypot(p.x - first.x, p.y - first.y) > 5)).toBe(true);
+    }
+    observer.socket.close();
     // Client close events precede the peer's close callbacks. Wait for the actual server cleanup.
     const deadline = performance.now() + 2000;
     while (app.arenas.active.size && performance.now() < deadline) await Bun.sleep(5);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.rooms.size).toBe(0);
     const interrupted = new AbortController(), timer = setTimeout(() => interrupted.abort(), 200);
-    try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow("interrupted"); }
+    try { await expect(runBots({ url: `http://127.0.0.1:${app.server.port}`, count: 2, seconds: 60 }, interrupted.signal)).rejects.toThrow(); }
     finally { clearTimeout(timer); }
     const abortedDeadline = performance.now() + 2000;
     while (app.arenas.active.size && performance.now() < abortedDeadline) await Bun.sleep(5);
     expect(app.arenas.active.size).toBe(0); expect(app.arenas.connections.size).toBe(0);
-  } finally { await app.stop(); rmSync(scratch, { recursive: true, force: true }); }
+  } finally {
+    if (child && child.exitCode === null) { child.kill(); await child.exited; }
+    observer.socket.close(); await app.stop(); rmSync(scratch, { recursive: true, force: true });
+  }
 }, 10000);

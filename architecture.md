@@ -6,6 +6,8 @@ Release 2 turns the game into a server-authoritative multiplayer arena (see `dir
 
 ### Available now: movement foundation
 
+First-time entry stays an editable draft until the server sends `welcome`; only then is its identity stored. Refusal and reload do not lock an unaccepted name. Saved identities keep their permanent name/team rules. Local and remote name tags share a cached bitmap sized from measured text bounds, including stroke padding.
+
 `/arena` and `/arena/` serve the movement-only slice. It has shared 2400 × 2400 worlds, fullest-room matching (20 players), keyboard movement, a floating left touch stick, camera following, prediction/reconciliation and remote interpolation. Mouse aim and held fire travel as inputs; firing has no effect yet. Combat, right-stick aiming, minimaps, lives and scoring in the target design below remain later items. `/` still serves release 1. Arena entry registers the existing fixed name/team identity without creating a run or event. A second active connection for the same UUID is refused; use separate browser storage contexts to play together on one machine. Hidden names are refused at entry and removed from live rooms within one second.
 
 `src/server/server.ts` owns the callable server lifecycle, including `port: 0` for integration tests and `stop()` for sockets, timers, listener and SQLite. `main.ts` supplies environment configuration and signal handling. Shutdown closes sockets with code 1012; clients reconnect with 250 ms–5 s backoff and reload when a subsequent welcome changes the build id. There are no arena scores to save in this slice. The build id is `RAILWAY_GIT_COMMIT_SHA`, then `BUILD_ID`, then a digest of built HTML (or `development` without a build).

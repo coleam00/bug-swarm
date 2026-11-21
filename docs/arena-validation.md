@@ -50,7 +50,7 @@ For the 100 ms connection case, the browser delayed WebSocket sends and applicat
 
 ## Reproduction and automated checks
 
-Delivery checks passed: `bun run check` completed with **516 passing tests, zero failures** across 48 files, and `bun run build` produced the release 1, board and lazy arena bundles. `git diff --check` was clean.
+Original delivery checks passed: `bun run check` completed with **516 passing tests, zero failures** across 48 files, and `bun run build` produced the release 1, board and lazy arena bundles. `git diff --check` was clean.
 
 Run `bun install`, `bun run check` and `bun run build`. To start a production server with private data/home and an ephemeral loopback port from the repository root:
 
@@ -61,3 +61,27 @@ bun -e "import {createServer} from './src/server/server.ts'; import {mkdtempSync
 Use the printed origin for two fresh browser storage contexts at `/arena` and the bots command above. Press F in both pages, move each human, then repeat at 390 × 844 and 844 × 390 with two-point touch emulation. Stop the server with Ctrl+C. Never point bots at a listener whose data you do not own.
 
 Focused tests cover deterministic seeded stepping, extreme/analog input clamping and bounds; UTF-8 byte caps and all five directional protocol types; room packing/overflow, applied sequence acknowledgements, stale inputs, rolling limits, backpressure, moderation and timing expiry; prediction convergence/history limits, interpolation, camera and pointer ownership; entry, reconnect/build reload and mount cleanup. Real-server integration uses port 0 and temporary SQLite, proves both clients observe movement, isolates the 21st sequential join, rejects a refused name, removes a live hidden name and exercises successful/interrupted bot cleanup. Release 1 checks remain part of `bun run check`.
+
+## Returned-check repairs
+
+Admission now separates an attempted session from the accepted identity. A refused new name remains editable with both team choices, and is not written to storage. A subsequent `welcome` commits the identity. The existing saved/legacy identity paths and team-conflict retry retain permanent identity rules; the connection layer itself never writes browser storage. Tests cover both teams through mounting and persistence, refusal before admission, correction after reload, and fixed identity after admission.
+
+Name tags now measure glyph bounds and reserve stroke padding when creating the cached canvas. Both local and remote robots use the same label path; the fixed floor/glow canvases contain no dynamic text. A recording-canvas test verifies both bodies and identities are actually painted, their measured text fits, labels stay centered, and the second draw reuses the cached surfaces.
+
+The other repairs extend the existing fixtures at the boundaries missed by the original assertions:
+
+| Boundary | Regression guard |
+| --- | --- |
+| Shared stepping | Oversized/extreme inputs move one speed-limited step; different seeds produce different spawns while equal seeds reproduce |
+| Room selection | Populations `[1,19]` become `[1,20]` when the fuller room was inserted later |
+| Scheduling | Server tick and client input fixtures assert the requested 50 ms interval |
+| Input delivery | All WASD/arrow directions and captured touch moves reach emitted inputs; connection sends the actual wire message |
+| Scheduled frames | Frames render predicted then reconciled local positions, remote interpolation and matching camera coordinates |
+| Tick stats | The manager aggregates samples across two rooms, giving p50=50 and p95=95 for values 1–100; empty/expired windows remain covered |
+| Bot CLI | The owned ephemeral server observes displacement for both bots; the real CLI JSON contains joins, arena ids/count, rates, errors and tick percentiles |
+
+The tests were challenged with the 16 reported behavioral mutations plus premature persistence and fixed-width labels: **all 18 regressions failed their focused tests**. Cancellation wording and highest-free-slot allocation both passed, confirming the two implementation-specific assertions were removed. [Mutation results](arena-evidence/fix-mutations.json) record every case; each temporary edit was restored before continuing.
+
+Production Chrome repeated first-time hidden-name refusal and correction, refusal then reload, accepted identity reload/rejoin, both team choices, and a later hide of an accepted identity. Both wide 16-character names were checked against real glyph metrics on both local and remote robots. [Browser/load report](arena-evidence/fix-report.json), [editable refusal](arena-evidence/fix-name-refusal.png), [Spaces view](arena-evidence/fix-wide-spaces.png), [Tabs view](arena-evidence/fix-wide-tabs.png) and [portrait touch](arena-evidence/fix-wide-portrait-touch.png) capture the result. The two humans were separated before the screenshots so overlapping tags would not obscure label legibility. Validation again used an owned loopback server, private home/profile/data directories and 18 bots for 60 seconds.
+
+The repaired build passed `bun run check`: **517 tests, zero failures across 49 files**; `bun run build` and `git diff --check` also passed. The repeated load joined all 18 bots in one 20-player arena with zero errors and tick p50/p95 **0.346/0.784 ms**. Both desktop views sampled **60 FPS** for seven seconds, with combined update/draw costs **0.210–0.282 ms/frame**. Real glyph bounds required 214 px and 206 px cached canvases for the two wide names, including padding. Measurement happens once per cached label; drawing still uses cached images. Every owned browser, bot and server process finished before delivery.

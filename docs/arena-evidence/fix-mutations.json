@@ -1,0 +1,122 @@
+[
+  {
+    "label": "movement clamp",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "different seeds",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "fullest later room",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "server cadence",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "client cadence",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "wire input send",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "touch pointermove",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "ArrowRight binding",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "engine reconciliation",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "engine interpolation",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "camera following",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "both team choices",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "remote robot painting",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "combined p95",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "wandering bots",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "CLI report output",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "premature identity persistence",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "fixed-width labels",
+    "expectedPass": false,
+    "exit": 1,
+    "ok": true
+  },
+  {
+    "label": "cancellation wording is harmless",
+    "expectedPass": true,
+    "exit": 0,
+    "ok": true
+  },
+  {
+    "label": "free slot order is harmless",
+    "expectedPass": true,
+    "exit": 0,
+    "ok": true
+  }
+]

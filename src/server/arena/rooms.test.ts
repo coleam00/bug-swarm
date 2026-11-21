@@ -1,12 +1,11 @@
 import { expect, test } from "bun:test";
 import { openDb, hideName, startRun } from "../db";
 import { RoomManager, type Transport } from "./rooms";
-import { TickMetrics } from "./metrics";
 function fixture() {
   const db = openDb(":memory:"); let now = 0, cancelled = 0;
   const callbacks = new Map<any, () => void>();
   const manager = new RoomManager(db, "test", { now: () => now, seed: () => 1,
-    schedule: fn => { const timer = { unref() {} } as any; callbacks.set(timer, fn); return timer; },
+    schedule: (fn, ms) => { expect(ms).toBe(50); const timer = { unref() {} } as any; callbacks.set(timer, fn); return timer; },
     cancel: timer => { cancelled++; callbacks.delete(timer); } });
   const join = (id = crypto.randomUUID(), name = "Robot", team = "tabs") => {
     const messages: any[] = []; let buffered = 0, closed = false;
@@ -22,6 +21,12 @@ test("rooms pack fullest first, 21st opens a new arena, departures dispose empty
     const players = Array.from({ length: 21 }, () => f.join()); expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([20, 1]);
     const first = players[0]!.c.room!; f.manager.leave(players[0]!.c); const next = f.join(); expect(next.c.room).toBe(first);
     f.manager.leave(players[20]!.c); expect(f.manager.rooms.size).toBe(1); expect(f.cancelled()).toBe(1);
+    // Leave an earlier room nearly empty and a later one nearly full.
+    const later = Array.from({ length: 19 }, () => f.join());
+    for (const player of players.slice(1)) f.manager.leave(player.c);
+    expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([1, 19]);
+    expect(f.join().c.room).toBe(later[0]!.c.room);
+    expect([...f.manager.rooms.values()].map(r => r.members.size)).toEqual([1, 20]);
     expect((f.db.query("SELECT COUNT(*) AS n FROM runs").get() as any).n).toBe(0);
     expect((f.db.query("SELECT COUNT(*) AS n FROM events").get() as any).n).toBe(0);
   } finally { f.close(); }
@@ -73,11 +78,14 @@ test("arena UUID casing preserves a release 1 player's fixed name and team", () 
   } finally { f.close(); }
 });
 test("tick metrics use nearest-rank percentiles and expire the last minute", () => {
-  let now = 0; const metrics = new TickMetrics(() => now);
-  expect(metrics.stats().p95Ms).toBeNull();
-  for (let i = 1; i <= 100; i++) metrics.add(i);
-  expect(metrics.stats()).toMatchObject({ samples: 100, p50Ms: 50, p95Ms: 95 });
-  now = 60000; expect(metrics.stats().samples).toBe(0);
+  const f = fixture(); try {
+    expect(f.manager.stats().tick).toMatchObject({ samples: 0, p50Ms: null, p95Ms: null });
+    const players = Array.from({ length: 21 }, () => f.join());
+    const first = players[0]!.c.room!.metrics, second = players[20]!.c.room!.metrics;
+    for (let i = 1; i <= 100; i++) (i % 2 ? first : second).add(i);
+    expect(f.manager.stats().tick).toMatchObject({ samples: 100, p50Ms: 50, p95Ms: 95 });
+    f.at(60000); expect(f.manager.stats().tick).toMatchObject({ samples: 0, p50Ms: null, p95Ms: null });
+  } finally { f.close(); }
 });
 test("a delayed callback advances one fixed step; closed-room timing expires after a minute", () => {
   const f = fixture(); try {
