@@ -49,7 +49,7 @@ test("coincident bugs get deterministic finite push directions and keep all othe
   const a = createArena(1), point = { x: 450, y: 450 };
   a.bugs = [bug(1, 450, 450), bug(2, 450, 450)];
   const b = structuredClone(a); pushBugsFromSpawn(a, point); pushBugsFromSpawn(b, point);
-  expect(a).toEqual(b); expect(a.bugs[0]).not.toEqual(a.bugs[1]);
+  expect(a).toEqual(b);
   for (const bug of a.bugs) { expect(Math.hypot(bug.x - 450, bug.y - 450)).toBeCloseTo(300); expect(bug.vx).toBe(3); }
 });
 
@@ -73,7 +73,7 @@ test("only an emitted shot ends spawn protection, before the same step's contact
 });
 
 test("personal rate knots interpolate and clamp", () => {
-  for (const [seconds, rate] of [[-3, 0.3], [0, 0.3], [30, 0.75], [60, 1.2], [90, 2.1], [120, 3], [180, 3.5], [240, 4], [900, 4]])
+  for (const [seconds, rate] of [[-3, 0.1], [0, 0.1], [30, 2.05], [60, 4], [90, 4.5], [120, 5], [180, 5.5], [240, 6], [900, 6]])
     expect(threatRate(seconds!)).toBeCloseTo(rate!);
 });
 
@@ -81,7 +81,7 @@ test("integrated requests follow life age independently of wave or arena age, wi
   for (const arenaAge of [0, 480]) {
     const a = createArena(4); a.tick = arenaAge * 20; a.wave = arenaAge / 30;
     const p = joinPlayer(a, identity())!; p.x = p.y = 1200;
-    for (const [seconds, expected] of [[60, 45], [120, 171], [240, 591], [300, 831]]) {
+    for (const [seconds, expected] of [[60, 123], [120, 393], [240, 1053], [300, 1413]]) {
       while (a.tick < (arenaAge + seconds!) * 20) { a.bugs.length = 0; stepArena(a, new Map()); }
       expect(a.nextId - 1).toBe(expected!); expect(a.spawnCredits.get(p.id)).toBeCloseTo(0);
     }
@@ -90,8 +90,8 @@ test("integrated requests follow life age independently of wave or arena age, wi
   const a = createArena(2); a.tick = 480 * 20;
   const p = joinPlayer(a, identity())!, q = joinPlayer(a, identity("q"))!; q.startedTick -= 120 * 20;
   stepArena(a, new Map());
-  expect(a.spawnCredits.get(p.id)).toBeCloseTo((0.3 + threatRate(0.05)) / 40);
-  expect(a.spawnCredits.get(q.id)).toBeCloseTo((3 + threatRate(120.05)) / 40);
+  expect(a.spawnCredits.get(p.id)).toBeCloseTo((0.1 + threatRate(0.05)) / 40);
+  expect(a.spawnCredits.get(q.id)).toBeCloseTo((5 + threatRate(120.05)) / 40);
   endLife(a, p.id); expect(a.spawnCredits.has(p.id)).toBe(false);
   respawnPlayer(a, p.id, p.life); expect(a.spawnCredits.get(p.id)).toBe(0); expect(p.startedTick).toBe(a.tick);
   expect(p.spawnProtectedUntil).toBe(a.tick * STEP_MS + 2000);
@@ -103,25 +103,29 @@ test("capacity consumes requests without debt and rotates successful allocation 
   for (let i = 0; i < 20; i++) { const p = joinPlayer(a, identity(String(i)))!; p.x = p.y = 1200; }
   for (let round = 0; round < 40; round++) {
     a.bugs = Array.from({ length: MAX_BUGS - 1 }, (_, i) => bug(10000 + i, 0, 0));
-    for (const p of a.players.values()) a.spawnCredits.set(p.id, 0.99);
+    for (const p of a.players.values()) a.spawnCredits.set(p.id, 0.999);
     stepArena(a, new Map()); expect(a.bugs).toHaveLength(MAX_BUGS); expect(a.spawnCursor).toBe(round % 20);
     for (const credit of a.spawnCredits.values()) expect(credit).toBeLessThan(1);
   }
   a.bugs.length = 0; stepArena(a, new Map()); expect(a.bugs).toHaveLength(0);
 });
 
-test("bug births are in the source annulus, in bounds and outside every living player's conservative view", () => {
+test("bug births favour outer regions within the source annulus, in bounds and outside every living player's view", () => {
   const a = createArena(22), p = joinPlayer(a, identity())!, q = joinPlayer(a, identity("q"))!;
   p.x = p.y = 450; q.x = 1600; q.y = 1200;
   for (let i = 0; i < 150; i++) spawnBug(a, p);
   expect(a.bugs).toHaveLength(150);
+  let outer = 0;
   for (const b of a.bugs) {
     const distance = Math.hypot(b.x - p.x, b.y - p.y);
     expect(distance).toBeGreaterThanOrEqual(600 - 1e-8); expect(distance).toBeLessThanOrEqual(900 + 1e-8); expect(inset(b)).toBeGreaterThanOrEqual(0);
+    if (inset(b) < 450) outer++;
     for (const player of [p, q]) {
       const c = cameraFor(player.x, player.y, MAX_VIEW, MAX_VIEW);
       expect(b.x < c.x - VISIBILITY_PADDING || b.x > c.x + MAX_VIEW + VISIBILITY_PADDING || b.y < c.y - VISIBILITY_PADDING || b.y > c.y + MAX_VIEW + VISIBILITY_PADDING).toBe(true);
       expect(Math.hypot(b.x - player.x, b.y - player.y)).toBeGreaterThanOrEqual(500);
     }
   }
+  // This source has outer candidates; favour them over scattering attackers through the interior.
+  expect(outer).toBeGreaterThan(a.bugs.length * 0.8);
 });

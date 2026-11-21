@@ -22,20 +22,43 @@ test("spawn shimmer animates on both robots, expires independently of damage fla
       renderer.draw(1280, 800, { x: 750, y: 918.75 }, [local, remote], local, input, [], [], 17, tick, tick * 50, 1280 / 900);
       return [...fixture.context.paints];
     };
-    const shimmer = (paints: Paint[]) => paints.filter(p => p.op === "stroke" && p.strokeStyle === "#b8efff");
-    const first = draw(0), next = draw(10);
-    expect(shimmer(first)).toHaveLength(2); expect(shimmer(next)).toHaveLength(2);
-    expect(shimmer(first)[0]!.path).not.toEqual(shimmer(next)[0]!.path);
-    expect(shimmer(first)[0]!.transform[0]).toBeCloseTo(1280 / 900);
+    const protection = (tick: number) => {
+      const protectedPaints = draw(tick), timers = [local.spawnProtectedUntil, remote.spawnProtectedUntil];
+      local.spawnProtectedUntil = remote.spawnProtectedUntil = 0;
+      const ordinary = draw(tick);
+      [local.spawnProtectedUntil, remote.spawnProtectedUntil] = timers as [number, number];
+      const geometry = (paint: Paint) => JSON.stringify([paint.op, paint.path, paint.transform]);
+      return protectedPaints.filter(p => (p.op === "stroke" || p.op === "fill") && p.path.length && !ordinary.some(q => geometry(p) === geometry(q)));
+    };
+    const surrounds = (paints: Paint[], robots: typeof local[]) => {
+      const seen = new Set<string>(), scale = 1280 / 900;
+      expect(paints.length).toBeGreaterThan(0);
+      for (const paint of paints) for (const arc of paint.path.filter(c => c.op === "arc")) {
+        const [x, y, radius] = arc.args as [number, number, number], [a, b, c, d, e, f] = paint.transform as [number, number, number, number, number, number];
+        const cx = a * x + c * y + e, cy = b * x + d * y + f;
+        const robot = robots.find(p => Math.abs(cx - (p.x - 750) * scale) < 1e-6 && Math.abs(cy - (p.y - 918.75) * scale) < 1e-6);
+        expect(robot).toBeDefined(); seen.add(robot!.id);
+        expect(radius).toBeGreaterThan(PLAYER_RADIUS); expect(paint.globalAlpha).toBeGreaterThan(0);
+        const rx = radius * Math.hypot(a, c), ry = radius * Math.hypot(b, d);
+        expect(cx - rx).toBeGreaterThanOrEqual(0); expect(cx + rx).toBeLessThanOrEqual(1280);
+        expect(cy - ry).toBeGreaterThanOrEqual(0); expect(cy + ry).toBeLessThanOrEqual(800);
+        expect(a).toBeCloseTo(scale); expect(d).toBeCloseTo(scale);
+      }
+      expect([...seen].sort()).toEqual(robots.map(p => p.id).sort());
+    };
+    const first = draw(0), opening = protection(0), next = protection(10);
+    surrounds(opening, [local, remote]); surrounds(next, [local, remote]);
+    expect(opening.map(p => p.path)).not.toEqual(next.map(p => p.path));
     const hud = first.find(p => p.op === "fillText" && String(p.args[0]).includes("Wave"))!;
     expect(hud.transform).toEqual([1, 0, 0, 1, 0, 0]);
-    expect(first.some(p => p.op === "fillText" && String(p.args[0]).includes("hits left   0:00"))).toBe(true);
-    expect(draw(1260).some(p => p.op === "fillText" && String(p.args[0]).includes("hits left   1:03"))).toBe(true);
+    expect(first.some(p => p.op === "fillText" && /\b0:00\b/.test(String(p.args[0])))).toBe(true);
+    expect(draw(1260).some(p => p.op === "fillText" && /\b1:03\b/.test(String(p.args[0])))).toBe(true);
     const stick = first.find(p => p.op === "stroke" && p.path.some(c => c.op === "arc" && c.args[2] === 60))!;
     expect(stick.transform).toEqual([1, 0, 0, 1, 0, 0]);
-    expect(shimmer(draw(39))).toHaveLength(2); expect(shimmer(draw(40))).toHaveLength(0);
+    surrounds(protection(39), [local, remote]); expect(protection(40)).toHaveLength(0);
     local.spawnProtectedUntil = 0; remote.immuneUntil = 1000;
-    const afterFire = draw(2); expect(shimmer(afterFire)).toHaveLength(1);
+    surrounds(protection(2), [remote]);
+    const afterFire = draw(2);
     expect(afterFire.some(p => p.path.some(c => c.op === "roundRect") && p.globalAlpha === 0.4)).toBe(true);
   } finally {
     if (original) Object.defineProperty(globalThis, "document", original); else Reflect.deleteProperty(globalThis, "document");

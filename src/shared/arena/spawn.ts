@@ -31,7 +31,10 @@ export function pushBugsFromSpawn(state: ArenaState, point: { x: number; y: numb
 }
 export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
   if (state.bugs.length >= MAX_BUGS || !source.hits) return false;
+  // Prefer outer candidates within the source annulus, leaving interior openings for drop-ins.
+  let bestX = 0, bestY = 0, bestDistance = -1;
   for (let i = 0; i < 224; i++) {
+    if (i === 32 && bestDistance >= 0) break;
     const angle = i < 32 ? random(state) * Math.PI * 2 : ((i - 32) % 64) * Math.PI / 32;
     const radius = i < 32 ? Math.sqrt(BUG_SPAWN_MIN ** 2 + random(state) * (BUG_SPAWN_MAX ** 2 - BUG_SPAWN_MIN ** 2)) : BUG_SPAWN_MIN + Math.floor((i - 32) / 64) * (BUG_SPAWN_MAX - BUG_SPAWN_MIN) / 2;
     const x = source.x + Math.cos(angle) * radius, y = source.y + Math.sin(angle) * radius;
@@ -43,7 +46,11 @@ export function spawnBug(state: ArenaState, source: CombatPlayer): boolean {
         x >= camera.x - VISIBILITY_PADDING && x <= camera.x + MAX_VIEW + VISIBILITY_PADDING &&
         y >= camera.y - VISIBILITY_PADDING && y <= camera.y + MAX_VIEW + VISIBILITY_PADDING) { valid = false; break; }
     }
-    if (valid) { state.bugs.push({ id: state.nextId++, kind: "crawler", x, y, vx: 0, vy: 0 }); return true; }
+    if (valid) {
+      const distance = (x - WORLD_WIDTH / 2) ** 2 + (y - WORLD_HEIGHT / 2) ** 2;
+      if (distance > bestDistance) { bestX = x; bestY = y; bestDistance = distance; }
+    }
   }
+  if (bestDistance >= 0) { state.bugs.push({ id: state.nextId++, kind: "crawler", x: bestX, y: bestY, vx: 0, vy: 0 }); return true; }
   return false;
 }

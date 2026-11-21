@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { skillSeed, skillMatrix, median, lifeMedians, newcomerTrial, newcomerComparison, survivalSummary, fairnessPassed, type NewcomerLife } from "./skill";
+import { skillSeed, skillMatrix, median, lifeMedians, newcomerTrial, newcomerComparison, survivalSummary, fairnessPassed, IDLE_JOIN_AGES, type NewcomerLife } from "./skill";
 test("fixed-seed combat and private policy randomness replay exactly", () => {
   expect(skillSeed(4, "aimer", 400)).toEqual(skillSeed(4, "aimer", 400));
   expect(median([3, 1, 4, 2])).toBe(2.5);
@@ -20,6 +20,13 @@ test("20 seeds × 8 bots × 180s: aimer median score is positive and at least tw
 }, 30000);
 
 test("newcomer trials observe exactly the first life at the requested age and retain live cutoffs", () => {
+  for (const age of [0, 90, 150, 180, 480, 900]) {
+    const admissions: { tick: number; startedTick: number; ids: string[] }[] = [];
+    newcomerTrial(3, "idle", age, 8, 0.5, arena => {
+      admissions.push({ tick: arena.tick, startedTick: arena.players.get("newcomer")!.startedTick, ids: [...arena.players.keys()] });
+    });
+    expect(admissions).toEqual([{ tick: age * 20, startedTick: age * 20, ids: ["0", "1", "2", "3", "4", "5", "6", "7", "newcomer"] }]);
+  }
   const early = newcomerTrial(3, "idle", 0, 0, 0.5), late = newcomerTrial(3, "idle", 480, 0, 0.5);
   expect(early).toEqual({ seed: 3, policy: "idle", joinSeconds: 0, incumbents: 0, seconds: 0.5, score: 0, cutoff: true });
   expect(late).toEqual({ ...early, joinSeconds: 480 });
@@ -41,11 +48,23 @@ test("survival gates distinguish deaths, censored lower bounds, missing cohorts 
   expect(newcomerComparison(early, censored)).toBe("pass");
   expect(newcomerComparison(censored, late)).toBe("inconclusive");
   expect(newcomerComparison(early, censored.map(l => ({ ...l, seconds: 79 })))).toBe("inconclusive");
-  const idle = [0, 120, 300, 480, 900].map(age => cohort("idle", age, 8, 10));
+  expect(IDLE_JOIN_AGES).toEqual(Array.from({ length: 61 }, (_, i) => i * 15));
+  const idle = IDLE_JOIN_AGES.map(age => cohort("idle", age, 8, 10));
   const cohorts = [early, late, ...idle, cohort("idle", 0, 0, 10), cohort("idle", 480, 0, 10)];
   expect(fairnessPassed(cohorts)).toBe(true); expect(fairnessPassed(cohorts.slice(0, -1))).toBe(false);
   const missing = structuredClone(cohorts); missing[0]!.pop(); expect(fairnessPassed(missing)).toBe(false);
   const duplicate = structuredClone(cohorts); duplicate[1]![1]!.seed = 0; expect(fairnessPassed(duplicate)).toBe(false);
   const wrongAge = structuredClone(cohorts); wrongAge[3]![0]!.joinSeconds = 0; expect(fairnessPassed(wrongAge)).toBe(false);
-  cohorts[2] = cohort("idle", 0, 8, 9.99); expect(fairnessPassed(cohorts)).toBe(false);
+  for (const age of [90, 150, 180]) {
+    const failing = structuredClone(cohorts), index = failing.findIndex(lives => lives[0]!.policy === "idle" && lives[0]!.joinSeconds === age);
+    failing[index] = cohort("idle", age, 8, 9.99); expect(fairnessPassed(failing)).toBe(false);
+  }
 });
+
+test("idle openings retain a ten-second median during the first incumbent lives", () => {
+  for (const age of [90, 150, 180]) {
+    const lives = Array.from({ length: 20 }, (_, seed) => newcomerTrial(seed, "idle", age, 8, 10));
+    // A survivor at ten seconds is sufficient evidence for this lower-bound gate.
+    expect(survivalSummary(lives).medianSeconds).toBeGreaterThanOrEqual(10);
+  }
+}, 30000);

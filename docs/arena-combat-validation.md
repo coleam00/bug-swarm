@@ -1,71 +1,74 @@
 # Drop-in fairness validation — issue #65
 
-The current spawn and pacing rules supersede the historical #61 results below. Evidence for #65 is kept locally under `.evidence/65/` (gitignored), including raw per-seed JSON, Chrome captures, the validation driver, scratch homes/profiles and databases. The pull request summarizes that evidence.
+The current rules and measurements include the returned-check correction. Evidence stays inside this checkout under `.evidence/65/` (gitignored), with scratch homes, profiles and databases; the pull request summarizes it.
 
-## Rules and tuning
+## Rules and correction
 
-Join and respawn searches use 64 seeded candidates and a 16×16 grid inside the 450-unit world inset, choosing the greatest nearest-bug distance without overlapping living robots. Crowded spawns push bugs inside 300 units straight outward to 300 without kills, lost bug state or points. Two seconds of pale rotating spawn shimmer prevent contact damage; an emitted shot ends it early. Overheat/cooldown-blocked fire does not end it, and firing preserves independent damage immunity.
+Join and respawn searches use 64 seeded candidates and a 16×16 grid inside the 450-unit world inset, choosing the greatest nearest-bug distance without overlapping living robots. Crowded spawns push bugs inside 300 units straight outward to 300 without kills, lost bug state or points. Two seconds of rotating spawn shimmer prevent contact damage; an emitted shot ends it early. Blocked fire does not end it, and firing preserves independent one-second damage immunity.
 
-Each life accrues its own fractional spawn credits. The final piecewise-linear rate is **0.3/s at 0 s, 1.2/s at 60 s, 3/s at 120 s, 4/s at 240 s**, clamped thereafter. Starting values 0.4/1.2/2/3 produced 438.1 s fresh versus 253.7 s late aimer lives (57.9%), with some idle cohorts below 10 s. Lower opening pressure and stronger later pressure produced shorter fresh lives and the passing results below. Policies, seeds, populations and gates were unchanged.
+The returned checks found a transient pressure peak between the original five sampled ages: unchanged 20-seed idle cohorts at ages 90/150/180 seconds died at medians **8.4 / 9.85 / 9.625 seconds**. This was reproduced in `returned-baseline.json`. Rate-only tuning moved that peak to another age, so birth placement now prefers outer arena regions: sample 32 seeded annulus candidates, choose the valid point farthest from the world centre, and use the same preference in the bounded 192-point fallback if necessary. All births still lie 600–900 units from the requesting player, in bounds, at least 500 from living players and outside every conservative view plus 64 units. This leaves interior openings while bugs still chase the nearest living player.
 
-Bugs spawn 600–900 units from the requesting player, outside every living player's conservative view plus 64 units. They remain shared and chase the nearest living player. Failed or capped requests are discarded, retaining only fractional credit, with persistent round-robin allocation after the last successful room slot. The live cap remains 150. Waves retain their first-step/30-second clock for future kinds/events and add no volume. The HUD shows wave and life m:ss, reset on respawn and frozen on death.
-
-World drawing scales so the longest view dimension is at most 900 units; HUD and touch controls remain in CSS pixels and mouse aiming divides by the world scale. This permits enforceable off-screen placement without adding viewport reports to protocol v1. The 300-unit crowded fallback guarantees physical clearance, but cannot universally guarantee an empty screen.
+The final life-age rate is **0.1/s at 0 s, 4/s at 60 s, 5/s at 120 s, 6/s at 240 s**, linearly interpolated and clamped. Stronger later pressure keeps aimed lives short while the reduced opening and outer-region placement give newcomers room. Policies, seeds, populations and thresholds were unchanged. Each life owns its credits; blocked requests discard whole credit, successful allocations rotate through room slots, and the live cap remains 150. Waves retain the 30-second event clock without volume bursts. World view remains bounded to 900 units; HUD/touch stay in CSS pixels, scaled aiming remains correct, and the life clock resets/freezes with the authoritative life.
 
 ## Seeded measurements
 
-`bun run skill` retains the 20-seed, eight-bot, 180-second score benchmark:
+`bun run skill` passed. The unchanged 20-seed, eight-bot, 180-second score benchmark reports:
 
 | Policy | Median score | Median life seconds | Lives | Deaths | Cutoffs |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| mover | 242 | 75.1 | 346 | 186 | 160 |
-| aimer | 3472.5 | 145.55 | 246 | 86 | 160 |
+| mover | 222 | 90 | 300 | 140 | 160 |
+| aimer | 2178 | 75.85 | 349 | 189 | 160 |
 
-Aimer/mover score ratio: **14.349×**, above 2×.
+Aimer/mover score ratio: **9.811×**, above 2×. The independent newcomer trials observe exactly one first life per seed against eight continuously respawning aimers, with paired world/newcomer seeds. Fresh/late medians are **123.625 / 114.75 seconds**, or **92.821%**, above 80%. Both medians are exact; two fresh and one late lives are censored at the common 600-second horizon. No extension was needed; inconclusive comparisons would extend both windows to 1200/1800 seconds and fail if still inconclusive.
 
-Newcomer trials pair seeds 0–19 and newcomer policy seeds, with one independent newcomer against eight continuously respawning aimers. Only the newcomer's first life enters the cohort. The common observation window is 600 seconds after joining. A cutoff is a censored lower bound, never a recorded death; both middle observations must be completed lives for an exact median. Inconclusive paired windows extend to 1200 then 1800 seconds and fail if still inconclusive. All medians below are exact; no extension was needed.
+The idle gate now covers **61 ages, every 15 seconds from 0 through 900**, plus the two solo controls. Together with the aimer pair this is **65 cohorts / 1,300 first-life observations**. Every idle cohort passes: the lowest busy-room median is **11 seconds at arena age 135 seconds**. The returned 90/150/180-second cases now reach **11.675 / 11.975 / 11.7 seconds**. All idle medians are exact. Selected cohorts are below; every observation and final constant is printed in `returned-skill-final.json`.
 
-| Newcomer | Arena age at join, seconds | Incumbents | Median first life, seconds | Deaths / cutoffs |
+| Newcomer | Join age, seconds | Incumbents | Median first life, seconds | Deaths / cutoffs |
 | --- | ---: | ---: | ---: | ---: |
-| aimer | 0 | 8 | 205.525 | 17 / 3 |
-| aimer | 480 | 8 | 168.75 | 18 / 2 |
-| idle | 0 | 8 | 47.05 | 20 / 0 |
-| idle | 120 | 8 | 10.05 | 20 / 0 |
-| idle | 300 | 8 | 10.35 | 20 / 0 |
-| idle | 480 | 8 | 10.175 | 20 / 0 |
-| idle | 900 | 8 | 10.45 | 20 / 0 |
-| idle solo | 0 | 0 | 10.3 | 20 / 0 |
-| idle solo | 480 | 0 | 10.3 | 20 / 0 |
+| aimer | 0 | 8 | 123.625 | 18 / 2 |
+| aimer | 480 | 8 | 114.75 | 19 / 1 |
+| idle | 0 | 8 | 18.475 | 20 / 0 |
+| idle | 30 | 8 | 11.325 | 20 / 0 |
+| idle | 45 | 8 | 11.175 | 20 / 0 |
+| idle | 60 | 8 | 11.375 | 20 / 0 |
+| idle | 90 | 8 | 11.675 | 20 / 0 |
+| idle | 120 | 8 | 11.275 | 20 / 0 |
+| idle | 135 | 8 | 11 | 20 / 0 |
+| idle | 150 | 8 | 11.975 | 20 / 0 |
+| idle | 180 | 8 | 11.7 | 20 / 0 |
+| idle | 300 | 8 | 11.25 | 20 / 0 |
+| idle | 480 | 8 | 12.075 | 20 / 0 |
+| idle | 900 | 8 | 11.275 | 20 / 0 |
+| idle | 0 | 0 | 12.325 | 20 / 0 |
+| idle | 480 | 0 | 12.325 | 20 / 0 |
 
-Late/fresh survival: **82.107%**, above 80%. Every idle cohort exceeds 10 seconds. Raw observations and constants: `.evidence/65/skill-final.json`.
+## Regression guards and neighboring cases
 
-## Regression and simulation guards
+The trial test observes the actual arena tick, life start tick and incumbent identities at admission, including tick 9600 for the eight-minute join. Cohort validation rejects missing ages or populations; gate fixtures reject failures at each returned age, and a short simulation regression retains the 90/150/180-second idle cases in the ordinary check.
 
-The engine renderer mock records travelling shots and exact changing waves after interpolation delay. Independent mutations dropping shots and zeroing the wave both fail that test. A real RoomManager/LifeWriter/SQLite lifecycle stores literal score 37 and asserts 37 in pending/saved `life_over` and the database; a mutation storing 38 fails. Results are in `.evidence/65/mutation-results.json`.
+The engine mock now records changing authoritative ticks as well as travelling shots and exact waves. The recording-canvas test compares protected/unprotected drawing geometry, checks that it visibly surrounds each robot after transformation and disappears at expiry/early cancellation, and reads the clock without surrounding wording. Decorative colour changes remain acceptable. The ineffective whole-bug inequality and redundant row-to-message comparisons were removed; deterministic pushes and all three literal score-37 assertions remain.
 
-Deterministic simulation guards cover repeated join/respawn inset and clearance, clustered/crowded placement, coincident pushes without score/state loss, protection boundaries and blocked/emitted fire, independent damage immunity, threat knots/integration by life age, reset/removal, wave independence, annulus/off-screen placement, capacity fairness and exhausted placement. View, engine and recording-canvas tests cover containment, centred spawns, scaled aiming, resize/DPR, independent touch ownership, shimmer and life-clock reset/freeze.
+Eight independent bad mutations are rejected: admission at zero, renderer tick zero, shimmer at origin, shimmer never expiring, removal of outer-region preference, dropped shots, zero wave and wrong persisted score. Harmless shimmer-colour and HUD-wording mutations pass. Raw output is in `returned-mutations.json` and `returned-legacy-mutations.json`. Neighboring wave/shot forwarding, benchmark participant/time accounting, protection timing, damage immunity, safe spawn/push behavior, annulus/off-screen bounds, credit reset/allocation/cap, and life-clock reset/freeze were checked and remain covered.
 
-## Production Chrome, touch and capacity
+## Repeated production Chrome, touch and capacity
 
-Validated on Windows with Bun 1.4.2 and installed Chrome/Chromium **156.0.8078.4**, using built production assets, a server started on an ephemeral loopback port, and scratch data/home/profile directories inside `.evidence/65/`. The driver never changes arena state to obtain an opening. Eight real WebSocket aimers ran for 555 wall seconds, continuously respawning. Chrome joined with fresh browser storage after **9,825 simulation ticks / 491.25 simulation seconds**, at wave 17, with exactly eight incumbents. No extra probe joined the room.
+Validated with Bun 1.4.2 and installed **Chrome/156.0.8078.4**, built production assets, an owned ephemeral loopback server, and scratch data/home/profile directories. Eight real WebSocket aimers ran for 555 wall seconds, continuously respawning. Fresh Chrome storage joined with exactly eight incumbents after **9823 ticks / 491.15 simulation seconds**, at wave 17; no extra probe or server-state edits were used.
 
-Captures `spawn-0.png`, `spawn-0_5.png`, `spawn-1_5.png`, `spawn-5.png`, `spawn-10.png` and `spawn-30.png` show the opening and first 30 wall seconds. The initial robot is exactly at screen (640, 400) in 1280×800, with three hits, zero visible bugs and a visible shimmer. The next two captures, at life ages 0.8 and 1.8 seconds, still have no visible bugs and active shimmer. After the neutral opening, real CDP keyboard/mouse events move, aim and fire. The approximately 30-second capture is at authoritative life age 29.85 seconds, wave 18, **587 points and two hits remaining**. The opening, 30-second and touch captures were visually inspected.
+Opening capture: screen **(640, 400)** in 1280×800, three hits, visible shimmer and no bugs on screen. The 0.5/1.5-second captures remain clear with active shimmer, at authoritative life ages 0.8/1.8 seconds. After the neutral opening, actual CDP keyboard/mouse events move, aim and fire. The 30-second capture is at life age **30.05 seconds**, wave 18, **778 points and 2 hits remaining**. Fresh 390×844 portrait and 844×390 landscape contexts demonstrate simultaneous independent touch movement/aimed fire while the eight bots remain connected, with no overflow or browser errors. Opening, 30-second and touch captures were visually inspected.
 
-Separate fresh contexts at **390×844 portrait** and **844×390 landscape** join the same busy arena while the eight bots remain connected. Spawn and simultaneous two-point touch captures show centred robots, readable HUDs and both sticks; outgoing inputs contain independent movement, aimed fire and `touch:true`. Neither layout overflows, and no browser errors were recorded. Files: `portrait-spawn.png`, `portrait-twin-sticks.png`, `landscape-spawn.png`, `landscape-twin-sticks.png`.
+Captures and raw report are in `returned-production/`: `spawn-{0,0_5,1_5,5,10,30}.png`, portrait/landscape spawn and twin-stick captures, and three full-arena captures. The driver is `returned-validate.ts` with `run.ps1` supplying scratch environment paths.
 
-The existing developer fixture holds 20 players, 150 bugs, 140 travelling shots and 140 effect slots, using production rendering and the shared view helper with normal culling. Seven consecutive one-second windows per layout measured:
+The developer fixture holds 20 players, 150 bugs, 140 shots and 140 effect slots with production drawing and normal culling. Seven one-second windows per layout (device scale factor 1, no CPU throttling) report:
 
-| Full-arena view | FPS | Update/draw ms per frame |
+| Full-arena view | FPS range | CPU update/draw ms per frame |
 | --- | ---: | ---: |
-| 1280×800 desktop | 60.0 | 0.980–1.070 |
-| 390×844 portrait | 60.0 | 0.825–0.890 |
-| 844×390 landscape | 60.0 | 0.867–1.072 |
+| desktop | 60–60 | 0.828–0.975 |
+| portrait | 60–60 | 0.718–0.833 |
+| landscape | 60–60 | 0.728–0.857 |
 
-Device scale factor was 1 with no CPU throttling. The readout measures CPU update/draw work, excluding later compositing. Browser flags include `--headless=new`, a scratch `--user-data-dir`, and disabled background timer/render throttling. Captures: `full-arena-desktop.png`, `full-arena-portrait.png`, `full-arena-landscape.png`.
+The real CLI ran **200 aimers for 120 seconds in 10 rooms**: 200/200 joins, zero errors, tick p50/p95 **0.771 / 1.292 ms**, scheduler lateness p95 **1.858 ms**. Tick cost includes simulation, serialization and socket enqueueing, and remains below 10 ms p95 despite evaluating more birth candidates. The eight-bot run had zero errors and tick p95 0.739 ms. All **351/351** scratch lives were finished; every owned server/browser/bot stopped.
 
-The real bot CLI ran **200 aimers for 120 seconds across 10 rooms**: 200/200 joins, zero errors, tick p50 **0.718 ms**, tick p95 **1.228 ms**, scheduler lateness p95 **1.852 ms**. The eight-bot run also had zero errors, with tick p95 0.757 ms. Tick cost includes simulation, serialization and socket enqueueing. All 244 lives in the scratch database were finished, and every owned server/browser/bot was stopped. Full raw observations, frame windows, input messages and load results are in `.evidence/65/production-report.json`; driver and logs are beside it.
-
-`bun run check` passed **573 tests, zero failures across 58 files**, including the real ephemeral-server integration tests. `bun run skill`, `bun run build`, targeted renderer/engine/SQLite/simulation tests, all three mutation probes and `git diff --check` passed. No dependency was added. The validation driver is `.evidence/65/validate.ts`, run with a scratch environment through `.evidence/65/run.ps1`; raw evidence remains gitignored under the repository's evidence policy. The bounded camera and conservative spawn rejection are the planned smallest implementation; viewport reports, spatial indexing, additional bug kinds and bosses remain outside this item.
+`bun run check` passed **574 tests, zero failures across 58 files**, including real-server integration tests. `bun run build`, `bun run skill`, targeted simulation/renderer/engine/SQLite tests, type checking, all mutation expectations and `git diff --check` passed. The original spawn, protection, personal-pressure and event-wave requirements still hold. No dependency or protocol version change was added.
 
 ---
 

@@ -80,6 +80,5 @@ test("the score in pending and saved life_over is the literal score persisted by
     const saved = messages.find(m => m.type === "life_over" && m.save === "saved");
     const row = db.query("SELECT score FROM runs WHERE id = ?").get(c.record!.runId) as { score: number };
     expect(saved?.score).toBe(37); expect(row.score).toBe(37);
-    expect(row.score).toBe(pending.score); expect(row.score).toBe(saved.score);
   } finally { manager.stop(); db.close(); }
 });

@@ -23,7 +23,7 @@ const canvas = Object.assign(new EventTarget(), { clientWidth: 390, clientHeight
   getBoundingClientRect: () => ({ left: 20, top: 30 }),
   hasPointerCapture: id => captures.has(id), setPointerCapture: id => captures.add(id), releasePointerCapture: id => captures.delete(id) });
 mock.module(${moduleUrl("draw.ts")}, () => ({ ArenaRenderer: class { reset() {} events(events) { effects.push(...events); } draw(width, height, camera, players, local, input, bugs, shots, wave, tick, now, scale) {
-  draws.push(structuredClone({ width, height, camera, players, local, shots, wave, scale }));
+  draws.push(structuredClone({ width, height, camera, players, local, shots, wave, tick, scale }));
 } } }));
 mock.module(${moduleUrl("connection.ts")}, () => ({ connectArena: (identity, touch, got, status, gone) => {
   receive = got; disconnected = gone;
@@ -49,6 +49,7 @@ for (let cycle = 0; cycle < 2; cycle++) {
   snapshot(1, 1200, 1000, 0);
   let draw = frame(base); assert.equal(draw.local.x, 1200); assert.deepEqual(draw.camera, { x: 1005, y: 778 });
   assert.equal(draw.wave, 5, "Nonzero wave must reach the renderer");
+  assert.equal(draw.tick, 1, "Authoritative tick must reach the renderer");
   assert.equal(draw.players.find(p => p.id === remote.id).x, 1000);
   mouse("pointermove", 295, 322); send();
   assert.ok(Math.abs(inputs.at(-1).aim + Math.PI / 4) < 1e-8, "Mouse aim must include camera and canvas offsets");
@@ -62,6 +63,7 @@ for (let cycle = 0; cycle < 2; cycle++) {
   clock = base + 100; snapshot(3, 1203, 1020, inputs.at(-1).seq);
   draw = frame(base + 150);
   assert.equal(draw.wave, 7, "Changing wave must reach the renderer exactly");
+  assert.equal(draw.tick, 3, "Changing authoritative ticks must reach the renderer exactly");
   assert.equal(draw.shots[0].x, 1290, "Travelling shots must reach the renderer after the delay");
   assert.ok(Math.abs(draw.local.x - 1203) < 1, "Acknowledgement must retire prediction and reconcile to authority");
   assert.equal(draw.camera.x, draw.local.x - 195); assert.equal(draw.camera.y, draw.local.y - 422);

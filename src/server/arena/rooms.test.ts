@@ -47,7 +47,7 @@ test("room snapshots transmit the simulated wave and crawler population", () => 
   const f = fixture(); try {
     const { c, messages } = f.join(), room = c.room!;
     for (const [tick, wave, count] of [[0, 1, 1], [600, 2, 1]]) {
-      room.state.tick = tick!; room.state.bugs = []; room.state.spawnCredits.set(c.id!, 0.99);
+      room.state.tick = tick!; room.state.bugs = []; room.state.spawnCredits.set(c.id!, 0.999);
       f.manager.tick(room);
       const snapshot = parseServer(JSON.stringify(messages.at(-1)));
       expect(snapshot?.type).toBe("snapshot"); if (snapshot?.type !== "snapshot") throw new Error("Missing snapshot");

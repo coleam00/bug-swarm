@@ -119,11 +119,11 @@ test("separate life credits do not pool fractional requests; exhausted spawn pla
   const a = createArena(3);
   for (let i = 0; i < 4; i++) joinPlayer(a, { id: String(i), name: `bot-${i}`, team: "tabs" });
   a.tick = 1; for (let i = 0; i < 20; i++) stepArena(a, new Map()); expect(a.bugs).toHaveLength(0);
-  for (const credit of a.spawnCredits.values()) expect(credit).toBeCloseTo(0.30825);
+  for (const credit of a.spawnCredits.values()) expect(credit).toBeCloseTo(0.13575);
   const full = createArena(1);
   for (let i = 0; i < 20; i++) { const p = joinPlayer(full, { id: String(i), name: `bot-${i}`, team: "tabs" })!; p.x = 240 + i % 5 * 480; p.y = 300 + Math.floor(i / 5) * 600; }
   expect(spawnBug(full, full.players.get("0")!)).toBe(false); expect(full.bugs).toHaveLength(0);
-  for (const p of full.players.values()) full.spawnCredits.set(p.id, 0.99);
+  for (const p of full.players.values()) full.spawnCredits.set(p.id, 0.999);
   stepArena(full, new Map()); expect(full.bugs).toHaveLength(0); expect(full.spawnCursor).toBe(-1);
   for (const credit of full.spawnCredits.values()) expect(credit).toBeLessThan(1);
   for (const p of full.players.values()) if (p.id !== "0") endLife(full, p.id);
