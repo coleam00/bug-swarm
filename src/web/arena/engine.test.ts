@@ -9,7 +9,7 @@ test("engine routes controls, predicts/reconciles and renders interpolated movem
   const probe = `
 import { mock } from "bun:test";
 import assert from "node:assert/strict";
-let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected;
+let clock = 0, next = 0, observers = 0, disposed = 0, reconnects = 0, admissions = 0, receive, disconnected, refusal;
 const timers = new Map(), frames = new Map(), inputs = [], draws = [], captures = new Set();
 performance.now = () => clock;
 globalThis.setInterval = (fn, ms) => { assert.equal(ms, 50); const id = ++next; timers.set(id, fn); return id; };
@@ -35,7 +35,7 @@ const pointer = (type, id, x, y) => canvas.dispatchEvent(Object.assign(new Event
 const send = () => timers.values().next().value();
 const frame = at => { clock = at; const [id, fn] = frames.entries().next().value; frames.delete(id); fn(clock); return draws.at(-1); };
 for (let cycle = 0; cycle < 2; cycle++) {
-  const base = clock, cleanup = mountArena(canvas, identity, false, () => {}, () => {}, () => admissions++);
+  const base = clock, cleanup = mountArena(canvas, identity, false, () => {}, (...args) => { refusal = args; }, () => admissions++);
   assert.equal(timers.size, 1); assert.equal(frames.size, 1); assert.equal(observers, 1);
   receive({ v: 1, type: "welcome" });
   assert.equal(admissions, cycle * 2 + 1);
@@ -69,6 +69,8 @@ for (let cycle = 0; cycle < 2; cycle++) {
   key("KeyD"); disconnected(); const count = inputs.length; timers.values().next().value(); assert.equal(inputs.length, count);
   receive({ v: 1, type: "welcome" }); timers.values().next().value(); assert.equal(inputs.at(-1).move.x, 0); assert.equal(inputs.at(-1).seq, 1);
   clock += 3001; timers.values().next().value(); assert.equal(reconnects, cycle + 1);
+  receive({ v: 1, type: "error", code: "name-hidden", message: "Unavailable" });
+  assert.deepEqual(refusal, ["Unavailable", undefined, "name-hidden"]);
   cleanup(); assert.equal(timers.size, 0); assert.equal(frames.size, 0); assert.equal(observers, 0); assert.equal(disposed, cycle + 1);
   // The next mount must start clean even after a key event while detached.
   key("KeyD");

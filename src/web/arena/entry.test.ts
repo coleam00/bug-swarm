@@ -18,10 +18,13 @@ mock.module(${moduleUrl("engine.ts")}, () => ({ mountArena: (canvas, identity, t
 let saved = null;
 globalThis.localStorage = { getItem: () => saved, setItem: (key, value) => { assert.equal(key, "bug-swarm-player"); saved = value; } };
 const { Arena } = await import(${moduleUrl("Arena.tsx")});
+const { HIDDEN_IDENTITY_MESSAGE } = await import(${moduleUrl("../../shared/arena/protocol.ts")});
+const unavailable = "That name is unavailable. Pick another.";
+const alertText = () => tree.root.findByProps({ role: "alert" }).children.join("");
+let tree;
 for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "spaces"]) {
   const id = crypto.randomUUID(); saved = kind === "new" ? null : JSON.stringify({ playerId: id, name: "Robot", ...(kind === "returning" ? { team } : {}) });
   const original = saved;
-  let tree;
   const mount = () => act(() => { tree = create(createElement(Arena), { createNodeMock: () => ({}) }); });
   const choose = () => act(() => tree.root.findAllByType("button").find(b => b.children.join("").toLowerCase().includes(team)).props.onClick());
   mount();
@@ -41,7 +44,8 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   if (kind !== "new") assert.equal(joined.identity.playerId, id);
   let acceptedName = "Robot";
   if (kind === "new") {
-    act(() => onError("That name is unavailable. Pick another."));
+    act(() => onError(unavailable, undefined, "name-hidden"));
+    assert.equal(alertText(), unavailable, "A fresh editable attempt keeps correction guidance");
     assert.equal(saved, null); assert.equal(tree.root.findByType("input").props.readOnly, false);
     assert.equal(tree.root.findAllByType("button").length, 2);
     // Reload after refusal: no rejected identity may survive in storage.
@@ -59,10 +63,21 @@ for (const kind of ["new", "legacy", "returning"]) for (const team of ["tabs", "
   act(() => onError("This player is already in an arena."));
   assert.equal(mounted, disposed); assert.equal(tree.root.findAllByProps({ role: "alert" }).length, 1);
   assert.equal(tree.root.findByType("input").props.readOnly, true, "An accepted name stays fixed after refusal");
+  act(() => tree.root.findAllByType("button")[0].props.onClick());
+  act(() => onAccepted());
+  act(() => onError(unavailable, undefined, "name-hidden"));
+  assert.equal(alertText(), HIDDEN_IDENTITY_MESSAGE, "Live removal must explain the saved identity rule");
+  assert.equal(tree.root.findByType("input").props.readOnly, true);
   act(() => tree.unmount()); assert.equal(mounted, disposed);
   mount(); assert.equal(tree.root.findByType("input").props.readOnly, true);
   assert.equal(tree.root.findByType("input").props.value, acceptedName);
   assert.equal(tree.root.findAllByType("button").length, 1);
+  const persisted = saved;
+  act(() => tree.root.findAllByType("button")[0].props.onClick());
+  // A saved identity can be refused before welcome too; it must receive the same rule.
+  act(() => onError(unavailable, undefined, "name-hidden"));
+  assert.equal(alertText(), HIDDEN_IDENTITY_MESSAGE); assert.equal(saved, persisted);
+  assert.equal(tree.root.findByType("input").props.readOnly, true);
   act(() => tree.unmount());
 }
 `;

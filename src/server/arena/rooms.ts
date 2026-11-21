@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { registerArenaPlayer } from "../db";
 import { nameKey, validateName } from "../rules";
 import { HELLO_TIMEOUT_MS, INPUT_LIMIT, INPUT_STALE_MS, INPUT_WINDOW_MS, MAX_PLAYERS, PLAYER_RADIUS, PLAYER_SPEED, STALL_TIMEOUT_MS, STEP_MS, WORLD_HEIGHT, WORLD_WIDTH } from "../../shared/arena/constants";
-import { parseClient, type ArenaError, type InputMessage, type Snapshot, type Welcome } from "../../shared/arena/protocol";
+import { HIDDEN_IDENTITY_MESSAGE, parseClient, type ArenaError, type InputMessage, type Snapshot, type Welcome } from "../../shared/arena/protocol";
 import { createArena, joinPlayer, leavePlayer, stepArena } from "../../shared/arena/simulation";
 import { neutralInput, type ArenaState, type Input } from "../../shared/arena/types";
 import { TickMetrics } from "./metrics";
@@ -120,7 +120,7 @@ export class RoomManager {
   refreshHidden() {
     this.expireMetrics();
     const hidden = this.hidden();
-    for (const c of this.active.values()) if (hidden.has(nameKey(c.room!.state.players.get(c.id!)!.name))) this.refuse(c, "name-hidden", "That name is unavailable. Pick another.");
+    for (const c of this.active.values()) if (hidden.has(nameKey(c.room!.state.players.get(c.id!)!.name))) this.refuse(c, "name-hidden", HIDDEN_IDENTITY_MESSAGE);
   }
   private expireMetrics() {
     for (const [id, metric] of this.metrics) if (!this.rooms.has(id) && metric.tick.stats().samples === 0) this.metrics.delete(id);

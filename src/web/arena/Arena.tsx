@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Identity } from "../../shared/api";
+import { HIDDEN_IDENTITY_MESSAGE } from "../../shared/arena/protocol";
 import { TEAMS, TEAM_COLOURS, TEAM_NAMES, type Team } from "../../shared/teams";
 import { validateName } from "../../server/rules";
 import { loadIdentity, storeIdentity } from "../game/identity";
@@ -16,9 +17,9 @@ export function Arena() {
     const next = { playerId: identity?.playerId ?? crypto.randomUUID(), name: result.name!, team: identity?.team ?? team };
     setError(""); setSession(next);
   }
-  if (session) return <ArenaGame identity={session} touch={touch.current} onAccepted={() => remember(session)} onError={(message, team) => {
+  if (session) return <ArenaGame identity={session} touch={touch.current} onAccepted={() => remember(session)} onError={(message, team, code) => {
     if (team) { if (identity) remember({ ...identity, team }); setSession({ ...session, team }); return; }
-    setError(message); setSession(null);
+    setError(code === "name-hidden" && identity ? HIDDEN_IDENTITY_MESSAGE : message); setSession(null);
   }} />;
   return <main className="arena-entry"><form onSubmit={event => { event.preventDefault(); if (identity?.team) join(identity.team); else setError("Choose Tabs or Spaces."); }} onPointerDown={event => { if (event.pointerType === "touch") touch.current = true; }}>
     <h1>Bug Swarm</h1>
@@ -28,9 +29,9 @@ export function Arena() {
     <div className="arena-teams">{(identity?.team ? [identity.team] : TEAMS).map(team => <button key={team} type="button" style={{ background: TEAM_COLOURS[team] }} onClick={() => join(team)}>Join {TEAM_NAMES[team]}</button>)}</div>
   </form></main>;
 }
-function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identity; touch: boolean; onAccepted: () => void; onError: (message: string, team?: Team) => void }) {
+function ArenaGame({ identity, touch, onAccepted, onError }: { identity: Identity; touch: boolean; onAccepted: () => void; onError: (message: string, team?: Team, code?: string) => void }) {
   const canvas = useRef<HTMLCanvasElement>(null), error = useRef(onError), accepted = useRef(onAccepted), [status, setStatus] = useState("Connecting…");
   error.current = onError; accepted.current = onAccepted;
-  useEffect(() => mountArena(canvas.current!, identity, touch, setStatus, (message, team) => error.current(message, team), () => accepted.current()), [identity.playerId]);
+  useEffect(() => mountArena(canvas.current!, identity, touch, setStatus, (message, team, code) => error.current(message, team, code), () => accepted.current()), [identity.playerId]);
   return <main className="arena-game"><canvas ref={canvas} aria-label="Shared arena" tabIndex={0} />{status && <p role="status" className="arena-status">{status}</p>}</main>;
 }

@@ -3,6 +3,7 @@ import { isTeam, type Team } from "../teams";
 import { CLIENT_MESSAGE_BYTES, MAX_PLAYERS, SERVER_MESSAGE_BYTES, WORLD_HEIGHT, WORLD_WIDTH, PLAYER_RADIUS } from "./constants";
 import type { Input, Player } from "./types";
 export const VERSION = 1;
+export const HIDDEN_IDENTITY_MESSAGE = "This identity cannot rejoin because its name is hidden. Saved names are permanent.";
 export interface Hello { v: 1; type: "hello"; playerId: string; name: string; team: Team; touch: boolean; buildId: string }
 export interface InputMessage extends Input { v: 1; type: "input"; seq: number }
 export interface Welcome { v: 1; type: "welcome"; playerId: string; arenaId: string; buildId: string;

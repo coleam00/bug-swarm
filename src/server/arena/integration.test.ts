@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../server";
 import { hideName } from "../db";
-import { parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
+import { HIDDEN_IDENTITY_MESSAGE, parseServer, type ServerMessage, type Snapshot } from "../../shared/arena/protocol";
 import { runBots } from "../../../scripts/bots";
 function client(url: string, index: number, name = `bot-${index}`) {
   const id = crypto.randomUUID(), socket = new WebSocket(url), messages: ServerMessage[] = [];
@@ -49,7 +49,7 @@ test("real server: clients see each other move, 21st player is isolated, refused
     const refused = client(url, 22, "<script>"); clients.push(refused);
     expect(await refused.wait(m => m.type === "error")).toMatchObject({ code: "name-refused" });
     hideName(app.db, "bot-1", Date.now());
-    expect(await a.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden" });
+    expect(await a.wait(m => m.type === "error")).toMatchObject({ code: "name-hidden", message: HIDDEN_IDENTITY_MESSAGE });
     expect((app.db.query("SELECT COUNT(*) AS n FROM runs").get() as any).n).toBe(0);
   } finally {
     const closed = clients.map(c => new Promise<void>(resolve => {
@@ -84,8 +84,10 @@ test("real bot CLI wanders, reports required fields and cleans up, including can
     expect(result.tick.windowMs).toBe(60000); expect(result.tick.samples).toBeGreaterThan(0);
     expect(Number.isFinite(result.tick.p50Ms)).toBe(true); expect(Number.isFinite(result.tick.p95Ms)).toBe(true);
     expect(result.tick.p95Ms).toBeGreaterThanOrEqual(result.tick.p50Ms);
-    for (const name of ["bot-01", "bot-02"]) {
-      const positions = observer.messages.flatMap(m => m.type === "snapshot" ? m.players.filter(p => p.name === name) : []);
+    const observations = observer.messages.flatMap(m => m.type === "snapshot" ? m.players.filter(p => p.id !== observer.id) : []);
+    const botIds = new Set(observations.map(p => p.id)); expect(botIds.size).toBe(2);
+    for (const id of botIds) {
+      const positions = observations.filter(p => p.id === id);
       expect(positions.length).toBeGreaterThan(1);
       const first = positions[0]!;
       expect(positions.some(p => Math.hypot(p.x - first.x, p.y - first.y) > 5)).toBe(true);
